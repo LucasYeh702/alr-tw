@@ -1,0 +1,12 @@
+[
+  {
+    "source_id": "demo-law-001",
+    "source_tier": "synthetic",
+    "doc_type": "law"
+  },
+  {
+    "source_id": "tlr-candidate-001",
+    "source_tier": "external_semantic_recall",
+    "doc_type": "candidate"
+  }
+]

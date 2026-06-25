@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+uv.lock
+dist/
+build/
+*.egg-info/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Production data - never commit
+data/
+cache/
+logs/
+archives/
+raw_official/
+official_cache/
+tlr_cache/
+hf_cache/
+manifests/production/
+manifests/private/
+verified_archive/
+
+# Databases and indexes
+*.sqlite
+*.sqlite3
+*.db
+*.duckdb
+*.parquet
+*.arrow
+*.chroma/
+chroma/
+vector_store/
+
+# Large archives
+*.zip
+*.tar
+*.gz
+*.7z
+*.rar
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
