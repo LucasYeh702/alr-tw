@@ -2,7 +2,9 @@
 
 語言版本：繁體中文 | [English](README.en.md)
 
-ALR-TW 是 **Agentic Legal RAG / MCP Harness for Taiwan Law** 的簡稱。它是一個 public-safe 的參考實作，用來示範法律 AI agent 在回答前如何規劃檢索、召回候選資料、判斷來源層級、驗證引用、檢查覆蓋率，最後在證據不足時 fail closed。
+ALR-TW 是 **Agentic Legal RAG / MCP Harness for Taiwan Law** 的簡稱。它是一個由 AI agent 驅動的 agentic RAG harness：agent 可以呼叫工具、產生 trace、做 trust-gate decision，但必須在 harness 的 deterministic graph、citation validation 與 trust gate 內運作。它不是自主執業、可自行完成法律判斷的 autonomous legal agent。
+
+本 repo 是 public-safe 的參考實作，用來示範法律 AI agent 在回答前如何規劃檢索、召回候選資料、判斷來源層級、驗證引用、檢查覆蓋率，最後在證據不足時 fail closed。
 
 這個 repo 的重點不是「內建台灣法律資料庫」，而是「讓法律 RAG agent 不跳過查證流程」。它提供 deterministic execution graph、MCP tools、trust gate、trace schema、validation report 與 synthetic scenarios，讓開發者可以用公開安全的方式檢查 agentic legal RAG 的工程邊界。
 
@@ -25,7 +27,7 @@ User Query
 -> Final Decision
 ```
 
-這個 loop 是 bounded agentic workflow，不是無限制自治代理。Agent 可以使用工具、產生 trace、提出 final action，但不能繞過 citation validation 與 trust gate。
+這個 loop 是 AI-agent-driven 的 bounded agentic workflow，不是無限制自治代理。Agent 可以使用工具、產生 trace、提出 final action，但不能繞過 citation validation 與 trust gate。
 
 ALR-TW 目前示範的能力：
 

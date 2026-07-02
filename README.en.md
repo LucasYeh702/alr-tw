@@ -2,7 +2,9 @@
 
 Languages: [繁體中文](README.zh-TW.md) | English
 
-ALR-TW is short for **Agentic Legal RAG / MCP Harness for Taiwan Law**. It is a public-safe reference implementation that demonstrates how a legal AI agent can plan retrieval, recall candidate materials, classify source tiers, validate citations, check coverage, and fail closed when evidence is not sufficient.
+ALR-TW is short for **Agentic Legal RAG / MCP Harness for Taiwan Law**. It is an AI-agent-driven agentic RAG harness: an agent may call tools, produce traces, and make trust-gate decisions, but it must operate inside the harness's deterministic graph, citation validation, and trust gate. It is not an autonomous legal agent that practices law or independently completes legal judgment.
+
+This repository is a public-safe reference implementation that demonstrates how a legal AI agent can plan retrieval, recall candidate materials, classify source tiers, validate citations, check coverage, and fail closed when evidence is not sufficient.
 
 This repository is not a bundled Taiwan legal database. Its purpose is to make sure a legal RAG agent does not skip verification. It provides a deterministic execution graph, MCP tools, trust gates, trace schemas, validation reports, and synthetic scenarios so developers can inspect the engineering boundary of agentic legal RAG without exposing private or production data.
 
@@ -25,7 +27,7 @@ User Query
 -> Final Decision
 ```
 
-This is a bounded agentic workflow, not an unrestricted autonomous legal agent. The agent may use tools, produce a trace, and choose a final action, but it cannot bypass citation validation or the trust gate.
+This is an AI-agent-driven bounded agentic workflow, not an unrestricted autonomous legal agent. The agent may use tools, produce a trace, and choose a final action, but it cannot bypass citation validation or the trust gate.
 
 Current ALR-TW capabilities:
 

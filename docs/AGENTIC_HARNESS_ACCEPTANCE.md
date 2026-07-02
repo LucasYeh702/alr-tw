@@ -5,8 +5,8 @@ describe itself as an Agentic Legal RAG / MCP Harness.
 
 ## Accepted v0.2 Claim
 
-ALR-TW v0.2 may claim to be a bounded agentic legal RAG harness because the
-repository includes:
+ALR-TW v0.2 may claim to be an AI-agent-driven, bounded agentic legal RAG harness
+because the repository includes:
 
 1. A deterministic execution graph:
    `query_understanding -> source_plan -> retrieval -> source_classification ->
@@ -34,6 +34,7 @@ repository includes:
 ALR-TW v0.2 does not claim to be:
 
 - an unrestricted autonomous legal agent
+- an autonomous legal agent that practices law or independently completes legal judgment
 - a production legal research agent
 - a real Taiwan legal database
 - a source of legal advice
@@ -68,4 +69,3 @@ The release must also include at least these public artifacts:
 - `docs/PUBLIC_PRIVATE_BOUNDARY.md`
 - `examples/agentic_runs/*.json`
 - `examples/reports/*.md`
-

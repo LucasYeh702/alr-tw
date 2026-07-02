@@ -50,7 +50,9 @@ def test_agentic_harness_name_is_backed_by_graph_tools_and_scenarios():
 def test_acceptance_doc_states_current_claim_boundary():
     text = Path("docs/AGENTIC_HARNESS_ACCEPTANCE.md").read_text(encoding="utf-8")
 
+    assert "AI-agent-driven" in text
     assert "bounded agentic legal RAG harness" in text
     assert "Not Claimed" in text
     assert "unrestricted autonomous legal agent" in text
+    assert "independently completes legal judgment" in text
     assert "production legal research agent" in text

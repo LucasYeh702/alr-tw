@@ -1,7 +1,8 @@
 # ALR-TW Agentic Workflow
 
-ALR-TW is a bounded agentic legal RAG harness. It demonstrates how an AI agent can
-plan, retrieve, validate, and decide without bypassing source and citation policy.
+ALR-TW is an AI-agent-driven, bounded agentic legal RAG harness. It demonstrates
+how an AI agent can plan, retrieve, validate, and decide without bypassing source
+and citation policy.
 
 ```text
 Query
@@ -16,8 +17,9 @@ Query
 ```
 
 The graph is deterministic. ALR-TW does not implement an unrestricted autonomous
-legal agent loop. Every final answer must pass citation validation and the trust
-gate; otherwise the harness refuses or requires human review.
+legal agent loop, and it is not an agent that practices law or independently
+completes legal judgment. Every final answer must pass citation validation and
+the trust gate; otherwise the harness refuses or requires human review.
 
 ## Scenarios
 
@@ -28,4 +30,3 @@ gate; otherwise the harness refuses or requires human review.
 - `fail_no_final_citation`: no final citation produces fail-closed refusal.
 - `fail_low_coverage`: low legal coverage blocks final answer.
 - `human_review_required_claim_support`: source exists, but claim support was not checked.
-
