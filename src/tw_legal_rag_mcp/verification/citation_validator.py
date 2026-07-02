@@ -23,6 +23,14 @@ class CitationSupport(str, Enum):
     NOT_CHECKED = "not_checked"
 
 
+class CitationEligibility(str, Enum):
+    FINAL_ELIGIBLE = "final_eligible"
+    CANDIDATE_ONLY = "candidate_only"
+    DEMO_ONLY = "demo_only"
+    REJECTED = "rejected"
+    MISSING = "missing"
+
+
 def _source_from_mapping(citation: dict[str, Any]) -> SourceRecord:
     return SourceRecord(
         source_id=str(citation.get("source_id") or citation.get("citation_id") or ""),
@@ -42,26 +50,31 @@ def validate_citation(citation: dict[str, Any], require_final: bool = False) -> 
     if not citation_id:
         status = CitationStatus.NOT_FOUND
         support = CitationSupport.UNSUPPORTED
+        eligibility = CitationEligibility.MISSING
         reason = "citation_id is missing"
         error_code = "CITATION_ID_MISSING"
     elif citation_use == CitationUse.ALLOW_FINAL:
         status = CitationStatus.EXISTS
-        support = CitationSupport.SUPPORTED
-        reason = "citation is allowed as a final source"
+        support = CitationSupport.NOT_CHECKED
+        eligibility = CitationEligibility.FINAL_ELIGIBLE
+        reason = "source tier is eligible for final citation"
         error_code = None
     elif citation_use == CitationUse.DEMO_ONLY:
         status = CitationStatus.EXISTS
         support = CitationSupport.NOT_CHECKED
+        eligibility = CitationEligibility.DEMO_ONLY
         reason = "synthetic source exists for demo only"
         error_code = "SYNTHETIC_DEMO_ONLY"
     elif citation_use == CitationUse.ALLOW_CANDIDATE_ONLY:
         status = CitationStatus.UNVERIFIABLE if require_final else CitationStatus.EXISTS
-        support = CitationSupport.UNSUPPORTED if require_final else CitationSupport.NOT_CHECKED
+        support = CitationSupport.NOT_CHECKED
+        eligibility = CitationEligibility.CANDIDATE_ONLY
         reason = "source tier is candidate-only and not allowed as final citation"
         error_code = "CANDIDATE_ONLY_SOURCE" if require_final else None
     else:
         status = CitationStatus.UNVERIFIABLE
-        support = CitationSupport.UNSUPPORTED
+        support = CitationSupport.NOT_CHECKED
+        eligibility = CitationEligibility.REJECTED
         reason = "source tier is rejected or unknown"
         error_code = "SOURCE_REJECTED_OR_UNKNOWN"
 
@@ -69,6 +82,7 @@ def validate_citation(citation: dict[str, Any], require_final: bool = False) -> 
         "citation_id": citation_id,
         "status": status.value,
         "support": support.value,
+        "citation_eligibility": eligibility.value,
         "source_tier": source.source_tier.value,
         "citation_use": citation_use.value,
         "official_url": source.official_url,

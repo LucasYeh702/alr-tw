@@ -48,6 +48,8 @@ Production implementations should preserve these invariants even when replacing 
 6. Candidate-only, unknown, rejected, or unverifiable citations must not satisfy answer validation.
 7. If no final citation remains after validation, the trust gate must fail closed.
 8. Citation eligibility is separate from legal force. Production systems should separately model `legal_effect_type`, `normative_weight`, `citation_role`, or equivalent metadata.
+9. Non-answer traces must not include directly presentable answer content.
+10. Trace tool calls should identify whether they are deterministic harness records or actual live tool calls.
 
 ## Out Of Scope
 
@@ -76,6 +78,13 @@ Implementers can replace or extend the following layers without changing the tru
 - citation verifiers that re-check official URLs, recompute content hashes, handle tombstones, and apply freshness policies
 - ranking layers that consider citation eligibility, source tier, legal effect, court level, date, and issue fit
 - MCP tools or service APIs that expose search, exact lookup, citation validation, and trust gate results
+
+TLR-like semantic indexes can be used as high-recall retrieval sources, but they
+should feed candidate discovery only. For final citation eligibility, implementers
+should verify candidates against original files downloaded from the Judicial Yuan
+or another official source and promote only records with official URL or stable
+identifier, content hash, download timestamp, and verification timestamp into a
+local `verified_cache`.
 
 ## Contract Tests
 

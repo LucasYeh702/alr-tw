@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from alr_tw.harness.constants import TrustFailureReason
+from alr_tw.harness.orchestrator import run_agentic_demo
 from alr_tw.harness.trace_schema import AgenticRunTrace
 
 
@@ -24,3 +26,38 @@ def test_example_traces_validate_against_schema():
     for path in paths:
         AgenticRunTrace.model_validate_json(path.read_text(encoding="utf-8"))
 
+
+def test_demo_trace_marks_harness_recorded_tool_calls_and_decisions():
+    trace = run_agentic_demo("民法第184條 押金", scenario="pass_official_source")
+
+    assert trace.tool_calls
+    assert {tool_call.execution_mode for tool_call in trace.tool_calls} == {"harness_recorded"}
+    assert trace.decision_trace[-1]["final_action"] == "answer"
+    assert trace.decision_trace[-1]["safe_to_present"] is True
+
+
+def test_non_answer_example_traces_do_not_include_answer_body():
+    for scenario in [
+        "fail_candidate_only",
+        "fail_synthetic_only",
+        "fail_verified_cache_incomplete",
+        "fail_no_final_citation",
+        "fail_low_coverage",
+        "human_review_required_claim_support",
+    ]:
+        trace = run_agentic_demo("民法第184條 押金", scenario=scenario)
+
+        assert trace.final_action != "answer"
+        assert trace.answer is None
+
+
+def test_example_failure_reasons_are_known_constants_and_documented():
+    allowed = {reason.value for reason in TrustFailureReason}
+    docs_text = Path("docs/ERROR_CODES.md").read_text(encoding="utf-8")
+
+    for reason in allowed:
+        assert f"`{reason}`" in docs_text
+
+    for path in sorted(Path("examples/agentic_runs").glob("*.json")):
+        trace = AgenticRunTrace.model_validate_json(path.read_text(encoding="utf-8"))
+        assert set(trace.trust_gate.failure_reasons).issubset(allowed)

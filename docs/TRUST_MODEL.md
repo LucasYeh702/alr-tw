@@ -20,8 +20,23 @@ ALR-TW separates source discovery from final citation authority.
 - `demo_only`: synthetic fixture only.
 - `reject`: cannot be used.
 
+## Citation Eligibility
+
+`citation_eligibility` is separate from claim support:
+
+- `final_eligible`: source tier and metadata can support final-citation eligibility.
+- `candidate_only`: source may help discovery only.
+- `demo_only`: source is synthetic demonstration data only.
+- `rejected`: source tier or metadata failed the policy.
+- `missing`: citation was not found.
+
+`support: not_checked` means the public harness has not verified that a source
+actually entails a legal claim. Production systems should add a separate
+claim-support or legal-effect layer before presenting legal analysis.
+
 ## Fail-Closed Rules
 
-ALR-TW refuses or requires human review when there is no final citation, a rejected
-or unverifiable source, low required coverage, or unchecked claim support.
-
+ALR-TW refuses when there is no final citation, a rejected or unverifiable
+source, or low required coverage. It may return `human_review_required` only
+when final citation eligibility exists and the remaining blocker is unchecked
+claim support. Non-answer traces must keep `answer` as `null`.

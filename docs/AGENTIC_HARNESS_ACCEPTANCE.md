@@ -3,9 +3,9 @@
 This document defines the minimum public evidence required before ALR-TW can
 describe itself as an Agentic Legal RAG / MCP Harness.
 
-## Accepted v0.2 Claim
+## Accepted v0.2.1 Claim
 
-ALR-TW v0.2 may claim to be an AI-agent-driven, bounded agentic legal RAG harness
+ALR-TW v0.2.1 may claim to be an AI-agent-driven, bounded agentic legal RAG harness
 because the repository includes:
 
 1. A deterministic execution graph:
@@ -20,18 +20,23 @@ because the repository includes:
    `alr-tw.agentic_trace/v1`.
 6. Deterministic synthetic scenarios covering answer, refusal, and
    human-review-required outcomes.
-7. Fail-closed trust behavior for candidate-only sources, synthetic-only
+7. Trace fields that distinguish deterministic harness records from live tool
+   execution logs through `execution_mode`.
+8. Decision traces that show citation-validation counts and trust-gate output.
+9. Fail-closed trust behavior for candidate-only sources, synthetic-only
    sources, incomplete verified-cache metadata, missing final citations, and
    low coverage.
-8. Markdown validation reports generated from run traces.
-9. Public/private boundary checks that block production data, caches, indexes,
+10. Human-review-required traces that do not include directly presentable
+    answer bodies.
+11. Markdown validation reports generated from run traces.
+12. Public/private boundary checks that block production data, caches, indexes,
    logs, credentials, and local sensitive paths.
-10. Tests and CI gates for the harness, trace schema, MCP server, reports,
+13. Tests and CI gates for the harness, trace schema, MCP server, reports,
     source policy, and public boundary.
 
 ## Not Claimed
 
-ALR-TW v0.2 does not claim to be:
+ALR-TW v0.2.1 does not claim to be:
 
 - an unrestricted autonomous legal agent
 - an autonomous legal agent that practices law or independently completes legal judgment
@@ -63,9 +68,11 @@ The release must also include at least these public artifacts:
 
 - `docs/AGENTIC_WORKFLOW.md`
 - `docs/TRUST_MODEL.md`
+- `docs/TLR_CANDIDATE_MODE.md`
 - `docs/TOOL_CONTRACT.md`
 - `docs/TRACE_SCHEMA.md`
 - `docs/VALIDATION_REPORT.md`
+- `docs/RELEASE_NOTES.md`
 - `docs/PUBLIC_PRIVATE_BOUNDARY.md`
 - `examples/agentic_runs/*.json`
 - `examples/reports/*.md`

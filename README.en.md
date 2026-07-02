@@ -31,14 +31,14 @@ This is an AI-agent-driven bounded agentic workflow, not an unrestricted autonom
 
 Current ALR-TW capabilities:
 
-- query understanding: mask sensitive text, normalize the query, parse legal citations, and extract issue tags
+- query understanding: apply demo heuristic sensitive-text masking, normalize the query, parse legal citations, and extract issue tags
 - source planning: separate official sources, verified caches, staging data, external semantic recall, and synthetic fixtures
 - candidate retrieval: retrieve synthetic statute, judgment, Constitutional Court, and external-candidate records
 - exact lookup: look up law articles, judgment `jid` values, and synthetic Constitutional Court ids
 - citation validation: decide whether a citation exists, is verifiable, and may become a final citation
 - coverage gate: report laws, judgments, constitutional materials, and other coverage states
 - trust gate: refuse output when final citations are missing, sources are unverifiable, coverage is low-confidence, or claim support is unchecked
-- trace schema: emit `alr-tw.agentic_trace/v1` with steps, tool calls, evidence, coverage, trust-gate output, and final action
+- trace schema: emit `alr-tw.agentic_trace/v1` with steps, tool calls, decision trace, evidence, coverage, trust-gate output, and final action
 - validation report: convert an agent run into a Markdown review report
 - MCP server: expose agentic legal RAG tools over stdio for local MCP clients
 
@@ -46,7 +46,7 @@ Current ALR-TW capabilities:
 
 | Tool | Capability | Output focus |
 |---|---|---|
-| `agentic_legal_research` | Runs the synthetic agentic RAG loop | Tool trace, candidates, final citations, trust gate |
+| `agentic_legal_research` | Runs the synthetic agentic RAG loop | Canonical trace, candidates, final citations, trust gate |
 | `run_agentic_demo` | Runs a deterministic ALR-TW scenario | `answer`, `refuse`, or `human_review_required` |
 | `build_validation_report` | Builds a validation report | Markdown review artifact |
 | `get_trust_model` | Returns source tiers and fail-closed policy | Trust model |
@@ -66,6 +66,8 @@ All MCP tool results use the same envelope:
   "error": null
 }
 ```
+
+Example traces mark `tool_calls` with `execution_mode: "harness_recorded"`. That means they are deterministic harness records, not live external tool execution logs.
 
 ## Trust Gate
 
@@ -88,7 +90,7 @@ The trust gate fails closed when:
 - only synthetic demo sources were found
 - a verified cache lacks official URL, hash, or verification time
 - coverage is absent or low-confidence
-- claim support has not been checked and human review is required
+- claim support has not been checked; the run can only require human review and must not return a directly presentable answer body
 
 ## Demo Scenarios
 
@@ -103,6 +105,8 @@ The trust gate fails closed when:
 | `fail_no_final_citation` | No final citation exists; answer is refused |
 | `fail_low_coverage` | Coverage is low-confidence; answer is refused |
 | `human_review_required_claim_support` | Source exists, but claim support was not checked; human review is required |
+
+When `final_action != "answer"`, the trace `answer` must be `null`. A client may render answer content only when `trust_gate.safe_to_present == true` and `final_action == "answer"`.
 
 ## Quick Start
 
@@ -119,7 +123,7 @@ MCP stdio smoke:
 
 ```bash
 printf '%s\n' \
-  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"stdio-smoke","version":"0.2.0"}}}' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"stdio-smoke","version":"0.2.1"}}}' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
   | uv run --extra dev alr-tw-mcp
@@ -179,14 +183,29 @@ Official data source or compliant internal source
 
 External semantic recall may improve recall, but ALR-TW treats it as `external_semantic_recall` first. It is candidate-only. Final citations must come from `official` sources or qualifying `verified_cache` records.
 
+In practice, TLR or another semantic index can be a useful high-recall data source for candidate judgments and related leads. Final citations should not directly cite TLR recall results; the recommended path is still to download original files from the Judicial Yuan or another official source and build a local `verified_cache`.
+
+A local `verified_cache` should at least keep the official URL or stable official identifier, content hash, download time, and verified time. Only `official` sources or metadata-complete `verified_cache` records can pass final-citation eligibility.
+
+Minimum data recommendation:
+
+- search / semantic recall: connect TLR or another semantic index first as the high-recall candidate source.
+- local verification cache: download Judicial Yuan monthly judgment originals and convert them into a local `verified_cache` for jid, official-source, hash, and verified-time checks.
+- law corpus: statutes are not part of the Judicial Yuan judgment monthly archives. Connect a separate official law source such as MOJ or another official legal-data provider. Based on measured official-law JSON scale, raw statute data is within a few hundred MB; a separate statute vector index is usually in the 1-2GB range. Exact article lookup should take priority for explicit article queries, with semantic recall as a supplement.
+- constitutional materials: Judicial Yuan public data can also include Judicial Yuan Interpretations and Constitutional Court materials as a local verification source for constitutional materials. Based on measured scale, raw zip files are roughly 260MB and raw JSON is roughly 25MB; with attachments and OCR text retained, the total remains within about 1GB.
+- Judicial Yuan scope: in this section, Judicial Yuan data mainly means public monthly judgment archives, plus separately ingestible Judicial Yuan Interpretations and Constitutional Court public materials. It does not include statute full text, administrative interpretations, MOJ law data, unpublished judgments, or private case data. Actual downloadable periods, fields, and redaction behavior depend on the Judicial Yuan open-data source.
+- capacity planning: for a full historical judgment corpus, official compressed monthly archives are roughly 50GB and a local gzip verification cache is roughly 30GB. A separate judgment full-text, FTS, or vector index can grow into the hundreds of GB. A minimal deployment can reserve about 100GB for official judgment originals plus local verification cache; raw statute data and constitutional materials usually each fit within 1GB, while indexing capacity should be planned separately.
+
 ## Specification Docs
 
 - [docs/AGENTIC_WORKFLOW.md](docs/AGENTIC_WORKFLOW.md): agentic RAG execution graph
-- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md): v0.2 naming and release acceptance criteria
+- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md): v0.2.1 naming and release acceptance criteria
 - [docs/TRUST_MODEL.md](docs/TRUST_MODEL.md): source tiers, citation use, and fail-closed rules
+- [docs/TLR_CANDIDATE_MODE.md](docs/TLR_CANDIDATE_MODE.md): external semantic recall / TLR-like candidate-only mode
 - [docs/TOOL_CONTRACT.md](docs/TOOL_CONTRACT.md): MCP tool envelope and contracts
 - [docs/TRACE_SCHEMA.md](docs/TRACE_SCHEMA.md): trace schema
 - [docs/VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md): validation report structure
+- [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md): release notes
 - [docs/PUBLIC_PRIVATE_BOUNDARY.md](docs/PUBLIC_PRIVATE_BOUNDARY.md): public repo and private runtime boundary
 - [docs/PUBLIC_PRIVATE_TRACEABILITY.md](docs/PUBLIC_PRIVATE_TRACEABILITY.md): local capability to public counterpart mapping
 - [docs/ERROR_CODES.md](docs/ERROR_CODES.md): error codes

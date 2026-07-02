@@ -2,13 +2,19 @@ from __future__ import annotations
 
 from typing import Any
 
+from alr_tw.harness.trace_schema import (
+    AgenticRunTrace,
+    EvidenceRecord,
+    ToolCallTrace,
+    TrustGateTrace,
+)
+from alr_tw.harness.constants import FinalAction, ToolExecutionMode
+
 from ..contracts import SyntheticOfficialAdapter, SyntheticRetriever, SourcePolicyCitationVerifier
 from ..legal_nlp.privacy import mask_sensitive_text
 from ..legal_nlp.query_understanding import understand_query
 from ..verification.answer_validation import answer_with_validation
 from ..verification.trust_gates import evaluate_trust_gate
-
-AGENTIC_LEGAL_RAG_SCHEMA = "alr-tw.agentic-legal-rag/v1"
 
 
 def _trace_step(tool: str, decision: str, details: dict[str, Any]) -> dict[str, Any]:
@@ -17,6 +23,20 @@ def _trace_step(tool: str, decision: str, details: dict[str, Any]) -> dict[str, 
 
 def _public_understanding(understanding: dict[str, object]) -> dict[str, object]:
     return {key: value for key, value in understanding.items() if key != "raw_query"}
+
+
+def _tool_call(tool_trace: dict[str, Any]) -> ToolCallTrace:
+    return ToolCallTrace(
+        tool_name=str(tool_trace["tool"]),
+        execution_mode=ToolExecutionMode.HARNESS_RECORDED.value,
+        output_summary={
+            "decision": tool_trace["decision"],
+            "synthetic": True,
+            "trace_kind": "deterministic_harness_step",
+            **dict(tool_trace["details"]),
+        },
+        status="success",
+    )
 
 
 def run_agentic_legal_research(query: str) -> dict[str, Any]:
@@ -108,20 +128,54 @@ def run_agentic_legal_research(query: str) -> dict[str, Any]:
         )
     )
 
-    return {
-        "schema": AGENTIC_LEGAL_RAG_SCHEMA,
-        "plan": {
-            "mode": "synthetic_agentic_rag",
-            "policy": "retrieve_candidates_validate_citations_fail_closed",
-            "data_boundary": "synthetic_demo_only",
+    evidence = [
+        EvidenceRecord(
+            citation_id=str(verification["citation_id"]),
+            source_id=candidate.source_id,
+            source_tier=str(verification["source_tier"]),
+            citation_use=str(verification["citation_use"]),
+            title=candidate.title,
+            snippet=candidate.snippet,
+            official_url=verification.get("official_url"),
+            validation_status=str(verification["status"]),
+        )
+        for candidate, verification in zip(candidates, verifications, strict=True)
+    ]
+    final_action = str(trust_gate["recommended_action"])
+    decision_trace = [
+        {
+            "step": "citation_validation",
+            "final_citation_count": len(final_citations),
+            "candidate_count": len(candidates),
         },
-        "query": safe_understanding["masked_query"],
-        "query_understanding": safe_understanding,
-        "tool_trace": tool_trace,
-        "source_manifest": adapter_result.manifest.to_dict(),
-        "retrieval_candidates": [candidate.to_dict() for candidate in candidates],
-        "citation_verifications": verifications,
-        "final_citations": final_citations,
-        "trust_gate": trust_gate,
-        "answer_validation": wrapped_answer["validation_summary"],
-    }
+        {
+            "step": "trust_gate",
+            "safe_to_present": bool(trust_gate["safe_to_present"]),
+            "failure_reasons": list(trust_gate["failure_reasons"]),
+            "final_action": final_action,
+            "answer_present": final_action == FinalAction.ANSWER.value,
+        },
+    ]
+    trace = AgenticRunTrace(
+        query=str(safe_understanding["masked_query"]),
+        normalized_query=str(safe_understanding["normalized_query"]),
+        steps=[
+            {"from": "query_understanding", "to": "synthetic_retrieval"},
+            {"from": "synthetic_retrieval", "to": "citation_validation"},
+            {"from": "citation_validation", "to": "trust_gate"},
+            {"from": "trust_gate", "to": "answer_validation"},
+        ],
+        tool_calls=[_tool_call(step) for step in tool_trace],
+        decision_trace=decision_trace,
+        evidence=evidence,
+        coverage=coverage,
+        trust_gate=TrustGateTrace(
+            safe_to_present=bool(trust_gate["safe_to_present"]),
+            failure_reasons=list(trust_gate["failure_reasons"]),
+            validation_summary=dict(wrapped_answer["validation_summary"]),
+            recommended_action=final_action,  # type: ignore[arg-type]
+        ),
+        final_action=final_action,  # type: ignore[arg-type]
+        answer=answer if final_action == "answer" else None,
+    )
+    return trace.model_dump()

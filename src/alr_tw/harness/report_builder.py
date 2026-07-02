@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from .trace_schema import AgenticRunTrace
 
 
@@ -24,7 +26,13 @@ def build_validation_report(trace: AgenticRunTrace) -> str:
         trace.normalized_query or "",
         "",
         "## 3. Tool Plan",
-        "\n".join(f"- {call.tool_name}: {call.status}" for call in trace.tool_calls),
+        "\n".join(
+            "- "
+            f"{call.tool_name}: {call.status}, "
+            f"execution_mode={call.execution_mode}, "
+            f"trace_kind={call.output_summary.get('trace_kind', 'unspecified')}"
+            for call in trace.tool_calls
+        ),
         "",
         "## 4. Retrieved Sources",
         "\n".join(
@@ -54,11 +62,17 @@ def build_validation_report(trace: AgenticRunTrace) -> str:
         f"- safe_to_present: {trace.trust_gate.safe_to_present}",
         f"- failure_reasons: {reasons}",
         "",
-        "## 10. Final Action",
+        "## 10. Decision Trace",
+        "\n".join(
+            f"- {json.dumps(decision, ensure_ascii=False, sort_keys=True)}"
+            for decision in trace.decision_trace
+        )
+        or "- None",
+        "",
+        "## 11. Final Action",
         trace.final_action,
         "",
-        "## 11. Human Review Notes",
+        "## 12. Human Review Notes",
         "\n".join(f"- {note}" for note in trace.human_review_notes) or "- None",
     ]
     return "\n".join(sections) + "\n"
-

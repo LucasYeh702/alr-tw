@@ -31,14 +31,14 @@ User Query
 
 ALR-TW 目前示範的能力：
 
-- query understanding：遮罩敏感資訊、正規化查詢、解析法律引用與 issue tags
+- query understanding：用 demo heuristic 遮罩敏感資訊、正規化查詢、解析法律引用與 issue tags
 - source planning：把官方來源、verified cache、staging、external semantic recall、synthetic fixture 分層
 - candidate retrieval：召回 synthetic 法規、裁判、憲法法庭資料與外部候選線索
 - exact lookup：用法律名稱與條號、裁判 `jid`、憲法法庭 synthetic id 做精確查找
 - citation validation：判斷 citation 是否存在、是否可驗證、是否可作 final citation
 - coverage gate：回報 laws、judgments、constitutional materials 等覆蓋狀態
 - trust gate：沒有 final citation、來源不可驗證、coverage 低信心或 claim support 未檢查時拒絕輸出
-- trace schema：輸出 `alr-tw.agentic_trace/v1`，保留 steps、tool calls、evidence、coverage、trust gate 與 final action
+- trace schema：輸出 `alr-tw.agentic_trace/v1`，保留 steps、tool calls、decision trace、evidence、coverage、trust gate 與 final action
 - validation report：把 agent run 轉成可 review 的 Markdown report
 - MCP server：用 stdio 暴露 agentic legal RAG tools，讓本機 MCP client 啟動
 
@@ -46,7 +46,7 @@ ALR-TW 目前示範的能力：
 
 | Tool | 能力 | 輸出重點 |
 |---|---|---|
-| `agentic_legal_research` | 執行 synthetic agentic RAG loop | tool trace、candidate、final citation、trust gate |
+| `agentic_legal_research` | 執行 synthetic agentic RAG loop | canonical trace、candidate、final citation、trust gate |
 | `run_agentic_demo` | 執行 deterministic ALR-TW scenario | `answer`、`refuse` 或 `human_review_required` |
 | `build_validation_report` | 產生 validation report | Markdown review artifact |
 | `get_trust_model` | 回傳 source tier 與 fail-closed policy | trust model |
@@ -66,6 +66,8 @@ ALR-TW 目前示範的能力：
   "error": null
 }
 ```
+
+範例 trace 中的 `tool_calls` 會標示 `execution_mode: "harness_recorded"`，代表這是 deterministic harness record，不是 live external tool execution log。
 
 ## Trust Gate
 
@@ -88,7 +90,7 @@ Trust gate 會在下列情況 fail closed：
 - 只找到 synthetic demo source
 - verified cache 缺少官方 URL、hash 或驗證時間
 - coverage 為 absent 或 low confidence
-- claim support 尚未檢查，需要 human review
+- claim support 尚未檢查時只能進入 human review，不會輸出可直接呈現的 answer body
 
 ## Demo Scenarios
 
@@ -103,6 +105,8 @@ Trust gate 會在下列情況 fail closed：
 | `fail_no_final_citation` | 沒有 final citation，拒絕回答 |
 | `fail_low_coverage` | 覆蓋率低信心，拒絕回答 |
 | `human_review_required_claim_support` | 來源存在，但 claim support 未檢查，需要人工審查 |
+
+當 `final_action != "answer"` 時，trace 的 `answer` 必須是 `null`。Client 只有在 `trust_gate.safe_to_present == true` 且 `final_action == "answer"` 時才能渲染 answer content。
 
 ## 快速開始
 
@@ -119,7 +123,7 @@ MCP stdio smoke：
 
 ```bash
 printf '%s\n' \
-  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"stdio-smoke","version":"0.2.0"}}}' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"stdio-smoke","version":"0.2.1"}}}' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
   | uv run --extra dev alr-tw-mcp
@@ -179,14 +183,29 @@ Official data source or compliant internal source
 
 外部語意召回可以提高 recall，但在 ALR-TW 中永遠先視為 `external_semantic_recall`，只能當 candidate。Final citation 必須回到 `official` 或符合條件的 `verified_cache`。
 
+實務上可以把 TLR 或其他語意索引作為高召回資料源，用來找候選裁判與相關線索。但 final citation 不應直接引用 TLR 召回結果；建議仍自司法院或其他官方來源下載原始檔，建立本地 `verified_cache`。
+
+本地 `verified_cache` 至少應保留官方 URL 或穩定官方識別碼、content hash、下載時間與 verified time。只有 `official` 或 metadata 完整的 `verified_cache` 才能通過 final-citation eligibility。
+
+最小資料建議：
+
+- search / semantic recall：先接 TLR 或其他語意索引，作為高召回 candidate source。
+- local verification cache：下載司法院裁判原始月檔，轉成本地 `verified_cache`，用來核對 jid、官方來源、hash 與 verified time。
+- law corpus：法規資料不屬於司法院裁判月檔，應另接法務部或其他官方法規來源。以官方法規 JSON 的實測量級估算，原始法規資料約數百 MB 以內；若另建法規 vector index，通常是 1-2GB 級別。明確條號查詢應優先走 exact article lookup，再補語意召回。
+- constitutional materials：司法院公開資料也可另外接釋字與憲法法庭資料，作為 constitutional materials 的本地驗證來源。以實測量級估算，raw zip 約 260MB、raw JSON 約 25MB，若保留附件與 OCR text，整體約 1GB 以內。
+- Judicial Yuan scope：這裡的司法院資料主要指司法院開放資料的裁判書月檔，以及可另行接入的釋字與憲法法庭公開資料。它不包含法規全文、行政函釋、法務部法規資料、未公開裁判或任何私有案件資料；實際可下載期間、欄位與遮蔽內容以司法院開放資料站為準。
+- capacity planning：以完整歷史裁判資料量級估算，官方壓縮月檔約 50GB，轉成本地 gzip 驗證快取約 30GB；若另外自建裁判全文、FTS 或 vector index，容量可能上升到數百 GB。最小部署可先預留約 100GB 給官方裁判原始檔與本地驗證快取；法規原始檔與憲法資料各預留 1GB 以內通常足夠，index 層視需求另外規劃。
+
 ## 規格文件
 
 - [docs/AGENTIC_WORKFLOW.md](docs/AGENTIC_WORKFLOW.md)：agentic RAG execution graph
-- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md)：v0.2 名稱與 release acceptance 條件
+- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md)：v0.2.1 名稱與 release acceptance 條件
 - [docs/TRUST_MODEL.md](docs/TRUST_MODEL.md)：source tier、citation use 與 fail-closed rules
+- [docs/TLR_CANDIDATE_MODE.md](docs/TLR_CANDIDATE_MODE.md)：外部語意召回 / TLR-like candidate-only 模式
 - [docs/TOOL_CONTRACT.md](docs/TOOL_CONTRACT.md)：MCP tool envelope 與工具契約
 - [docs/TRACE_SCHEMA.md](docs/TRACE_SCHEMA.md)：trace schema
 - [docs/VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md)：validation report 結構
+- [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md)：release notes
 - [docs/PUBLIC_PRIVATE_BOUNDARY.md](docs/PUBLIC_PRIVATE_BOUNDARY.md)：公開 repo 與 private runtime 邊界
 - [docs/PUBLIC_PRIVATE_TRACEABILITY.md](docs/PUBLIC_PRIVATE_TRACEABILITY.md)：local capability 與 public counterpart 對應
 - [docs/ERROR_CODES.md](docs/ERROR_CODES.md)：錯誤碼

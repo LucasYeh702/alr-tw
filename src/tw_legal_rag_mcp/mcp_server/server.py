@@ -17,7 +17,7 @@ from .tools import (
 )
 
 SERVER_NAME = "alr-tw"
-SERVER_VERSION = "0.2.0"
+SERVER_VERSION = "0.2.1"
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"
 SUPPORTED_PROTOCOL_VERSIONS = {DEFAULT_PROTOCOL_VERSION}
 SOURCE_TIER_VALUES = {
@@ -188,6 +188,9 @@ def tool_definitions() -> list[dict[str, Any]]:
                 "type": "object",
                 "properties": {
                     "citation_id": {"type": "string"},
+                    "official_hash": {"type": "string"},
+                    "official_url": {"type": "string"},
+                    "source_label": {"type": "string"},
                     "source_tier": {
                         "type": "string",
                         "enum": [
@@ -199,6 +202,7 @@ def tool_definitions() -> list[dict[str, Any]]:
                             "unknown",
                         ],
                     },
+                    "verified_at": {"type": "string"},
                 },
                 "required": ["citation_id", "source_tier"],
                 "additionalProperties": False,
@@ -273,13 +277,27 @@ def call_tool(params: dict[str, Any]) -> dict[str, Any]:
         _reject_unexpected_keys(arguments, set())
         payload = get_trust_model_tool()
     elif name == "validate_citation":
-        _reject_unexpected_keys(arguments, {"citation_id", "source_tier"})
+        _reject_unexpected_keys(
+            arguments,
+            {
+                "citation_id",
+                "source_tier",
+                "official_url",
+                "official_hash",
+                "verified_at",
+                "source_label",
+            },
+        )
         source_tier = _required_string(arguments, "source_tier")
         if source_tier not in SOURCE_TIER_VALUES:
             raise ValueError(f"source_tier must be one of: {', '.join(sorted(SOURCE_TIER_VALUES))}")
         payload = validate_citation_tool(
             _required_string(arguments, "citation_id"),
             source_tier,
+            _optional_string(arguments, "official_url", default=None),
+            _optional_string(arguments, "official_hash", default=None),
+            _optional_string(arguments, "verified_at", default=None),
+            _optional_string(arguments, "source_label", default=None),
         )
     elif name == "exact_law_lookup":
         _reject_unexpected_keys(arguments, {"title", "article_no"})
@@ -319,7 +337,7 @@ def _required_string(arguments: dict[str, Any], name: str) -> str:
     return value
 
 
-def _optional_string(arguments: dict[str, Any], name: str, *, default: str) -> str:
+def _optional_string(arguments: dict[str, Any], name: str, *, default: str | None) -> str | None:
     if name not in arguments:
         return default
     raw_value = arguments[name]

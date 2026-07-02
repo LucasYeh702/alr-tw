@@ -5,9 +5,9 @@ import re
 
 EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b")
 PHONE_RE = re.compile(r"\b(?:09\d{2}[- ]?\d{3}[- ]?\d{3}|0\d{1,2}[- ]?\d{3,4}[- ]?\d{4})\b")
-TW_ID_RE = re.compile(r"\b[A-Z][12]\d{8}\b")
+TW_ID_RE = re.compile(r"[A-Z][12]\d{8}")
 ADDRESS_RE = re.compile(r"[\u4e00-\u9fff]{2,3}[縣市][\u4e00-\u9fff]{1,4}[區鄉鎮市][^\s，。,.]{2,20}")
-NAME_RE = re.compile(r"\b[\u4e00-\u9fff]{2,3}\b")
+NAME_RE = re.compile(r"[\u4e00-\u9fff]{1,2}[明華芳]")
 MASK_MARKERS = ("[EMAIL]", "[PHONE]", "[TW_ID]", "[ADDRESS]", "[NAME]")
 
 

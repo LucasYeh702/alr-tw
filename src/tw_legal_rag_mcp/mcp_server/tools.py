@@ -17,9 +17,24 @@ def legal_search(query: str) -> dict:
     return demo_search(query)
 
 
-def validate_citation_tool(citation_id: str, source_tier: str) -> dict:
+def validate_citation_tool(
+    citation_id: str,
+    source_tier: str,
+    official_url: str | None = None,
+    official_hash: str | None = None,
+    verified_at: str | None = None,
+    source_label: str | None = None,
+) -> dict:
     return validate_citation(
-        {"citation_id": citation_id, "source_id": citation_id, "source_tier": source_tier},
+        {
+            "citation_id": citation_id,
+            "source_id": citation_id,
+            "source_tier": source_tier,
+            "official_url": official_url,
+            "official_hash": official_hash,
+            "verified_at": verified_at,
+            "source_label": source_label,
+        },
         require_final=True,
     )
 

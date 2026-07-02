@@ -17,6 +17,23 @@ def test_masks_email_phone_taiwan_id_and_address_phrase():
     assert "[ADDRESS]" in masked
 
 
+def test_masks_unsegmented_chinese_name():
+    masked = mask_sensitive_text("王小明想問押金", mask_names=True)
+
+    assert "王小明" not in masked
+    assert "[NAME]" in masked
+
+
+def test_masks_taiwan_id_adjacent_to_chinese_text():
+    synthetic_id = "A" + "123456789"
+    masked = mask_sensitive_text(f"身分證王小明{synthetic_id}", mask_names=True)
+
+    assert "王小明" not in masked
+    assert synthetic_id not in masked
+    assert "[NAME]" in masked
+    assert "[TW_ID]" in masked
+
+
 def test_external_recall_gate_blocks_sensitive_query():
     synthetic_id = "A" + "123456789"
     result = external_recall_safety_gate(f"請查 {synthetic_id} 在租賃押金案件的判決")

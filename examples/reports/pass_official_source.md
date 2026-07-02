@@ -7,14 +7,14 @@
 民法第184條 擔保金
 
 ## 3. Tool Plan
-- query_understanding: success
-- source_plan: success
-- retrieval: success
-- source_classification: success
-- citation_validation: success
-- coverage_gate: success
-- trust_gate: success
-- final_decision: success
+- query_understanding: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
+- source_plan: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
+- retrieval: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
+- source_classification: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
+- citation_validation: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
+- coverage_gate: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
+- trust_gate: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
+- final_decision: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
 
 ## 4. Retrieved Sources
 - `official-demo-law-184` (official, allow_final)
@@ -36,8 +36,12 @@
 - safe_to_present: True
 - failure_reasons: none
 
-## 10. Final Action
+## 10. Decision Trace
+- {"candidate_count": 1, "final_citation_count": 1, "step": "citation_validation"}
+- {"answer_present": true, "failure_reasons": [], "final_action": "answer", "safe_to_present": true, "step": "trust_gate"}
+
+## 11. Final Action
 answer
 
-## 11. Human Review Notes
+## 12. Human Review Notes
 - None

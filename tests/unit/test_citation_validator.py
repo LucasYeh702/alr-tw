@@ -16,6 +16,8 @@ def test_validate_citation_reports_exists_for_official_source():
 
     assert result["status"] == CitationStatus.EXISTS
     assert result["citation_use"] == "allow_final"
+    assert result["citation_eligibility"] == "final_eligible"
+    assert result["support"] == "not_checked"
 
 
 def test_validate_citation_rejects_tlr_as_final_citation():

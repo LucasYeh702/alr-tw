@@ -15,10 +15,12 @@ def test_validation_report_contains_required_sections_for_fail_case():
         "7. Rejected / Unverifiable Sources",
         "8. Coverage",
         "9. Trust Gate Decision",
-        "10. Final Action",
-        "11. Human Review Notes",
+        "10. Decision Trace",
+        "11. Final Action",
+        "12. Human Review Notes",
     ):
         assert heading in report
     assert "refuse" in report
     assert "NO_FINAL_CITATION" in report
-
+    assert "harness_recorded" in report
+    assert "deterministic_harness_step" in report

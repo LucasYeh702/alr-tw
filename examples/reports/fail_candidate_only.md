@@ -7,14 +7,14 @@
 民法第184條 擔保金
 
 ## 3. Tool Plan
-- query_understanding: success
-- source_plan: success
-- retrieval: success
-- source_classification: success
-- citation_validation: success
-- coverage_gate: success
-- trust_gate: success
-- final_decision: success
+- query_understanding: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
+- source_plan: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
+- retrieval: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
+- source_classification: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
+- citation_validation: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
+- coverage_gate: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
+- trust_gate: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
+- final_decision: success, execution_mode=harness_recorded, trace_kind=deterministic_harness_step
 
 ## 4. Retrieved Sources
 - `tlr-candidate-demo-001` (external_semantic_recall, allow_candidate_only)
@@ -36,8 +36,12 @@
 - safe_to_present: False
 - failure_reasons: NO_FINAL_CITATION, UNVERIFIABLE_CITATION
 
-## 10. Final Action
+## 10. Decision Trace
+- {"candidate_count": 1, "final_citation_count": 0, "step": "citation_validation"}
+- {"answer_present": false, "failure_reasons": ["NO_FINAL_CITATION", "UNVERIFIABLE_CITATION"], "final_action": "refuse", "safe_to_present": false, "step": "trust_gate"}
+
+## 11. Final Action
 refuse
 
-## 11. Human Review Notes
+## 12. Human Review Notes
 - None

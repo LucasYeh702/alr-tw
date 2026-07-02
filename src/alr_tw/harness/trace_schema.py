@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 class ToolCallTrace(BaseModel):
     tool_name: str
+    execution_mode: Literal["harness_recorded", "actual_tool"] = "harness_recorded"
     input_summary: dict[str, Any] = Field(default_factory=dict)
     output_summary: dict[str, Any] = Field(default_factory=dict)
     status: Literal["success", "fail", "skipped"]
@@ -37,10 +38,10 @@ class AgenticRunTrace(BaseModel):
     normalized_query: str | None = None
     steps: list[dict[str, Any]] = Field(default_factory=list)
     tool_calls: list[ToolCallTrace] = Field(default_factory=list)
+    decision_trace: list[dict[str, Any]] = Field(default_factory=list)
     evidence: list[EvidenceRecord] = Field(default_factory=list)
     coverage: dict[str, Any] = Field(default_factory=dict)
     trust_gate: TrustGateTrace
     final_action: Literal["answer", "refuse", "human_review_required"]
     answer: str | None = None
     human_review_notes: list[str] = Field(default_factory=list)
-

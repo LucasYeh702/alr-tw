@@ -21,6 +21,13 @@ legal agent loop, and it is not an agent that practices law or independently
 completes legal judgment. Every final answer must pass citation validation and
 the trust gate; otherwise the harness refuses or requires human review.
 
+Public example traces are deterministic harness traces. Their `tool_calls` use
+`execution_mode: "harness_recorded"` and should not be read as live external
+tool execution logs.
+
+Clients should render answer content only when `trust_gate.safe_to_present` is
+true and `final_action` is `answer`.
+
 ## Scenarios
 
 - `pass_official_source`: final citation exists and the trust gate allows answer.

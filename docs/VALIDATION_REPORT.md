@@ -13,8 +13,11 @@ Required sections:
 7. Rejected / Unverifiable Sources
 8. Coverage
 9. Trust Gate Decision
-10. Final Action
-11. Human Review Notes
+10. Decision Trace
+11. Final Action
+12. Human Review Notes
+
+The tool plan must show `execution_mode` so reviewers can distinguish a
+deterministic harness record from a live external tool execution log.
 
 Reports are explanatory artifacts. They do not provide legal advice.
-

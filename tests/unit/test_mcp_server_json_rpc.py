@@ -19,7 +19,7 @@ def test_mcp_initialize_returns_server_metadata():
     assert response["result"]["protocolVersion"] == "2024-11-05"
     assert response["result"]["serverInfo"] == {
         "name": "alr-tw",
-        "version": "0.2.0",
+        "version": "0.2.1",
     }
     assert response["result"]["capabilities"] == {"tools": {}}
 
@@ -78,8 +78,8 @@ def test_mcp_tools_call_runs_agentic_legal_research():
     payload = json.loads(response["result"]["content"][0]["text"])
     assert payload["ok"] is True
     assert payload["schema_version"] == "alr-tw.mcp_tool_result/v1"
-    assert payload["data"]["schema"] == "alr-tw.agentic-legal-rag/v1"
-    assert payload["data"]["trust_gate"]["safe_to_present"] is True
+    assert payload["data"]["schema_version"] == "alr-tw.agentic_trace/v1"
+    assert payload["data"]["final_action"] == "answer"
 
 
 def test_mcp_tools_call_runs_agentic_demo_trace():
@@ -117,6 +117,65 @@ def test_mcp_tools_call_builds_validation_report():
     payload = json.loads(response["result"]["content"][0]["text"])
     assert payload["ok"] is True
     assert payload["data"]["report"].startswith("# Legal Research Validation Report")
+
+
+def test_mcp_tools_call_returns_trust_model_contract():
+    response = McpSession(ready=True).handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "get_trust_model", "arguments": {}},
+        }
+    )
+
+    payload = json.loads(response["result"]["content"][0]["text"])
+    assert payload["ok"] is True
+    assert payload["data"]["schema_version"] == "alr-tw.trust_model/v1"
+    assert payload["data"]["final_citation_tiers"] == ["official", "verified_cache"]
+    assert "external_semantic_recall" in payload["data"]["candidate_only_tiers"]
+    assert "synthetic" in payload["data"]["demo_only_tiers"]
+
+
+def test_mcp_tools_call_exact_lookup_tools_are_demo_only():
+    law_response = McpSession(ready=True).handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "exact_law_lookup",
+                "arguments": {"title": "示範租賃規則", "article_no": "第1條"},
+            },
+        }
+    )
+    judgment_response = McpSession(ready=True).handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": "exact_judgment_lookup",
+                "arguments": {"jid": "DEMO,001,民,1,20260101,1"},
+            },
+        }
+    )
+    constitutional_response = McpSession(ready=True).handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "exact_constitutional_lookup",
+                "arguments": {"source_id": "demo-constitutional-001"},
+            },
+        }
+    )
+
+    for response in [law_response, judgment_response, constitutional_response]:
+        payload = json.loads(response["result"]["content"][0]["text"])
+        assert payload["ok"] is True
+        assert payload["data"]["source_tier"] == "synthetic"
 
 
 def test_mcp_tools_call_rejects_non_string_arguments():
@@ -171,6 +230,70 @@ def test_mcp_tools_call_rejects_invalid_enum_argument():
 
     assert response["error"]["code"] == -32602
     assert "source_tier must be one of" in response["error"]["message"]
+
+
+def test_mcp_validate_citation_uses_eligibility_without_claim_support_overclaim():
+    response = McpSession(ready=True).handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "validate_citation",
+                "arguments": {"citation_id": "official-demo", "source_tier": "official"},
+            },
+        }
+    )
+
+    payload = json.loads(response["result"]["content"][0]["text"])
+    assert payload["data"]["citation_eligibility"] == "final_eligible"
+    assert payload["data"]["support"] == "not_checked"
+
+
+def test_mcp_validate_citation_allows_complete_verified_cache_metadata():
+    response = McpSession(ready=True).handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "validate_citation",
+                "arguments": {
+                    "citation_id": "cache-demo",
+                    "source_tier": "verified_cache",
+                    "official_url": "https://example.test/law/184",
+                    "official_hash": "sha256:demo",
+                    "verified_at": "2026-01-01T00:00:00Z",
+                },
+            },
+        }
+    )
+
+    payload = json.loads(response["result"]["content"][0]["text"])
+    assert payload["data"]["citation_use"] == "allow_final"
+    assert payload["data"]["citation_eligibility"] == "final_eligible"
+
+
+def test_mcp_validate_citation_rejects_incomplete_verified_cache_metadata():
+    response = McpSession(ready=True).handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "validate_citation",
+                "arguments": {
+                    "citation_id": "cache-demo",
+                    "source_tier": "verified_cache",
+                    "official_url": "https://example.test/law/184",
+                },
+            },
+        }
+    )
+
+    payload = json.loads(response["result"]["content"][0]["text"])
+    assert payload["data"]["citation_use"] == "reject"
+    assert payload["data"]["citation_eligibility"] == "rejected"
 
 
 def test_mcp_tools_call_requires_initialized_session():

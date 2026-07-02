@@ -1,5 +1,7 @@
 import pytest
 
+from alr_tw.harness.trace_schema import EvidenceRecord
+from alr_tw.harness.orchestrator import _trust_gate_trace
 from alr_tw.harness.orchestrator import run_agentic_demo
 
 
@@ -27,8 +29,33 @@ def test_agentic_demo_scenarios_have_expected_final_action(
     if expected_action == "refuse":
         assert trace.answer is None
     if expected_action == "human_review_required":
-        assert trace.answer
+        assert trace.answer is None
         assert trace.human_review_notes
+
+
+def test_trust_gate_refuses_critical_failure_even_when_human_review_required():
+    trace = _trust_gate_trace(
+        evidence=[
+            EvidenceRecord(
+                citation_id="official-demo",
+                source_id="official-demo",
+                source_tier="official",
+                citation_use="allow_final",
+                validation_status="exists",
+            ),
+            EvidenceRecord(
+                citation_id="bad-cache",
+                source_id="bad-cache",
+                source_tier="verified_cache",
+                citation_use="reject",
+                validation_status="unverifiable",
+            ),
+        ],
+        coverage={"has_laws": "present", "has_judgments": "not_checked"},
+        human_review_required=True,
+    )
+
+    assert trace.recommended_action == "refuse"
 
 
 def test_agentic_demo_masks_sensitive_query_in_trace():
@@ -38,4 +65,3 @@ def test_agentic_demo_masks_sensitive_query_in_trace():
     assert "A123456789" not in serialized
     assert "王小明" not in serialized
     assert "[TW_ID]" in serialized
-

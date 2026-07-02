@@ -35,63 +35,111 @@
   "tool_calls": [
     {
       "tool_name": "query_understanding",
+      "execution_mode": "harness_recorded",
       "input_summary": {
         "query": "民法第184條 押金"
       },
-      "output_summary": {},
+      "output_summary": {
+        "synthetic": true,
+        "trace_kind": "deterministic_harness_step"
+      },
       "status": "success",
       "error_code": null
     },
     {
       "tool_name": "source_plan",
+      "execution_mode": "harness_recorded",
       "input_summary": {},
-      "output_summary": {},
+      "output_summary": {
+        "synthetic": true,
+        "trace_kind": "deterministic_harness_step"
+      },
       "status": "success",
       "error_code": null
     },
     {
       "tool_name": "retrieval",
+      "execution_mode": "harness_recorded",
       "input_summary": {},
-      "output_summary": {},
+      "output_summary": {
+        "synthetic": true,
+        "trace_kind": "deterministic_harness_step"
+      },
       "status": "success",
       "error_code": null
     },
     {
       "tool_name": "source_classification",
+      "execution_mode": "harness_recorded",
       "input_summary": {},
-      "output_summary": {},
+      "output_summary": {
+        "synthetic": true,
+        "trace_kind": "deterministic_harness_step"
+      },
       "status": "success",
       "error_code": null
     },
     {
       "tool_name": "citation_validation",
+      "execution_mode": "harness_recorded",
       "input_summary": {},
-      "output_summary": {},
+      "output_summary": {
+        "synthetic": true,
+        "trace_kind": "deterministic_harness_step"
+      },
       "status": "success",
       "error_code": null
     },
     {
       "tool_name": "coverage_gate",
+      "execution_mode": "harness_recorded",
       "input_summary": {},
-      "output_summary": {},
+      "output_summary": {
+        "synthetic": true,
+        "trace_kind": "deterministic_harness_step"
+      },
       "status": "success",
       "error_code": null
     },
     {
       "tool_name": "trust_gate",
+      "execution_mode": "harness_recorded",
       "input_summary": {},
-      "output_summary": {},
+      "output_summary": {
+        "synthetic": true,
+        "trace_kind": "deterministic_harness_step"
+      },
       "status": "success",
       "error_code": null
     },
     {
       "tool_name": "final_decision",
+      "execution_mode": "harness_recorded",
       "input_summary": {},
       "output_summary": {
-        "scenario": "fail_candidate_only"
+        "scenario": "fail_candidate_only",
+        "synthetic": true,
+        "trace_kind": "deterministic_harness_step"
       },
       "status": "success",
       "error_code": null
+    }
+  ],
+  "decision_trace": [
+    {
+      "step": "citation_validation",
+      "final_citation_count": 0,
+      "candidate_count": 1
+    },
+    {
+      "step": "trust_gate",
+      "safe_to_present": false,
+      "failure_reasons": [
+        "NO_FINAL_CITATION",
+        "UNVERIFIABLE_CITATION"
+      ],
+      "final_action": "refuse",
+      "answer_present": false
     }
   ],
   "evidence": [

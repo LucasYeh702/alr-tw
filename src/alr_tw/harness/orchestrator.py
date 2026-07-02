@@ -7,6 +7,7 @@ from tw_legal_rag_mcp.legal_nlp.privacy import mask_sensitive_text
 from tw_legal_rag_mcp.legal_nlp.query_normalizer import normalize_query
 from tw_legal_rag_mcp.verification.citation_validator import validate_citation
 
+from .constants import FinalAction, ToolExecutionMode, TrustFailureReason
 from .execution_graph import StepKind, graph_as_dict
 from .trace_schema import AgenticRunTrace, EvidenceRecord, ToolCallTrace, TrustGateTrace
 
@@ -105,26 +106,33 @@ def _trust_gate_trace(
     reasons: list[str] = []
 
     if final_count == 0:
-        reasons.append("NO_FINAL_CITATION")
+        reasons.append(TrustFailureReason.NO_FINAL_CITATION.value)
     if rejected_count:
-        reasons.append("REJECTED_CITATION")
+        reasons.append(TrustFailureReason.REJECTED_CITATION.value)
     if unverifiable_count:
-        reasons.append("UNVERIFIABLE_CITATION")
+        reasons.append(TrustFailureReason.UNVERIFIABLE_CITATION.value)
     if coverage.get("has_laws") in {"absent", "low_confidence"}:
-        reasons.append("LAWS_COVERAGE_LOW")
+        reasons.append(TrustFailureReason.LAWS_COVERAGE_LOW.value)
     if coverage.get("has_judgments") in {"absent", "low_confidence"}:
-        reasons.append("JUDGMENTS_COVERAGE_LOW")
+        reasons.append(TrustFailureReason.JUDGMENTS_COVERAGE_LOW.value)
     if human_review_required:
-        reasons.append("CLAIM_SUPPORT_NOT_CHECKED")
-        reasons.append("HUMAN_REVIEW_REQUIRED")
+        reasons.append(TrustFailureReason.CLAIM_SUPPORT_NOT_CHECKED.value)
+        reasons.append(TrustFailureReason.HUMAN_REVIEW_REQUIRED.value)
 
+    critical_reasons = {
+        TrustFailureReason.REJECTED_CITATION.value,
+        TrustFailureReason.UNVERIFIABLE_CITATION.value,
+        TrustFailureReason.LAWS_COVERAGE_LOW.value,
+        TrustFailureReason.JUDGMENTS_COVERAGE_LOW.value,
+    }
+    has_critical_failure = any(reason in critical_reasons for reason in reasons)
     safe = final_count > 0 and not reasons
     if safe:
-        action = "answer"
-    elif human_review_required and final_count > 0:
-        action = "human_review_required"
+        action = FinalAction.ANSWER.value
+    elif human_review_required and final_count > 0 and not has_critical_failure:
+        action = FinalAction.HUMAN_REVIEW_REQUIRED.value
     else:
-        action = "refuse"
+        action = FinalAction.REFUSE.value
 
     return TrustGateTrace(
         safe_to_present=safe,
@@ -164,10 +172,11 @@ def run_agentic_demo(
     )
     answer = (
         "Synthetic answer grounded by final citation."
-        if trust_gate.recommended_action in {"answer", "human_review_required"}
+        if trust_gate.recommended_action == FinalAction.ANSWER.value
         else None
     )
     notes = ["Claim support has not been checked; human legal review is required."] if human_review else []
+    final_citation_count = sum(1 for item in evidence if item.citation_use == "allow_final")
 
     return AgenticRunTrace(
         query=public_query,
@@ -179,11 +188,34 @@ def run_agentic_demo(
         tool_calls=[
             ToolCallTrace(
                 tool_name=step.value,
+                execution_mode=ToolExecutionMode.HARNESS_RECORDED.value,
                 input_summary={"query": public_query} if step == StepKind.QUERY_UNDERSTANDING else {},
-                output_summary={"scenario": scenario} if step == StepKind.FINAL_DECISION else {},
+                output_summary=(
+                    {
+                        "scenario": scenario,
+                        "synthetic": True,
+                        "trace_kind": "deterministic_harness_step",
+                    }
+                    if step == StepKind.FINAL_DECISION
+                    else {"synthetic": True, "trace_kind": "deterministic_harness_step"}
+                ),
                 status="success",
             )
             for step in StepKind
+        ],
+        decision_trace=[
+            {
+                "step": "citation_validation",
+                "final_citation_count": final_citation_count,
+                "candidate_count": len(evidence),
+            },
+            {
+                "step": "trust_gate",
+                "safe_to_present": trust_gate.safe_to_present,
+                "failure_reasons": list(trust_gate.failure_reasons),
+                "final_action": trust_gate.recommended_action,
+                "answer_present": answer is not None,
+            },
         ],
         evidence=evidence,
         coverage=coverage,
