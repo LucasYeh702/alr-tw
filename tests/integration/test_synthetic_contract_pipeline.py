@@ -5,10 +5,10 @@ from tw_legal_rag_mcp.verification.trust_gates import evaluate_trust_gate
 def test_synthetic_contract_pipeline_exposes_production_shape_without_parameters():
     result = run_synthetic_contract_pipeline("民法第184條 押金")
 
-    assert result["schema"] == "tw-legal-rag-mcp-reference.synthetic-contract-pipeline/v1"
-    assert result["source_manifest"]["schema"] == "tw-legal-rag-mcp-reference.source-manifest/v1"
+    assert result["schema"] == "alr-tw.synthetic-contract-pipeline/v1"
+    assert result["source_manifest"]["schema"] == "alr-tw.source-manifest/v1"
     assert result["source_manifest"]["provider"] == "Synthetic Official Source"
-    assert result["adapter_result"]["schema"] == "tw-legal-rag-mcp-reference.adapter-result/v1"
+    assert result["adapter_result"]["schema"] == "alr-tw.adapter-result/v1"
     assert result["adapter_result"]["status"] == "loaded"
 
     candidates = result["retrieval_candidates"]
@@ -16,7 +16,7 @@ def test_synthetic_contract_pipeline_exposes_production_shape_without_parameters
         "official",
         "external_semantic_recall",
     ]
-    assert all(candidate["schema"] == "tw-legal-rag-mcp-reference.retrieval-candidate/v1" for candidate in candidates)
+    assert all(candidate["schema"] == "alr-tw.retrieval-candidate/v1" for candidate in candidates)
 
     verifications = result["citation_verifications"]
     assert verifications[0]["citation_use"] == "allow_final"
@@ -45,7 +45,7 @@ def test_candidate_only_contract_results_fail_closed_when_no_final_citation():
 
     assert candidate_only_citations
     assert gate["safe_to_present"] is False
-    assert "no_final_citation" in gate["failure_reasons"]
+    assert "NO_FINAL_CITATION" in gate["failure_reasons"]
     assert gate["validation_summary"]["has_final_citation"] is False
 
 

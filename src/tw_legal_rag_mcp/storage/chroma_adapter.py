@@ -6,4 +6,4 @@ class ChromaAdapterUnavailable(RuntimeError):
 
 
 def connect_chroma() -> None:
-    raise ChromaAdapterUnavailable("v0.1 demo does not connect to vector databases")
+    raise ChromaAdapterUnavailable("public demo does not connect to vector databases")

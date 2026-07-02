@@ -19,7 +19,7 @@ class SourceManifest:
     retrieved_at: str
     source_tier: str
     redistribution_allowed: bool
-    schema: str = "tw-legal-rag-mcp-reference.source-manifest/v1"
+    schema: str = "alr-tw.source-manifest/v1"
     terms_reviewed_at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -32,7 +32,7 @@ class AdapterResult:
     status: str
     manifest: SourceManifest
     records: list[dict[str, Any]]
-    schema: str = "tw-legal-rag-mcp-reference.adapter-result/v1"
+    schema: str = "alr-tw.adapter-result/v1"
     error_code: str = ""
     reasons: list[str] = field(default_factory=list)
 
@@ -53,7 +53,7 @@ class RetrievalCandidate:
     official_hash: str = ""
     verified_at: str = ""
     jid: str = ""
-    schema: str = "tw-legal-rag-mcp-reference.retrieval-candidate/v1"
+    schema: str = "alr-tw.retrieval-candidate/v1"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -84,7 +84,7 @@ class SyntheticOfficialAdapter:
         manifest = SourceManifest(
             provider="Synthetic Official Source",
             dataset_name="synthetic-civil-law-demo",
-            dataset_version="v0.1",
+            dataset_version="v0.2",
             source_url="https://example.test/synthetic-official/civil-law-demo",
             license_name="Synthetic demo fixture",
             attribution_text="Synthetic demo data generated for this reference repository.",
@@ -170,7 +170,7 @@ def run_synthetic_contract_pipeline(query: str) -> dict[str, Any]:
     answer_validation = answer_with_validation(answer, final_citations)
 
     return {
-        "schema": "tw-legal-rag-mcp-reference.synthetic-contract-pipeline/v1",
+        "schema": "alr-tw.synthetic-contract-pipeline/v1",
         "source_manifest": adapter_result.manifest.to_dict(),
         "adapter_result": adapter_result.to_dict(),
         "retrieval_candidates": [candidate.to_dict() for candidate in candidates],

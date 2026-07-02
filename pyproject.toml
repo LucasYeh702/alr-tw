@@ -3,19 +3,29 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tw-legal-rag-mcp-reference"
-version = "0.1.0"
-description = "Reference implementation for Taiwan Legal RAG / MCP source grounding and citation verification."
+name = "alr-tw"
+version = "0.2.0"
+description = "Agentic Legal RAG / MCP trust harness for Taiwan law."
 requires-python = ">=3.11"
 dependencies = [
   "pydantic>=2",
   "pyyaml>=6",
 ]
 
+[project.scripts]
+alr-tw-demo = "alr_tw.harness.orchestrator:main"
+alr-tw-boundary-check = "alr_tw.scripts.check_public_boundary:main"
+alr-tw-mcp = "alr_tw.mcp.server:main"
+tw-legal-rag-mcp = "tw_legal_rag_mcp.mcp_server.server:main"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8",
   "ruff>=0.5",
+  "mypy>=1.10",
+]
+mcp = [
+  "mcp>=1.0",
 ]
 
 [tool.pytest.ini_options]

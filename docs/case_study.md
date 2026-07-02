@@ -1,4 +1,4 @@
-# Case Study: Taiwan Legal RAG / MCP Trust Infrastructure
+# Case Study: ALR-TW Agentic Legal RAG Harness
 
 ## Problem
 
@@ -6,7 +6,7 @@ Legal AI systems often fail by producing confident but ungrounded citations, mix
 
 ## Design
 
-This project demonstrates a Taiwan-focused Legal RAG / MCP architecture with:
+ALR-TW demonstrates a Taiwan-focused Legal Agentic RAG / MCP architecture with:
 
 - official-source grounding
 - citation validation

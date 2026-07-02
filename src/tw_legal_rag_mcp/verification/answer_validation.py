@@ -16,8 +16,10 @@ def answer_with_validation(answer: str, citations: list[dict[str, Any]]) -> dict
         item["citation_use"] == CitationUse.DEMO_ONLY.value for item in validated
     )
     safe_to_present = has_final and not has_rejected and not has_unverifiable
+    human_review_required = False
 
     return {
+        "schema_version": "alr-tw.answer_validation/v1",
         "answer": answer,
         "citations": validated,
         "validation_summary": {
@@ -26,5 +28,12 @@ def answer_with_validation(answer: str, citations: list[dict[str, Any]]) -> dict
             "has_unverifiable_citation": has_unverifiable,
             "demo_only": demo_only,
             "safe_to_present": safe_to_present,
+            "human_review_required": human_review_required,
+            "claim_support_level": "source_verified" if safe_to_present else "not_checked",
         },
+        "claim_support_summary": {
+            "level": "source_verified" if safe_to_present else "not_checked",
+            "note": "Source verification is not the same as full claim-level legal faithfulness.",
+        },
+        "validation_level": "source_verification",
     }

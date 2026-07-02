@@ -1,3 +1,3 @@
-"""Taiwan Legal RAG / MCP reference implementation."""
+"""ALR-TW: Agentic Legal RAG Harness for Taiwan Law."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

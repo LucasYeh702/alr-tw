@@ -16,7 +16,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .[dev]
-      - name: Test
-        run: pytest
+      - name: Ruff
+        run: ruff check .
       - name: Forbidden file check
         run: python scripts/check_no_forbidden_files.py
+      - name: Public boundary check
+        run: python scripts/check_public_boundary.py
+      - name: Test and example trace validation
+        run: pytest

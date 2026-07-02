@@ -43,22 +43,27 @@ def validate_citation(citation: dict[str, Any], require_final: bool = False) -> 
         status = CitationStatus.NOT_FOUND
         support = CitationSupport.UNSUPPORTED
         reason = "citation_id is missing"
+        error_code = "CITATION_ID_MISSING"
     elif citation_use == CitationUse.ALLOW_FINAL:
         status = CitationStatus.EXISTS
         support = CitationSupport.SUPPORTED
         reason = "citation is allowed as a final source"
+        error_code = None
     elif citation_use == CitationUse.DEMO_ONLY:
         status = CitationStatus.EXISTS
         support = CitationSupport.NOT_CHECKED
         reason = "synthetic source exists for demo only"
+        error_code = "SYNTHETIC_DEMO_ONLY"
     elif citation_use == CitationUse.ALLOW_CANDIDATE_ONLY:
         status = CitationStatus.UNVERIFIABLE if require_final else CitationStatus.EXISTS
         support = CitationSupport.UNSUPPORTED if require_final else CitationSupport.NOT_CHECKED
         reason = "source tier is candidate-only and not allowed as final citation"
+        error_code = "CANDIDATE_ONLY_SOURCE" if require_final else None
     else:
         status = CitationStatus.UNVERIFIABLE
         support = CitationSupport.UNSUPPORTED
         reason = "source tier is rejected or unknown"
+        error_code = "SOURCE_REJECTED_OR_UNKNOWN"
 
     return {
         "citation_id": citation_id,
@@ -68,6 +73,8 @@ def validate_citation(citation: dict[str, Any], require_final: bool = False) -> 
         "citation_use": citation_use.value,
         "official_url": source.official_url,
         "reason": reason,
+        "error_code": error_code,
+        "human_review_required": status != CitationStatus.EXISTS or citation_use != CitationUse.ALLOW_FINAL,
     }
 
 

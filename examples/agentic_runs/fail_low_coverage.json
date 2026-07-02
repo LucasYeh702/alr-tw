@@ -1,0 +1,130 @@
+{
+  "schema_version": "alr-tw.agentic_trace/v1",
+  "query": "民法第184條 押金",
+  "normalized_query": "民法第184條 擔保金",
+  "steps": [
+    {
+      "from": "query_understanding",
+      "to": "source_plan"
+    },
+    {
+      "from": "source_plan",
+      "to": "retrieval"
+    },
+    {
+      "from": "retrieval",
+      "to": "source_classification"
+    },
+    {
+      "from": "source_classification",
+      "to": "citation_validation"
+    },
+    {
+      "from": "citation_validation",
+      "to": "coverage_gate"
+    },
+    {
+      "from": "coverage_gate",
+      "to": "trust_gate"
+    },
+    {
+      "from": "trust_gate",
+      "to": "final_decision"
+    }
+  ],
+  "tool_calls": [
+    {
+      "tool_name": "query_understanding",
+      "input_summary": {
+        "query": "民法第184條 押金"
+      },
+      "output_summary": {},
+      "status": "success",
+      "error_code": null
+    },
+    {
+      "tool_name": "source_plan",
+      "input_summary": {},
+      "output_summary": {},
+      "status": "success",
+      "error_code": null
+    },
+    {
+      "tool_name": "retrieval",
+      "input_summary": {},
+      "output_summary": {},
+      "status": "success",
+      "error_code": null
+    },
+    {
+      "tool_name": "source_classification",
+      "input_summary": {},
+      "output_summary": {},
+      "status": "success",
+      "error_code": null
+    },
+    {
+      "tool_name": "citation_validation",
+      "input_summary": {},
+      "output_summary": {},
+      "status": "success",
+      "error_code": null
+    },
+    {
+      "tool_name": "coverage_gate",
+      "input_summary": {},
+      "output_summary": {},
+      "status": "success",
+      "error_code": null
+    },
+    {
+      "tool_name": "trust_gate",
+      "input_summary": {},
+      "output_summary": {},
+      "status": "success",
+      "error_code": null
+    },
+    {
+      "tool_name": "final_decision",
+      "input_summary": {},
+      "output_summary": {
+        "scenario": "fail_low_coverage"
+      },
+      "status": "success",
+      "error_code": null
+    }
+  ],
+  "evidence": [
+    {
+      "citation_id": "official-demo-law-184",
+      "source_id": "official-demo-law-184",
+      "source_tier": "official",
+      "citation_use": "allow_final",
+      "title": "Synthetic Civil Code Article 184",
+      "snippet": "Synthetic official-grounded fixture for tort and lease-deposit discussion.",
+      "official_url": "https://example.test/synthetic-official/civil-law-demo#article-184",
+      "validation_status": "exists"
+    }
+  ],
+  "coverage": {
+    "has_laws": "low_confidence",
+    "has_judgments": "not_checked"
+  },
+  "trust_gate": {
+    "safe_to_present": false,
+    "failure_reasons": [
+      "LAWS_COVERAGE_LOW"
+    ],
+    "validation_summary": {
+      "has_final_citation": true,
+      "has_rejected_citation": false,
+      "has_unverifiable_citation": false,
+      "safe_to_present": false,
+      "human_review_required": false
+    },
+    "recommended_action": "refuse"
+  },
+  "final_action": "refuse",
+  "answer": null,
+  "human_review_notes": []
+}

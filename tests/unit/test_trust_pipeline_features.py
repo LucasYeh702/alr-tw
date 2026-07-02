@@ -93,7 +93,7 @@ def test_trust_gate_blocks_candidate_only_final_answer_but_allows_official():
         coverage={"has_laws": "present", "has_judgments": "low_confidence"},
     )
     assert blocked["safe_to_present"] is False
-    assert "no_final_citation" in blocked["failure_reasons"]
+    assert "NO_FINAL_CITATION" in blocked["failure_reasons"]
 
     allowed = evaluate_trust_gate(
         answer="官方來源支持的結果",
