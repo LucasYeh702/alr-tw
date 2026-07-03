@@ -38,6 +38,7 @@ ALR-TW 目前示範的能力：
 - citation validation：判斷 citation 是否存在、是否可驗證、是否可作 final citation
 - coverage gate：回報 laws、judgments、constitutional materials 等覆蓋狀態
 - trust gate：沒有 final citation、來源不可驗證、coverage 低信心或 claim support 未檢查時拒絕輸出
+- claim grounding：v0.3 新增 answer claim 切分與語意對齊檢核，讓主張與證據可追溯
 - trace schema：輸出 `alr-tw.agentic_trace/v1`，保留 steps、tool calls、decision trace、evidence、coverage、trust gate 與 final action
 - validation report：把 agent run 轉成可 review 的 Markdown report
 - MCP server：用 stdio 暴露 agentic legal RAG tools，讓本機 MCP client 啟動
@@ -50,6 +51,9 @@ ALR-TW 目前示範的能力：
 | `run_agentic_demo` | 執行 deterministic ALR-TW scenario | `answer`、`refuse` 或 `human_review_required` |
 | `build_validation_report` | 產生 validation report | Markdown review artifact |
 | `get_trust_model` | 回傳 source tier 與 fail-closed policy | trust model |
+| `get_claim_grounding_policy` | 回傳 v0.3 claim grounding 合約 | claim policy |
+| `extract_answer_claims` | 將答案拆成可追蹤的 claim 單位 | answer claims |
+| `check_claim_support` | 檢查 claim 與 evidence segments 對應關係 | claim support status |
 | `legal_search` | synthetic legal search demo | candidate retrieval |
 | `validate_citation` | 驗證 citation tier 與使用資格 | final eligibility |
 | `exact_law_lookup` | synthetic 法規精確查找 | demo-only result |
@@ -68,6 +72,16 @@ ALR-TW 目前示範的能力：
 ```
 
 範例 trace 中的 `tool_calls` 會標示 `execution_mode: "harness_recorded"`，代表這是 deterministic harness record，不是 live external tool execution log。
+
+## Claim Grounding（v0.3）
+
+v0.3 在不改變來源安全門檻的前提下，新增語意層防線：
+
+- `extract_answer_claims`：把答案切成可追溯的 claim 單位（`alr-tw.answer-claim/v1`）
+- `check_claim_support`：檢核每個 claim 對應 evidence span 的支撐情形（`alr-tw.claim-support/v1`）
+- `get_claim_grounding_policy`：公開 claim status、風險旗標與合約邊界（`alr-tw.claim-grounding-policy/v1`）
+
+這版仍是 public-safe harness：公開 schema、synthetic fixture、MCP contract 與測試；未公開 production 版的完整語意推論引擎。
 
 ## Trust Gate
 
@@ -90,6 +104,7 @@ Trust gate 會在下列情況 fail closed：
 - 只找到 synthetic demo source
 - verified cache 缺少官方 URL、hash 或驗證時間
 - coverage 為 absent 或 low confidence
+- claim support 狀態非可直接展示的 safe 形態時（如 `partially_supported`、`overstated`、`unsupported`、`contradicted`、`role_error`、`unchecked`、`needs_review`）
 - claim support 尚未檢查時只能進入 human review，不會輸出可直接呈現的 answer body
 
 ## Demo Scenarios
@@ -225,4 +240,4 @@ Official data source or compliant internal source
 
 ## English Summary
 
-ALR-TW is an Agentic Legal RAG / MCP Harness for Taiwan Law. It demonstrates a bounded agentic legal RAG loop with source planning, retrieval, citation validation, coverage gates, trust gates, trace schema, validation reports, and MCP tools using synthetic demo data only.
+ALR-TW is an Agentic Legal RAG / MCP Harness for Taiwan Law. It demonstrates a bounded agentic legal RAG loop with source planning, retrieval, citation validation, coverage gates, trust gates, claim-grounding checks, trace schema, validation reports, and MCP tools using synthetic demo data only.

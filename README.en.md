@@ -38,6 +38,7 @@ Current ALR-TW capabilities:
 - citation validation: decide whether a citation exists, is verifiable, and may become a final citation
 - coverage gate: report laws, judgments, constitutional materials, and other coverage states
 - trust gate: refuse output when final citations are missing, sources are unverifiable, coverage is low-confidence, or claim support is unchecked
+- claim grounding: v0.3 adds answer claim splitting and semantic alignment checks so each claim is traceable to evidence
 - trace schema: emit `alr-tw.agentic_trace/v1` with steps, tool calls, decision trace, evidence, coverage, trust-gate output, and final action
 - validation report: convert an agent run into a Markdown review report
 - MCP server: expose agentic legal RAG tools over stdio for local MCP clients
@@ -50,6 +51,9 @@ Current ALR-TW capabilities:
 | `run_agentic_demo` | Runs a deterministic ALR-TW scenario | `answer`, `refuse`, or `human_review_required` |
 | `build_validation_report` | Builds a validation report | Markdown review artifact |
 | `get_trust_model` | Returns source tiers and fail-closed policy | Trust model |
+| `get_claim_grounding_policy` | Returns v0.3 claim grounding contract | Claim policy |
+| `extract_answer_claims` | Splits answer text into traceable claims | Answer claims |
+| `check_claim_support` | Checks claim support against evidence segments | Claim support status |
 | `legal_search` | Synthetic legal search demo | Candidate retrieval |
 | `validate_citation` | Validates citation tier and use | Final eligibility |
 | `exact_law_lookup` | Synthetic exact statute lookup | Demo-only result |
@@ -68,6 +72,16 @@ All MCP tool results use the same envelope:
 ```
 
 Example traces mark `tool_calls` with `execution_mode: "harness_recorded"`. That means they are deterministic harness records, not live external tool execution logs.
+
+## Claim Grounding (v0.3)
+
+ALR-TW v0.3 adds a semantic safety layer without changing the source-first safety model:
+
+- `extract_answer_claims`: split answer text into trackable claim units (`alr-tw.answer-claim/v1`)
+- `check_claim_support`: evaluate each claim against evidence segments (`alr-tw.claim-support/v1`)
+- `get_claim_grounding_policy`: expose public claim-policy, status labels, and risk flags (`alr-tw.claim-grounding-policy/v1`)
+
+This remains a public-safe harness: it publishes schema, synthetic fixtures, MCP contracts, and tests. It does not publish the full private production semantic inference stack.
 
 ## Trust Gate
 
@@ -89,6 +103,7 @@ The trust gate fails closed when:
 - only candidate-only sources were found
 - only synthetic demo sources were found
 - a verified cache lacks official URL, hash, or verification time
+- claim support status is not safe-to-present (e.g., `partially_supported`, `overstated`, `unsupported`, `contradicted`, `role_error`, `unchecked`, `needs_review`)
 - coverage is absent or low-confidence
 - claim support has not been checked; the run can only require human review and must not return a directly presentable answer body
 
