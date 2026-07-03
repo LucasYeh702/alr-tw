@@ -236,6 +236,7 @@ def tool_definitions() -> list[dict[str, Any]]:
                 "properties": {
                     "citation_id": {"type": "string"},
                     "official_hash": {"type": "string"},
+                    "official_identifier": {"type": "string"},
                     "official_url": {"type": "string"},
                     "source_label": {"type": "string"},
                     "source_tier": {
@@ -343,6 +344,7 @@ def call_tool(params: dict[str, Any]) -> dict[str, Any]:
                 "citation_id",
                 "source_tier",
                 "official_url",
+                "official_identifier",
                 "official_hash",
                 "verified_at",
                 "source_label",
@@ -355,6 +357,7 @@ def call_tool(params: dict[str, Any]) -> dict[str, Any]:
             _required_string(arguments, "citation_id"),
             source_tier,
             _optional_string(arguments, "official_url", default=None),
+            _optional_string(arguments, "official_identifier", default=None),
             _optional_string(arguments, "official_hash", default=None),
             _optional_string(arguments, "verified_at", default=None),
             _optional_string(arguments, "source_label", default=None),

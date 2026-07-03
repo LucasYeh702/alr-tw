@@ -46,12 +46,14 @@ Public example tool calls are deterministic harness records. Their
 - `citation_id`
 - `source_tier`
 - optional `official_url`
+- optional `official_identifier`
 - optional `official_hash`
 - optional `verified_at`
 - optional `source_label`
 
-`verified_cache` may become final-eligible only when the official URL, hash, and
-verification time are all present. Otherwise it fails closed.
+`verified_cache` may become final-eligible only when it has either an official
+URL or stable official identifier, plus an official content hash and
+verification time. Otherwise it fails closed.
 
 `citation_eligibility` still describes source-tier eligibility only.
 `check_claim_support` provides explicit claim-grounding status with

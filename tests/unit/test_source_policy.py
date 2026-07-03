@@ -24,6 +24,18 @@ def test_verified_cache_with_required_metadata_allows_final_citation():
     assert classify_citation_use(source) == CitationUse.ALLOW_FINAL
 
 
+def test_verified_cache_with_stable_official_identifier_allows_final_citation():
+    source = SourceRecord(
+        source_id="cache-jid-1",
+        source_tier=SourceTier.VERIFIED_CACHE,
+        official_identifier="TSTV,113,測,1,20240102,1",
+        official_hash="sha256:raw-jsonl-line",
+        verified_at="2026-01-01T00:00:00Z",
+    )
+
+    assert classify_citation_use(source) == CitationUse.ALLOW_FINAL
+
+
 def test_verified_cache_missing_hash_is_rejected():
     source = SourceRecord(
         source_id="cache-2",

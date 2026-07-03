@@ -24,6 +24,17 @@ back to:
 - a `verified_cache` record with official URL, content hash, and verification
   time.
 
+For a TLR-style judgment candidate, a minimal raw-backed promotion flow is:
+
+1. Treat the TLR result as `external_semantic_recall`.
+2. Extract the stable judgment identifier, such as a JID.
+3. Resolve that identifier against original Judicial Yuan monthly files stored
+   in a local verification cache.
+4. Compute a content hash from the matched original record, for example the raw
+   JSONL line or another documented canonical source representation.
+5. Promote only the locally matched record as `verified_cache`; keep unmatched
+   TLR candidates as candidate-only.
+
 For a local `verified_cache`, store at least:
 
 - official source URL or stable official identifier

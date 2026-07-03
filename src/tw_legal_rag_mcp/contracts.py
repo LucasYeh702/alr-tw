@@ -50,6 +50,7 @@ class RetrievalCandidate:
     score: float
     manifest_id: str
     official_url: str = ""
+    official_identifier: str = ""
     official_hash: str = ""
     verified_at: str = ""
     jid: str = ""
@@ -140,6 +141,7 @@ class SyntheticRetriever:
                     score=1.0 - (index * 0.1),
                     manifest_id=str(record.get("manifest_id") or adapter_result.manifest.dataset_name),
                     official_url=str(record.get("official_url") or ""),
+                    official_identifier=str(record.get("official_identifier") or ""),
                     official_hash=str(record.get("official_hash") or ""),
                     verified_at=str(record.get("verified_at") or ""),
                     jid=str(record.get("jid") or ""),

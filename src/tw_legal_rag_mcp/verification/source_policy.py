@@ -25,6 +25,7 @@ class SourceRecord:
     source_id: str
     source_tier: SourceTier
     official_url: str | None = None
+    official_identifier: str | None = None
     official_hash: str | None = None
     verified_at: str | None = None
     source_label: str | None = None
@@ -45,7 +46,7 @@ def classify_citation_use(source: SourceRecord) -> CitationUse:
     if source.source_tier == SourceTier.OFFICIAL:
         return CitationUse.ALLOW_FINAL
     if source.source_tier == SourceTier.VERIFIED_CACHE:
-        if source.official_url and source.official_hash and source.verified_at:
+        if (source.official_url or source.official_identifier) and source.official_hash and source.verified_at:
             return CitationUse.ALLOW_FINAL
         return CitationUse.REJECT
     if source.source_tier in {SourceTier.STAGING, SourceTier.EXTERNAL_SEMANTIC_RECALL}:

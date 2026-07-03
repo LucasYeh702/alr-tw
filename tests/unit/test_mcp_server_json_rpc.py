@@ -363,6 +363,31 @@ def test_mcp_validate_citation_allows_complete_verified_cache_metadata():
     assert payload["data"]["citation_eligibility"] == "final_eligible"
 
 
+def test_mcp_validate_citation_allows_verified_cache_with_official_identifier():
+    response = McpSession(ready=True).handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "validate_citation",
+                "arguments": {
+                    "citation_id": "cache-jid-demo",
+                    "source_tier": "verified_cache",
+                    "official_identifier": "TSTV,113,測,1,20240102,1",
+                    "official_hash": "sha256:raw-jsonl-line",
+                    "verified_at": "2026-01-01T00:00:00Z",
+                },
+            },
+        }
+    )
+
+    payload = json.loads(response["result"]["content"][0]["text"])
+    assert payload["data"]["citation_use"] == "allow_final"
+    assert payload["data"]["citation_eligibility"] == "final_eligible"
+    assert payload["data"]["official_identifier"] == "TSTV,113,測,1,20240102,1"
+
+
 def test_mcp_validate_citation_rejects_incomplete_verified_cache_metadata():
     response = McpSession(ready=True).handle_message(
         {
