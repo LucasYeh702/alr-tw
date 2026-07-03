@@ -14,8 +14,11 @@ Required sections:
 8. Coverage
 9. Trust Gate Decision
 10. Decision Trace
-11. Final Action
-12. Human Review Notes
+11. Answer Claims
+12. Claim Support Review
+13. Semantic Hallucination Risk
+14. Final Action
+15. Human Review Notes
 
 The tool plan must show `execution_mode` so reviewers can distinguish a
 deterministic harness record from a live external tool execution log.

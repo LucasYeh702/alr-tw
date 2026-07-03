@@ -17,6 +17,9 @@ All MCP tool results are wrapped in:
 |---|---|---|
 | `agentic_legal_research` | Synthetic agentic RAG loop returning `alr-tw.agentic_trace/v1` | Reports final citations |
 | `run_agentic_demo` | Deterministic ALR-TW scenario trace | Reports final action |
+| `get_claim_grounding_policy` | Returns claim-grounding contract for v0.3 | No direct citation effect |
+| `extract_answer_claims` | Split an answer into deterministic public claim units | No direct citation effect |
+| `check_claim_support` | Check answer claims against evidence segments and return semantic grounding summary | No direct citation effect |
 | `build_validation_report` | Markdown validation report | No direct citation effect |
 | `get_trust_model` | Source tiers and trust policy | No direct citation effect |
 | `legal_search` | Synthetic search demo | Candidate retrieval only |
@@ -50,6 +53,7 @@ Public example tool calls are deterministic harness records. Their
 `verified_cache` may become final-eligible only when the official URL, hash, and
 verification time are all present. Otherwise it fails closed.
 
-The field `citation_eligibility` describes source-tier eligibility only. The
-field `support` remains `not_checked`; this public harness does not claim
-claim-level entailment.
+`citation_eligibility` still describes source-tier eligibility only.
+`check_claim_support` provides explicit claim-grounding status with
+`supported` / `partially_supported` / `overstated` / `unsupported` / `contradicted`
+and can be used by clients to decide whether human review is needed.

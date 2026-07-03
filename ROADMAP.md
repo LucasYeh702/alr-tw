@@ -19,6 +19,14 @@
 - public / private boundary checker
 - synthetic pass / fail / human-review scenarios
 
+## v0.3
+
+- claim-grounding contract (LegalSegment / AnswerClaim / ClaimSupport / summary) in public schema
+- MCP claim-grounding tools: `get_claim_grounding_policy`, `extract_answer_claims`, `check_claim_support`
+- semantic hallucination synthetic scenarios covering supported, overstated, role errors, unsupported, unchecked
+- validation report sections for answer claims, claim-support review, semantic risk
+- v0.3 acceptance docs and boundary alignment
+
 ## Future
 
 - official adapter contracts without bundled production cache

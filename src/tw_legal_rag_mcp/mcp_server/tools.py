@@ -6,6 +6,11 @@ from alr_tw.harness.report_builder import build_validation_report
 from ..agentic.runner import run_agentic_legal_research
 from ..retrieval.exact_lookup import exact_constitutional_lookup, exact_judgment_lookup, exact_law_lookup
 from ..retrieval.search_coordinator import demo_search
+from alr_tw.verification.claim_support import (
+    claim_grounding_policy,
+    check_claim_support,
+    extract_answer_claims,
+)
 from ..verification.citation_validator import validate_citation
 
 
@@ -62,6 +67,39 @@ def build_validation_report_tool(query: str, scenario: str = "auto") -> dict:
         "trace": trace.model_dump(),
         "report": build_validation_report(trace),
     }
+
+
+def extract_answer_claims_tool(answer: str) -> dict:
+    claims = extract_answer_claims(answer)
+    return {
+        "schema_version": "alr-tw.claim_extraction_result/v1",
+        "schema": "alr-tw.answer-claim/v1-list",
+        "count": len(claims),
+        "claims": [claim.model_dump() for claim in claims],
+    }
+
+
+def check_claim_support_tool(
+    answer: str,
+    claims: list[dict[str, object]],
+    segments: list[dict[str, object]],
+) -> dict:
+    support_items, summary, failure_reasons = check_claim_support(
+        answer=answer,
+        claims=claims,
+        segments=segments,
+    )
+
+    return {
+        "schema": "alr-tw.claim-support-result/v1",
+        "claim_support": [item.model_dump() for item in support_items],
+        "summary": summary.model_dump(),
+        "failure_reasons": failure_reasons,
+    }
+
+
+def get_claim_grounding_policy_tool() -> dict:
+    return claim_grounding_policy()
 
 
 def get_trust_model_tool() -> dict:

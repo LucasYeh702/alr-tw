@@ -24,6 +24,21 @@ def test_agentic_harness_release_acceptance_artifacts_exist():
         assert Path(path).exists(), path
 
 
+def test_agentic_harness_0_3_scenarios_are_executable_and_classified():
+    query = "民法第184條 押金"
+    expected = {
+        "pass_claim_supported": "answer",
+        "fail_party_argument_as_court_view": "refuse",
+        "fail_overstated_case_specific_rule": "human_review_required",
+        "fail_unsupported_paraphrase": "refuse",
+        "human_review_claim_unchecked": "human_review_required",
+    }
+
+    for scenario, expected_action in expected.items():
+        trace = run_agentic_demo(query, scenario=scenario)
+        assert trace.final_action == expected_action
+
+
 def test_agentic_harness_name_is_backed_by_graph_tools_and_scenarios():
     graph = graph_as_dict()
     tool_names = {tool["name"] for tool in tool_definitions()}

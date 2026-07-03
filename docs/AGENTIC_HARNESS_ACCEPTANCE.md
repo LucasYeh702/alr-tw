@@ -3,9 +3,9 @@
 This document defines the minimum public evidence required before ALR-TW can
 describe itself as an Agentic Legal RAG / MCP Harness.
 
-## Accepted v0.2.1 Claim
+## Accepted v0.3 Claim
 
-ALR-TW v0.2.1 may claim to be an AI-agent-driven, bounded agentic legal RAG harness
+ALR-TW v0.3 may claim to be an AI-agent-driven, bounded agentic legal RAG harness
 because the repository includes:
 
 1. A deterministic execution graph:
@@ -28,15 +28,21 @@ because the repository includes:
    low coverage.
 10. Human-review-required traces that do not include directly presentable
     answer bodies.
-11. Markdown validation reports generated from run traces.
-12. Public/private boundary checks that block production data, caches, indexes,
-   logs, credentials, and local sensitive paths.
-13. Tests and CI gates for the harness, trace schema, MCP server, reports,
-    source policy, and public boundary.
+11. A public claim-grounding contract (AnswerClaim / ClaimSupport / Semantic
+    Grounding Summary) and dedicated synthetic failure scenarios for claim-level
+    overclaim checks.
+12. MCP tool extensions for `get_claim_grounding_policy`,
+    `extract_answer_claims`, and `check_claim_support`.
+13. Markdown validation reports that include answer claims, claim-support review,
+    and semantic hallucination risk.
+14. Public/private boundary checks that block production data, caches, indexes,
+    logs, credentials, and local sensitive paths.
+15. Tests and CI gates for the harness, trace schema, MCP server, reports,
+    source policy, claim-grounding outputs, and public boundary.
 
 ## Not Claimed
 
-ALR-TW v0.2.1 does not claim to be:
+ALR-TW v0.3 does not claim to be:
 
 - an unrestricted autonomous legal agent
 - an autonomous legal agent that practices law or independently completes legal judgment
@@ -46,6 +52,7 @@ ALR-TW v0.2.1 does not claim to be:
 - an external LLM provider runtime
 - a production citation-freshness watcher
 - a full claim-support entailment engine
+- a claim-support entailment engine that can always output legal conclusions without human review
 - a temporal law applicability engine
 - a procedural posture or appellate-lineage classifier
 - a replacement for official-source verification or human legal review

@@ -98,13 +98,18 @@ Trust gate 會在下列情況 fail closed：
 
 | Scenario | 預期結果 |
 |---|---|
-| `pass_official_source` | 有 final citation，允許回答 |
+| `pass_official_source` | 有 final citation，且 claim 被支持，允許回答 |
+| `pass_claim_supported` | 有 final citation 且 claim support 狀態為 supported，允許回答 |
 | `fail_candidate_only` | 外部召回只能當候選，拒絕回答 |
 | `fail_synthetic_only` | synthetic fixture 不能當現行法律，拒絕回答 |
 | `fail_verified_cache_incomplete` | verified cache metadata 不完整，拒絕回答 |
 | `fail_no_final_citation` | 沒有 final citation，拒絕回答 |
 | `fail_low_coverage` | 覆蓋率低信心，拒絕回答 |
+| `fail_party_argument_as_court_view` | party_argument 被誤述為法院見解，拒絕/需人工複核 |
+| `fail_overstated_case_specific_rule` | 案件事實外推為普遍規則，需人工複核或拒絕 |
+| `fail_unsupported_paraphrase` | 對應證據找不到支撐，拒絕回答 |
 | `human_review_required_claim_support` | 來源存在，但 claim support 未檢查，需要人工審查 |
+| `human_review_claim_unchecked` | 同上，但以情境名稱 `human_review_claim_unchecked` 驗證 alias 行為 |
 
 當 `final_action != "answer"` 時，trace 的 `answer` 必須是 `null`。Client 只有在 `trust_gate.safe_to_present == true` 且 `final_action == "answer"` 時才能渲染 answer content。
 
@@ -199,7 +204,7 @@ Official data source or compliant internal source
 ## 規格文件
 
 - [docs/AGENTIC_WORKFLOW.md](docs/AGENTIC_WORKFLOW.md)：agentic RAG execution graph
-- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md)：v0.2.1 名稱與 release acceptance 條件
+- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md)：v0.3.0 名稱與 release acceptance 條件
 - [docs/TRUST_MODEL.md](docs/TRUST_MODEL.md)：source tier、citation use 與 fail-closed rules
 - [docs/TLR_CANDIDATE_MODE.md](docs/TLR_CANDIDATE_MODE.md)：外部語意召回 / TLR-like candidate-only 模式
 - [docs/TOOL_CONTRACT.md](docs/TOOL_CONTRACT.md)：MCP tool envelope 與工具契約

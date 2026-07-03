@@ -1,5 +1,22 @@
 # Release Notes
 
+## v0.3.0 Claim-Grounding Patch
+
+- Adds v0.3 trace fields for claim grounding:
+  `answer_claims`, `claim_support`, `semantic_grounding_summary`, and
+  `semantic_failure_reasons`.
+- Adds MCP tools:
+  `get_claim_grounding_policy`, `extract_answer_claims`, `check_claim_support`.
+- Adds synthetic claim-grounding scenarios:
+  `pass_claim_supported`, `fail_party_argument_as_court_view`,
+  `fail_overstated_case_specific_rule`, `fail_unsupported_paraphrase`,
+  `human_review_claim_unchecked`.
+- Extends validation report to include sections:
+  Answer Claims / Claim Support Review / Semantic Hallucination Risk.
+- Documents v0.3 claim-grounding contract and updates v0.3 acceptance scope.
+- Keeps public-safe boundary: only synthetic fixtures, schemas, harness logic,
+  tests, and docs are included; no production legal full-text data.
+
 ## v0.2.1 Hardening Patch
 
 This patch tightens the public Agentic Legal RAG / MCP Harness claim.

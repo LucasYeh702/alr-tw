@@ -4,10 +4,13 @@ The public trace schema version is `alr-tw.agentic_trace/v1`.
 
 ## Main Objects
 
-- `AgenticRunTrace`: query, normalized query, steps, tool calls, decision trace, evidence, coverage, trust gate, final action, optional answer, and human review notes.
+- `AgenticRunTrace`: query, normalized query, steps, tool calls, decision trace, evidence, coverage, trust gate, claim grounding outputs (`answer_claims`, `claim_support`, `semantic_grounding_summary`, `semantic_failure_reasons`), final action, optional answer, and human review notes.
 - `ToolCallTrace`: tool name, execution mode, input summary, output summary, status, and optional error code.
 - `EvidenceRecord`: citation id, source id, source tier, citation use, title, snippet, official URL, and validation status.
 - `TrustGateTrace`: safe flag, failure reasons, validation summary, and recommended action.
+- `AnswerClaim`: claim id, claim text, claim type, referenced citation IDs, and importance.
+- `ClaimSupport`: per-claim support status, supporting legal segments, risk flags, and review requirement.
+- `SemanticGroundingSummary`: claim-support counts by status and semantic safety flag.
 
 ## Tool Execution Semantics
 
@@ -26,8 +29,8 @@ external tool execution logs.
 ## Decision Trace
 
 `decision_trace` records the auditable decisions that connect evidence to the
-final action. The public harness currently records citation-validation counts
-and the trust-gate decision.
+final action. The public harness records citation-validation counts,
+claim-support decision trace, and the trust-gate decision.
 
 Clients should render answer content only when both conditions are true:
 

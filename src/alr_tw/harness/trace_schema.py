@@ -4,6 +4,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from alr_tw.verification.claim_support import (
+    AnswerClaim,
+    ClaimSupport,
+    SemanticGroundingSummary,
+)
+
 
 class ToolCallTrace(BaseModel):
     tool_name: str
@@ -41,6 +47,12 @@ class AgenticRunTrace(BaseModel):
     decision_trace: list[dict[str, Any]] = Field(default_factory=list)
     evidence: list[EvidenceRecord] = Field(default_factory=list)
     coverage: dict[str, Any] = Field(default_factory=dict)
+    answer_claims: list[AnswerClaim] = Field(default_factory=list)
+    claim_support: list[ClaimSupport] = Field(default_factory=list)
+    semantic_grounding_summary: SemanticGroundingSummary = Field(
+        default_factory=SemanticGroundingSummary,
+    )
+    semantic_failure_reasons: list[str] = Field(default_factory=list)
     trust_gate: TrustGateTrace
     final_action: Literal["answer", "refuse", "human_review_required"]
     answer: str | None = None

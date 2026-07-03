@@ -1,6 +1,7 @@
 import pytest
 
 from alr_tw.harness.trace_schema import EvidenceRecord
+from alr_tw.verification.claim_support import SemanticGroundingSummary
 from alr_tw.harness.orchestrator import _trust_gate_trace
 from alr_tw.harness.orchestrator import run_agentic_demo
 
@@ -14,7 +15,12 @@ from alr_tw.harness.orchestrator import run_agentic_demo
         ("fail_verified_cache_incomplete", "refuse", False),
         ("fail_no_final_citation", "refuse", False),
         ("fail_low_coverage", "refuse", False),
+        ("pass_claim_supported", "answer", True),
         ("human_review_required_claim_support", "human_review_required", False),
+        ("human_review_claim_unchecked", "human_review_required", False),
+        ("fail_party_argument_as_court_view", "refuse", False),
+        ("fail_overstated_case_specific_rule", "human_review_required", False),
+        ("fail_unsupported_paraphrase", "refuse", False),
     ],
 )
 def test_agentic_demo_scenarios_have_expected_final_action(
@@ -52,7 +58,10 @@ def test_trust_gate_refuses_critical_failure_even_when_human_review_required():
             ),
         ],
         coverage={"has_laws": "present", "has_judgments": "not_checked"},
-        human_review_required=True,
+        semantic_summary=SemanticGroundingSummary(
+            claim_count=1,
+            unchecked_count=1,
+        ),
     )
 
     assert trace.recommended_action == "refuse"

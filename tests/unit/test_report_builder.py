@@ -16,8 +16,11 @@ def test_validation_report_contains_required_sections_for_fail_case():
         "8. Coverage",
         "9. Trust Gate Decision",
         "10. Decision Trace",
-        "11. Final Action",
-        "12. Human Review Notes",
+        "11. Answer Claims",
+        "12. Claim Support Review",
+        "13. Semantic Hallucination Risk",
+        "14. Final Action",
+        "15. Human Review Notes",
     ):
         assert heading in report
     assert "refuse" in report

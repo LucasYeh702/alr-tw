@@ -98,13 +98,18 @@ The trust gate fails closed when:
 
 | Scenario | Expected result |
 |---|---|
-| `pass_official_source` | Final citation exists; answer is allowed |
+| `pass_official_source` | Final citation exists and claim support is accepted; answer is allowed |
+| `pass_claim_supported` | Final citation exists and claim support status is supported; answer is allowed |
 | `fail_candidate_only` | External recall is candidate-only; answer is refused |
 | `fail_synthetic_only` | Synthetic fixture is not current law; answer is refused |
 | `fail_verified_cache_incomplete` | Verified-cache metadata is incomplete; answer is refused |
 | `fail_no_final_citation` | No final citation exists; answer is refused |
 | `fail_low_coverage` | Coverage is low-confidence; answer is refused |
+| `fail_party_argument_as_court_view` | Party-argument segment is misread as court view; refused/human review |
+| `fail_overstated_case_specific_rule` | Case-specific finding was over-generalized; human review/refusal |
+| `fail_unsupported_paraphrase` | Claim paraphrase is unsupported by evidence; answer is refused |
 | `human_review_required_claim_support` | Source exists, but claim support was not checked; human review is required |
+| `human_review_claim_unchecked` | Alias scenario for explicit unchecked claim support path |
 
 When `final_action != "answer"`, the trace `answer` must be `null`. A client may render answer content only when `trust_gate.safe_to_present == true` and `final_action == "answer"`.
 
@@ -199,7 +204,7 @@ Minimum data recommendation:
 ## Specification Docs
 
 - [docs/AGENTIC_WORKFLOW.md](docs/AGENTIC_WORKFLOW.md): agentic RAG execution graph
-- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md): v0.2.1 naming and release acceptance criteria
+- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md): v0.3.0 naming and release acceptance criteria
 - [docs/TRUST_MODEL.md](docs/TRUST_MODEL.md): source tiers, citation use, and fail-closed rules
 - [docs/TLR_CANDIDATE_MODE.md](docs/TLR_CANDIDATE_MODE.md): external semantic recall / TLR-like candidate-only mode
 - [docs/TOOL_CONTRACT.md](docs/TOOL_CONTRACT.md): MCP tool envelope and contracts

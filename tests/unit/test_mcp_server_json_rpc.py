@@ -19,7 +19,7 @@ def test_mcp_initialize_returns_server_metadata():
     assert response["result"]["protocolVersion"] == "2024-11-05"
     assert response["result"]["serverInfo"] == {
         "name": "alr-tw",
-        "version": "0.2.1",
+        "version": "0.3.0",
     }
     assert response["result"]["capabilities"] == {"tools": {}}
 
@@ -44,6 +44,9 @@ def test_mcp_tool_list_exposes_agentic_legal_research():
     assert "agentic_legal_research" in names
     assert "legal_search" in names
     assert "validate_citation" in names
+    assert "get_claim_grounding_policy" in names
+    assert "extract_answer_claims" in names
+    assert "check_claim_support" in names
     assert "exact_law_lookup" in names
     assert "run_agentic_demo" in names
     assert "build_validation_report" in names
@@ -117,6 +120,92 @@ def test_mcp_tools_call_builds_validation_report():
     payload = json.loads(response["result"]["content"][0]["text"])
     assert payload["ok"] is True
     assert payload["data"]["report"].startswith("# Legal Research Validation Report")
+
+
+def test_mcp_tools_call_gets_claim_grounding_policy():
+    response = McpSession(ready=True).handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "get_claim_grounding_policy",
+                "arguments": {},
+            },
+        }
+    )
+
+    payload = json.loads(response["result"]["content"][0]["text"])
+    assert payload["ok"] is True
+    assert payload["data"]["schema"] == "alr-tw.claim-grounding-policy/v1"
+    assert "supported_support_status" in payload["data"]
+
+
+def test_mcp_tools_call_extracts_and_checks_claims():
+    response = McpSession(ready=True).handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "extract_answer_claims",
+                "arguments": {
+                    "answer": "法院認為押金得依契約文字與事實情節判斷。\n程序中另有上訴抗辯。",
+                },
+            },
+        }
+    )
+
+    payload = json.loads(response["result"]["content"][0]["text"])
+    assert payload["ok"] is True
+    data = payload["data"]
+    assert data["count"] >= 1
+    claim = data["claims"][0]
+    assert claim["claim_id"] == "claim-001"
+
+    response = McpSession(ready=True).handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": "check_claim_support",
+                "arguments": {
+                    "answer": "法院認為押金得依契約文字與事實情節判斷。",
+                    "claims": [
+                        {
+                            "claim_id": "claim-001",
+                            "claim_text": "法院認為押金得依契約文字與事實情節判斷。",
+                            "claim_type": "court_view",
+                            "referenced_citation_ids": ["official-demo-law-184"],
+                        }
+                    ],
+                    "segments": [
+                        {
+                            "segment_id": "official-demo-law-184-seg-01",
+                            "source_id": "official-demo-law-184",
+                            "citation_id": "official-demo-law-184",
+                            "source_tier": "official",
+                            "legal_material_type": "law",
+                            "section_role": "statute_text",
+                            "span_start": 0,
+                            "span_end": 36,
+                            "text": "synthetic law segment",
+                            "official_url": "https://example.test/synthetic-official/civil-law-demo#article-184",
+                            "content_hash": "sha256:synthetic-official-law-184",
+                            "verified_at": "2026-01-01T00:00:00Z",
+                        }
+                    ],
+                },
+            },
+        }
+    )
+
+    payload = json.loads(response["result"]["content"][0]["text"])
+    assert payload["ok"] is True
+    assert payload["data"]["schema"] == "alr-tw.claim-support-result/v1"
+    assert isinstance(payload["data"]["claim_support"], list)
+    assert payload["data"]["summary"].get("claim_count", 0) >= 1
 
 
 def test_mcp_tools_call_returns_trust_model_contract():

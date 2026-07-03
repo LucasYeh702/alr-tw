@@ -37,3 +37,8 @@ true and `final_action` is `answer`.
 - `fail_no_final_citation`: no final citation produces fail-closed refusal.
 - `fail_low_coverage`: low legal coverage blocks final answer.
 - `human_review_required_claim_support`: source exists, but claim support was not checked.
+- `pass_claim_supported`: source exists and claim is supported by legal segments.
+- `fail_party_argument_as_court_view`: party-argument segment is misread as court-view.
+- `fail_overstated_case_specific_rule`: claim over-generalized a case-specific finding.
+- `fail_unsupported_paraphrase`: claim paraphrase does not match supporting segments.
+- `human_review_claim_unchecked`: source exists, but claim support was intentionally unchecked.

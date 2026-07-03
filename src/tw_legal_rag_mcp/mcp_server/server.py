@@ -10,14 +10,17 @@ from .tools import (
     exact_constitutional_lookup_tool,
     exact_judgment_lookup_tool,
     exact_law_lookup_tool,
+    extract_answer_claims_tool,
     get_trust_model_tool,
+    check_claim_support_tool,
+    get_claim_grounding_policy_tool,
     legal_search,
     run_agentic_demo_tool,
     validate_citation_tool,
 )
 
 SERVER_NAME = "alr-tw"
-SERVER_VERSION = "0.2.1"
+SERVER_VERSION = "0.3.0"
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"
 SUPPORTED_PROTOCOL_VERSIONS = {DEFAULT_PROTOCOL_VERSION}
 SOURCE_TIER_VALUES = {
@@ -173,6 +176,50 @@ def tool_definitions() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "get_claim_grounding_policy",
+            "description": "Return the public claim-grounding contract used by ALR-TW v0.3.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "extract_answer_claims",
+            "description": "Split an answer into deterministic public claim units.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "answer": {"type": "string"},
+                },
+                "required": ["answer"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "check_claim_support",
+            "description": (
+                "Validate whether answer claims are supported by provided evidence segments "
+                "and return semantic grounding summary for human review."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "answer": {"type": "string"},
+                    "claims": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                    },
+                    "segments": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                    },
+                },
+                "required": ["answer", "claims", "segments"],
+                "additionalProperties": False,
+            },
+        },
+        {
             "name": "get_trust_model",
             "description": "Return the ALR-TW public source trust model.",
             "inputSchema": {
@@ -258,6 +305,19 @@ def call_tool(params: dict[str, Any]) -> dict[str, Any]:
     if name == "agentic_legal_research":
         _reject_unexpected_keys(arguments, {"query"})
         payload = agentic_legal_research(_required_string(arguments, "query"))
+    elif name == "get_claim_grounding_policy":
+        _reject_unexpected_keys(arguments, set())
+        payload = get_claim_grounding_policy_tool()
+    elif name == "extract_answer_claims":
+        _reject_unexpected_keys(arguments, {"answer"})
+        payload = extract_answer_claims_tool(_required_string(arguments, "answer"))
+    elif name == "check_claim_support":
+        _reject_unexpected_keys(arguments, {"answer", "claims", "segments"})
+        payload = check_claim_support_tool(
+            _required_string(arguments, "answer"),
+            claims=_required_array_of_dict(arguments, "claims"),
+            segments=_required_array_of_dict(arguments, "segments"),
+        )
     elif name == "legal_search":
         _reject_unexpected_keys(arguments, {"query"})
         payload = legal_search(_required_string(arguments, "query"))
@@ -345,6 +405,15 @@ def _optional_string(arguments: dict[str, Any], name: str, *, default: str | Non
         raise ValueError(f"{name} must be a string")
     value = raw_value.strip()
     return value or default
+
+
+def _required_array_of_dict(arguments: dict[str, Any], name: str) -> list[dict[str, Any]]:
+    if name not in arguments:
+        raise ValueError(f"{name} is required")
+    raw_value = arguments[name]
+    if not isinstance(raw_value, list) or not all(isinstance(item, dict) for item in raw_value):
+        raise ValueError(f"{name} must be an array of objects")
+    return raw_value
 
 
 def _reject_unexpected_keys(arguments: dict[str, Any], allowed: set[str]) -> None:

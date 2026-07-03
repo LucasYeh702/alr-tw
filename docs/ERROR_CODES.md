@@ -14,6 +14,12 @@
 | `SOURCE_REJECTED` | Source tier or metadata rejected | refuse |
 | `SOURCE_UNVERIFIABLE` | Source could not be verified | refuse |
 | `CLAIM_SUPPORT_NOT_CHECKED` | Source exists but claim support was not checked | human_review_required |
+| `CLAIM_SUPPORT_UNCHECKED` | Claim-support not evaluated against legal evidence segments | human_review_required |
+| `CLAIM_SUPPORT_NEEDS_REVIEW` | Claim support is ambiguous and needs human review | human_review_required |
+| `CLAIM_UNSUPPORTED` | One or more core claims have no supporting evidence | refuse |
+| `CLAIM_OVERSTATED` | Claim support is broader than provided legal segments | refuse or human_review_required |
+| `CLAIM_CONTRADICTED` | Evidence conflicts with the claim text | refuse |
+| `CLAIM_ROLE_ERROR` | Claim incorrectly inferred from wrong legal segment role | refuse or human_review_required |
 | `HUMAN_REVIEW_REQUIRED` | Human legal review is required | human_review_required |
 | `PRIVATE_DATA_NOT_ALLOWED` | Private data must not enter public harness | refuse |
 | `PRODUCTION_DATA_EXCLUDED` | Production data is outside public repo | refuse |
