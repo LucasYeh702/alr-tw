@@ -1,3 +1,9 @@
+"""Demo authority scores, not production ranking configuration.
+
+The tier scores are illustrative public defaults for tests and examples. They
+do not represent tuned production ranking weights.
+"""
+
 from __future__ import annotations
 
 

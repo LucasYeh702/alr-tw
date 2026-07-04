@@ -1,3 +1,9 @@
+"""Demo Reciprocal Rank Fusion helper, not production ranking configuration.
+
+The default ``k`` value is an illustrative public default for examples and
+tests. It does not represent tuned production retrieval settings.
+"""
+
 from __future__ import annotations
 
 

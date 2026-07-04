@@ -41,11 +41,11 @@ source_manifest
 - vector dimension
 - HNSW or vector index parameters
 - SQLite FTS settings
-- ranking weights
+- tuned production ranking weights
 - private evaluation holdouts
 - production cache layout
 
-這不是缺漏，而是為了保留使用者依資料類型、硬體效能、更新頻率、精度需求、儲存成本與合規政策自行調整的彈性。完整資料流說明請見 `docs/ARCHITECTURE_CONTRACT.md`。
+這不是缺漏，而是為了保留使用者依資料類型、硬體效能、更新頻率、精度需求、儲存成本與合規政策自行調整的彈性。repo 內含 demo ranking formula 與通用預設（例如 RRF、source-tier 分數），僅供展示資料流與測試契約，不代表任何 production ranking 配置。完整資料流說明請見 `docs/ARCHITECTURE_CONTRACT.md`。
 
 ## Promotion rule
 

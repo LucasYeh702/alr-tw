@@ -2,7 +2,9 @@
 
 Languages: [繁體中文](README.zh-TW.md) | English
 
-ALR-TW is short for **Agentic Legal RAG / MCP Harness for Taiwan Law**. It is an AI-agent-driven agentic RAG harness: an agent may call tools, produce traces, and make trust-gate decisions, but it must operate inside the harness's deterministic graph, citation validation, and trust gate. It is not an autonomous legal agent that practices law or independently completes legal judgment.
+ALR-TW is short for **Agentic Legal RAG / MCP Harness for Taiwan Law**. It is an agentic RAG harness that constrains an external AI agent: the external agent may call tools and read traces, but it must operate inside the harness's deterministic graph, citation validation, and trust gate. It is not an autonomous legal agent that practices law or independently completes legal judgment.
+
+This repository does not ship an LLM or agent implementation. Planning, tool selection, and natural-language reasoning are supplied by the caller, such as an external MCP client or LLM runtime; ALR-TW provides tool interfaces, deterministic gate graphs, traces, and report contracts that constrain that external agent. The trust-gate decision is made by the deterministic harness, not asserted by the agent.
 
 This repository is a public-safe reference implementation that demonstrates how a legal AI agent can plan retrieval, recall candidate materials, classify source tiers, validate citations, check coverage, and fail closed when evidence is not sufficient.
 
@@ -27,7 +29,7 @@ User Query
 -> Final Decision
 ```
 
-This is an AI-agent-driven bounded agentic workflow, not an unrestricted autonomous legal agent. The agent may use tools, produce a trace, and choose a final action, but it cannot bypass citation validation or the trust gate.
+This is a bounded agentic workflow for constraining an external agent, not an unrestricted autonomous legal agent. The external agent may use tools and read traces; final actions and trust-gate decisions are still produced by the deterministic harness from citation validation, coverage, and claim-support state.
 
 Current ALR-TW capabilities:
 
@@ -200,7 +202,7 @@ The public repo demonstrates the boundary and contracts. Production systems may 
 
 ## Connecting Real Data
 
-ALR-TW intentionally does not prescribe a fixed chunk size, embedding model, vector dimension, HNSW configuration, or ranking weights. Those are deployment-specific choices that should be selected according to data scale, hardware, update frequency, licensing, precision needs, and latency budgets.
+ALR-TW intentionally does not publish tuned production ranking parameters, and it does not prescribe a fixed chunk size, embedding model, vector dimension, or HNSW configuration. The repo still includes demo ranking formulas and general defaults, such as RRF and source-tier scores, only to demonstrate data flow and test contracts; they do not represent any private runtime configuration. Implementers should measure and choose these settings according to data scale, hardware, update frequency, licensing, precision needs, and latency budgets.
 
 Recommended integration flow:
 
@@ -242,6 +244,8 @@ Minimum data recommendation:
 - [docs/TRACE_SCHEMA.md](docs/TRACE_SCHEMA.md): trace schema
 - [docs/VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md): validation report structure
 - [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md): release notes
+- [docs/RELEASE_AUDIT_PROCEDURE.md](docs/RELEASE_AUDIT_PROCEDURE.md): public release audit procedure
+- [docs/DEPLOYMENT_STARTING_POINTS.md](docs/DEPLOYMENT_STARTING_POINTS.md): illustrative deployment starting points
 - [docs/PUBLIC_PRIVATE_BOUNDARY.md](docs/PUBLIC_PRIVATE_BOUNDARY.md): public repo and private runtime boundary
 - [docs/PUBLIC_PRIVATE_TRACEABILITY.md](docs/PUBLIC_PRIVATE_TRACEABILITY.md): local capability to public counterpart mapping
 - [docs/ERROR_CODES.md](docs/ERROR_CODES.md): error codes

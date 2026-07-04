@@ -17,6 +17,7 @@ def test_agentic_harness_release_acceptance_artifacts_exist():
         "docs/VALIDATION_REPORT.md",
         "docs/RELEASE_NOTES.md",
         "docs/RELEASE_AUDIT_PROCEDURE.md",
+        "docs/DEPLOYMENT_STARTING_POINTS.md",
         "docs/PUBLIC_PRIVATE_BOUNDARY.md",
         "examples/agentic_runs/pass_official_source.json",
         "examples/reports/pass_official_source.md",
@@ -26,7 +27,7 @@ def test_agentic_harness_release_acceptance_artifacts_exist():
         assert Path(path).exists(), path
 
 
-def test_agentic_harness_0_3_scenarios_are_executable_and_classified():
+def test_agentic_harness_0_4_scenarios_are_executable_and_classified():
     query = "民法第184條 押金"
     expected = {
         "pass_claim_supported": "answer",
@@ -70,9 +71,10 @@ def test_acceptance_doc_states_current_claim_boundary():
     text = Path("docs/AGENTIC_HARNESS_ACCEPTANCE.md").read_text(encoding="utf-8")
 
     assert "v0.4" in text
-    assert "AI-agent-driven" in text
+    assert "constrains" in text
     assert "bounded agentic legal RAG harness" in text
     assert "identifier-backed `verified_cache`" in text
+    assert "an LLM or agent implementation shipped in this repo" in text
     assert "Not Claimed" in text
     assert "unrestricted autonomous legal agent" in text
     assert "independently completes legal judgment" in text

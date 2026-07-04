@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -48,21 +49,53 @@ FORBIDDEN_CONTENT_PATTERNS = {
     "local host name": re.compile(r"\b[A-Za-z0-9.-]+\.local\b"),
     "absolute macOS user path": re.compile(re.escape(MACOS_USER_PATH_PREFIX) + r"[^\s'\"`]+"),
     "private contract collection": re.compile(r"\b(?:private|legal)_contracts\b"),
+    "api_key assignment": re.compile(r"\bapi[_-]?key\s*[:=]", re.IGNORECASE),
+    "token assignment": re.compile(r"\btoken\s*[:=]", re.IGNORECASE),
+    "secret assignment": re.compile(r"\bsecret\s*[:=]", re.IGNORECASE),
+    "taiwan id": re.compile(r"\b[A-Z][12][0-9]{8}\b"),
 }
 
 SKIP_DIR_PARTS = {".git", ".venv", "venv", "__pycache__", ".pytest_cache", ".ruff_cache"}
 MAX_FILE_SIZE = 5 * 1024 * 1024
+JUDGMENT_IDENTIFIER_PATTERN = re.compile(
+    r"\b(?P<court>[A-Z]{3,5}),(?P<year>[0-9]{2,3}),(?P<case_type>[^,\s]{1,6}),"
+    r"(?P<number>[0-9]+),(?P<date>[0-9]{8}),(?P<sequence>[0-9]+)\b"
+)
 
 
-def main() -> int:
-    root = Path(".").resolve()
+def _iter_files(root: Path) -> list[Path]:
+    if (root / ".git").exists():
+        try:
+            output = subprocess.check_output(
+                ["git", "-C", str(root), "ls-files", "-z"],
+                text=False,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            pass
+        else:
+            return [root / raw.decode("utf-8") for raw in output.split(b"\0") if raw]
+    return [path for path in root.rglob("*") if path.is_file()]
+
+
+def _is_allowed_synthetic_judgment_identifier(match: re.Match[str]) -> bool:
+    return match.group("court") in {"DEMO", "TSTV"} or match.group("case_type") == "測"
+
+
+def _append_domain_violations(text: str, rel: Path, violations: list[str]) -> None:
+    for match in JUDGMENT_IDENTIFIER_PATTERN.finditer(text):
+        if not _is_allowed_synthetic_judgment_identifier(match):
+            violations.append(f"forbidden judgment identifier: {rel}")
+
+
+def find_forbidden_file_violations(root: Path) -> list[str]:
+    root = root.resolve()
     violations: list[str] = []
 
-    for path in root.rglob("*"):
+    for path in _iter_files(root):
+        if not path.exists() or not path.is_file():
+            continue
         rel_parts = set(path.relative_to(root).parts)
         if rel_parts & SKIP_DIR_PARTS:
-            continue
-        if not path.is_file():
             continue
 
         rel = path.relative_to(root)
@@ -83,6 +116,7 @@ def main() -> int:
         try:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
+            violations.append(f"non-utf-8 text file: {rel}")
             continue
 
         for marker in FORBIDDEN_CONTENT_MARKERS:
@@ -93,6 +127,13 @@ def main() -> int:
             if pattern.search(text):
                 violations.append(f"forbidden content pattern {label}: {rel}")
 
+        _append_domain_violations(text, rel, violations)
+
+    return violations
+
+
+def main() -> int:
+    violations = find_forbidden_file_violations(Path("."))
     if violations:
         print("Forbidden files detected:", file=sys.stderr)
         for item in violations:

@@ -1,8 +1,11 @@
 # ALR-TW Agentic Workflow
 
-ALR-TW is an AI-agent-driven, bounded agentic legal RAG harness. It demonstrates
-how an AI agent can plan, retrieve, validate, and decide without bypassing source
-and citation policy.
+ALR-TW is a bounded agentic legal RAG harness that constrains an external agent.
+This repository does not ship an LLM or agent implementation. Planning, tool
+selection, and natural-language reasoning are supplied by the caller, such as an
+external MCP client or LLM runtime; ALR-TW provides tool interfaces,
+deterministic gate graphs, traces, and report contracts that constrain that
+external agent.
 
 ```text
 Query
@@ -19,7 +22,9 @@ Query
 The graph is deterministic. ALR-TW does not implement an unrestricted autonomous
 legal agent loop, and it is not an agent that practices law or independently
 completes legal judgment. Every final answer must pass citation validation and
-the trust gate; otherwise the harness refuses or requires human review.
+the trust gate; otherwise the harness refuses or requires human review. The
+trust-gate decision is made by the deterministic harness, not asserted by the
+external agent.
 
 Public example traces are deterministic harness traces. Their `tool_calls` use
 `execution_mode: "harness_recorded"` and should not be read as live external

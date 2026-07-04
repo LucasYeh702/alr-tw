@@ -1,6 +1,6 @@
 # Architecture Contract
 
-本文件說明使用者接入自己的法規、裁判、憲法法庭資料或其他合規資料源時，建議保留的資料流介面、來源驗證邊界與 trust gate 規則。本 repo 只示範可替換介面，不提供部署環境專屬的資料、索引、快取、切片策略、ranking 權重或私有評測集。
+本文件說明使用者接入自己的法規、裁判、憲法法庭資料或其他合規資料源時，建議保留的資料流介面、來源驗證邊界與 trust gate 規則。本 repo 只示範可替換介面，不提供部署環境專屬的資料、索引、快取、切片策略、調校後的 production ranking 權重或私有評測集。
 
 ## Purpose
 
@@ -8,7 +8,7 @@ This contract helps implementers replace the synthetic demo with their own compl
 
 使用者應能從這份文件看懂：資料如何進入 adapter，如何成為 retrieval candidate，如何經過 citation verification，最後如何由 trust gate 決定可回答或應拒答。
 
-公開版不承諾任何特定資料集、硬體規格、向量資料庫、embedding 模型、chunking strategy 或 ranking formula。
+公開版不承諾任何特定資料集、硬體規格、向量資料庫、embedding 模型、chunking strategy 或調校後的 production ranking formula。repo 內含的 demo ranking formula 與通用預設只用來展示資料流與測試契約，不代表閉源 runtime 的實際配置。
 
 ## Contract Boundary
 
@@ -62,12 +62,12 @@ This public contract intentionally excludes deployment-specific tuning and priva
 - embedding model and vector dimension
 - HNSW or vector database parameters
 - SQLite FTS settings
-- ranking weights or production scoring formula
+- tuned production ranking weights or production scoring formula
 - private evaluation holdouts
 - user query logs
 - credentials, tokens, private endpoints, and local paths
 
-These items are deployment concerns. They should be selected by each implementer according to data source, hardware capacity, latency budget, update frequency, precision requirements, storage cost, and compliance policy.
+These items are deployment concerns. Demo ranking formula examples in this repo, including RRF and source-tier scores, are illustrative and not production configuration. Production ranking settings should be selected by each implementer according to data source, hardware capacity, latency budget, update frequency, precision requirements, storage cost, and compliance policy.
 
 ## Extension Points
 

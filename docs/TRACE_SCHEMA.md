@@ -2,6 +2,12 @@
 
 The public trace schema version is `alr-tw.agentic_trace/v1`.
 
+This repository does not ship an LLM or agent implementation. Traces emitted by
+`agentic_legal_research` and `run_agentic_demo` are deterministic synthetic
+harness outputs that an external MCP client or LLM runtime can inspect. The
+files under `examples/agentic_runs/*.json` are not recordings of agent
+reasoning or live external tool execution.
+
 ## Main Objects
 
 - `AgenticRunTrace`: query, normalized query, steps, tool calls, decision trace, evidence, coverage, trust gate, claim grounding outputs (`answer_claims`, `claim_support`, `semantic_grounding_summary`, `semantic_failure_reasons`), final action, optional answer, and human review notes.

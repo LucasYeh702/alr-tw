@@ -2,7 +2,9 @@
 
 語言版本：繁體中文 | [English](README.en.md)
 
-ALR-TW 是 **Agentic Legal RAG / MCP Harness for Taiwan Law** 的簡稱。它是一個由 AI agent 驅動的 agentic RAG harness：agent 可以呼叫工具、產生 trace、做 trust-gate decision，但必須在 harness 的 deterministic graph、citation validation 與 trust gate 內運作。它不是自主執業、可自行完成法律判斷的 autonomous legal agent。
+ALR-TW 是 **Agentic Legal RAG / MCP Harness for Taiwan Law** 的簡稱。它是一個約束外部 AI agent 的 agentic RAG harness：外部 agent 可以呼叫工具並取得 trace，但必須在 harness 的 deterministic graph、citation validation 與 trust gate 內運作。它不是自主執業、可自行完成法律判斷的 autonomous legal agent。
+
+本 repo 不包含 LLM，也不包含 agent 實作。規劃、選工具與自然語言推理的 agent 角色由呼叫端（外部 MCP client 或 LLM runtime）提供；ALR-TW 提供工具介面、確定性閘門圖與 trace / 報告契約，用來約束該外部 agent。Trust-gate decision 由 deterministic harness 做出，不由 agent 自行宣告。
 
 本 repo 是 public-safe 的參考實作，用來示範法律 AI agent 在回答前如何規劃檢索、召回候選資料、判斷來源層級、驗證引用、檢查覆蓋率，最後在證據不足時 fail closed。
 
@@ -27,7 +29,7 @@ User Query
 -> Final Decision
 ```
 
-這個 loop 是 AI-agent-driven 的 bounded agentic workflow，不是無限制自治代理。Agent 可以使用工具、產生 trace、提出 final action，但不能繞過 citation validation 與 trust gate。
+這個 loop 是用來約束外部 agent 的 bounded agentic workflow，不是無限制自治代理。外部 agent 可以使用工具並讀取 trace；final action 與 trust-gate decision 仍由 deterministic harness 根據 citation validation、coverage 與 claim support 狀態產生。
 
 ALR-TW 目前示範的能力：
 
@@ -200,7 +202,7 @@ Public repo 只示範「邊界與契約」。正式系統可以把 synthetic ada
 
 ## 如何接入真實資料
 
-ALR-TW 刻意不提供固定 chunk size、embedding model、vector dimension、HNSW 設定或 ranking weights。這些屬於 deployment-specific tuning，應由使用者依資料規模、硬體、更新頻率、授權條件與 precision / latency 需求自行決定。
+ALR-TW 刻意不公開調校後的 production ranking 參數，也不提供固定 chunk size、embedding model、vector dimension 或 HNSW 設定。repo 內仍包含 demo ranking 公式與通用預設（例如 RRF、source-tier 分數），只用來展示資料流與測試契約，不代表任何閉源 runtime 的實際配置；實作者應依資料規模、硬體、更新頻率、授權條件與 precision / latency 需求自行量測決定。
 
 建議接入順序：
 
@@ -242,6 +244,8 @@ Official data source or compliant internal source
 - [docs/TRACE_SCHEMA.md](docs/TRACE_SCHEMA.md)：trace schema
 - [docs/VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md)：validation report 結構
 - [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md)：release notes
+- [docs/RELEASE_AUDIT_PROCEDURE.md](docs/RELEASE_AUDIT_PROCEDURE.md)：公開 release audit 規程
+- [docs/DEPLOYMENT_STARTING_POINTS.md](docs/DEPLOYMENT_STARTING_POINTS.md)：illustrative deployment starting points
 - [docs/PUBLIC_PRIVATE_BOUNDARY.md](docs/PUBLIC_PRIVATE_BOUNDARY.md)：公開 repo 與 private runtime 邊界
 - [docs/PUBLIC_PRIVATE_TRACEABILITY.md](docs/PUBLIC_PRIVATE_TRACEABILITY.md)：local capability 與 public counterpart 對應
 - [docs/ERROR_CODES.md](docs/ERROR_CODES.md)：錯誤碼

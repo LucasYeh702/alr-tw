@@ -1,3 +1,9 @@
+"""Demo judgment ranking helpers, not production ranking configuration.
+
+The weights here are illustrative defaults for public contract tests. They do
+not represent tuned production ranking parameters or private runtime scoring.
+"""
+
 from __future__ import annotations
 
 from typing import Iterable

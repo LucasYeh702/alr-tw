@@ -61,7 +61,7 @@ gitleaks detect --source . --log-opts="--all"
 
 「synthetic only」是本 repo 的核心保證，逐檔檢視 `demo_data/`、`examples/agentic_runs/`、`examples/reports/`、測試 fixture：
 
-- 裁判 id 必須落在合成命名空間：`DEMO` 前綴或 `TSTV` 法院碼或字別「測」，且日期為未來日期。
+- 裁判 id 必須落在合成命名空間：`DEMO` 前綴、`TSTV` 法院碼、字別「測」，或其他明確文件化的合成 fixture 命名；真實形狀且不在合成命名空間內者不得出現。
 - 所有 URL 必須是 `example.test` 或其他保留網域；不得出現任何真實官方網域的完整可解析連結（文件中描述官方資料來源時使用文字名稱，不放深層連結）。
 - 不得出現：真實形狀的裁判字號（六段逗號格式而不在合成命名空間內）、身分證樣式、真實當事人姓名、真實案件事實。
 - 新增 fixture 的 PR 必須在描述中聲明資料為合成，reviewer 逐筆抽查。

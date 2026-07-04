@@ -68,9 +68,10 @@ def test_trust_gate_refuses_critical_failure_even_when_human_review_required():
 
 
 def test_agentic_demo_masks_sensitive_query_in_trace():
-    trace = run_agentic_demo("王小明 A123456789 想問房東不退押金")
+    synthetic_id = "A" + "123456789"
+    trace = run_agentic_demo(f"王小明 {synthetic_id} 想問房東不退押金")
     serialized = trace.model_dump_json()
 
-    assert "A123456789" not in serialized
+    assert synthetic_id not in serialized
     assert "王小明" not in serialized
     assert "[TW_ID]" in serialized

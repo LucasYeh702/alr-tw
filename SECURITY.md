@@ -58,10 +58,14 @@ python scripts/check_no_forbidden_files.py
 Recommended additional checks:
 
 - GitHub secret scanning
-- gitleaks
+- the CI history secret-scan job, currently backed by gitleaks
 - trufflehog
 - a tracked-file scan for database files, logs, archives, local paths, and generated caches
 - a git-history review when changing repository visibility or importing large changes
+
+The repository guard scripts also check common Taiwan legal-data leak shapes,
+including real-shaped judgment identifiers outside the synthetic namespace and
+Taiwan national ID number patterns.
 
 A clean current working tree does not prove that older commits are safe to publish.
 
