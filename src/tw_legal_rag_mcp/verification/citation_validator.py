@@ -4,10 +4,13 @@ from enum import Enum
 from typing import Any
 
 from .source_policy import (
+    DEFAULT_SOURCE_POLICY_CONFIG,
     CitationUse,
+    SourcePolicyConfig,
     SourceRecord,
-    classify_citation_use,
+    coerce_identifier_resolution,
     coerce_source_tier,
+    evaluate_citation_use,
 )
 
 
@@ -40,13 +43,22 @@ def _source_from_mapping(citation: dict[str, Any]) -> SourceRecord:
         official_hash=citation.get("official_hash"),
         verified_at=citation.get("verified_at"),
         source_label=citation.get("source_label"),
+        legal_material_type=citation.get("legal_material_type"),
+        identifier_resolution=coerce_identifier_resolution(
+            citation.get("identifier_resolution")
+        ),
     )
 
 
-def validate_citation(citation: dict[str, Any], require_final: bool = False) -> dict[str, Any]:
+def validate_citation(
+    citation: dict[str, Any],
+    require_final: bool = False,
+    config: SourcePolicyConfig = DEFAULT_SOURCE_POLICY_CONFIG,
+) -> dict[str, Any]:
     citation_id = str(citation.get("citation_id") or citation.get("source_id") or "")
     source = _source_from_mapping(citation)
-    citation_use = classify_citation_use(source)
+    decision = evaluate_citation_use(source, config)
+    citation_use = decision.citation_use
 
     if not citation_id:
         status = CitationStatus.NOT_FOUND
@@ -76,8 +88,8 @@ def validate_citation(citation: dict[str, Any], require_final: bool = False) -> 
         status = CitationStatus.UNVERIFIABLE
         support = CitationSupport.NOT_CHECKED
         eligibility = CitationEligibility.REJECTED
-        reason = "source tier is rejected or unknown"
-        error_code = "SOURCE_REJECTED_OR_UNKNOWN"
+        reason = decision.reason or "source tier is rejected or unknown"
+        error_code = decision.reason_code or "SOURCE_REJECTED_OR_UNKNOWN"
 
     return {
         "citation_id": citation_id,
@@ -88,6 +100,7 @@ def validate_citation(citation: dict[str, Any], require_final: bool = False) -> 
         "citation_use": citation_use.value,
         "official_url": source.official_url,
         "official_identifier": source.official_identifier,
+        "identifier_resolution": source.identifier_resolution.value,
         "reason": reason,
         "error_code": error_code,
         "human_review_required": status != CitationStatus.EXISTS or citation_use != CitationUse.ALLOW_FINAL,

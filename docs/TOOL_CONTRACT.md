@@ -50,10 +50,20 @@ Public example tool calls are deterministic harness records. Their
 - optional `official_hash`
 - optional `verified_at`
 - optional `source_label`
+- optional `legal_material_type` (`judgment`, `law`, or `constitutional`)
 
-`verified_cache` may become final-eligible only when it has either an official
-URL or stable official identifier, plus an official content hash and
-verification time. Otherwise it fails closed.
+`verified_cache` becomes final-eligible when it has an official URL, an
+official content hash, and a verification time. Otherwise it fails closed.
+
+Identifier-backed verified cache is a separate, opt-in capability
+(`ALR_TW_IDENTIFIER_BACKED_VERIFIED_CACHE`, default off). When enabled, an
+`official_identifier` may substitute for the official URL only for
+judgment-type records, and only after the server-side resolver maps the
+identifier to a locally stored official original record and the recomputed
+content hash matches `official_hash`. The resolution status is computed by the
+server; callers cannot declare it, and a bare identifier with a fabricated
+hash is rejected with `IDENTIFIER_UNRESOLVED` or `IDENTIFIER_HASH_MISMATCH`.
+The public server carries only a synthetic demo resolver.
 
 `citation_eligibility` still describes source-tier eligibility only.
 `check_claim_support` provides explicit claim-grounding status with

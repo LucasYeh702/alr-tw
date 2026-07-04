@@ -39,6 +39,7 @@ ALR-TW 目前示範的能力：
 - coverage gate：回報 laws、judgments、constitutional materials 等覆蓋狀態
 - trust gate：沒有 final citation、來源不可驗證、coverage 低信心或 claim support 未檢查時拒絕輸出
 - claim grounding：v0.3 新增 answer claim 切分與語意對齊檢核，讓主張與證據可追溯
+- identifier-backed verified cache：v0.4 新增 opt-in 的 JID / official identifier 驗證路徑，但必須由 resolver 回到本地官方原始檔並重算 hash 才能通過
 - trace schema：輸出 `alr-tw.agentic_trace/v1`，保留 steps、tool calls、decision trace、evidence、coverage、trust gate 與 final action
 - validation report：把 agent run 轉成可 review 的 Markdown report
 - MCP server：用 stdio 暴露 agentic legal RAG tools，讓本機 MCP client 啟動
@@ -55,7 +56,7 @@ ALR-TW 目前示範的能力：
 | `extract_answer_claims` | 將 answer 拆成可追溯的 claim 單位 | answer claims |
 | `check_claim_support` | 用 evidence segments 檢查 claim，輸出 claim_support 與 semantic failure summary | claim support status |
 | `legal_search` | synthetic legal search demo | candidate retrieval |
-| `validate_citation` | 驗證 citation tier 與使用資格 | final eligibility |
+| `validate_citation` | 驗證 citation tier、metadata 與 opt-in identifier-backed cache 使用資格 | final eligibility |
 | `exact_law_lookup` | synthetic 法規精確查找 | demo-only result |
 | `exact_judgment_lookup` | synthetic 裁判精確查找 | demo-only result |
 | `exact_constitutional_lookup` | synthetic 憲法法庭資料精確查找 | demo-only result |
@@ -83,6 +84,18 @@ v0.3 在不改變來源安全門檻的前提下，新增語意層防線：
 
 此版本仍是 public-safe 的示範：僅公開 schema、synthetic fixture、MCP contract 與測試，不公開完整的 production 語意推理引擎。
 
+## Identifier-Backed Verified Cache（v0.4）
+
+v0.4 新增 opt-in 的 `verified_cache` 路徑：對 judgment record，穩定官方識別碼（例如 JID）可以在特定條件下替代官方 URL。這不是放寬引用門檻；它把門檻改成 resolver-backed verification：
+
+- 預設關閉，必須設定 `ALR_TW_IDENTIFIER_BACKED_VERIFIED_CACHE=1` 才啟用。
+- 僅限 `legal_material_type: "judgment"`；法規與憲法資料仍要求官方 URL。
+- resolver 必須將 identifier 對回本地下載的官方原始檔。
+- 系統必須重新計算原始紀錄的 content hash，且與 citation 宣告的 `official_hash` 相符。
+- unresolved identifier、hash mismatch、未啟用 opt-in、非 judgment material 都會 fail closed。
+
+公開 repo 只提供 synthetic demo resolver，用來測試 allow / reject 路徑；正式部署需要 operator 自行接上合法取得的司法院原始資料快取。
+
 ## Trust Gate
 
 ALR-TW 的核心規則是：retrieval candidate 不等於 final citation。
@@ -90,7 +103,7 @@ ALR-TW 的核心規則是：retrieval candidate 不等於 final citation。
 | Source tier | 角色 | 可作 final citation |
 |---|---|---|
 | `official` | 官方或官方根據來源 | Yes |
-| `verified_cache` | 有官方 URL、content hash、verified time 的快取 | Conditional |
+| `verified_cache` | 有官方 URL，或 opt-in identifier resolver + content hash + verified time 的快取 | Conditional |
 | `staging` | 匯入或 audit 候選資料 | No |
 | `external_semantic_recall` | 外部語意召回候選 | No |
 | `synthetic` | demo / test fixture | No |
@@ -103,6 +116,7 @@ Trust gate 會在下列情況 fail closed：
 - 只找到 candidate-only source
 - 只找到 synthetic demo source
 - verified cache 缺少官方 URL、hash 或驗證時間
+- identifier-backed verified cache 未啟用、未解析、hash mismatch，或不是 judgment record
 - coverage 為 absent 或 low confidence
 - claim support 狀態非安全展示形態（如 `partially_supported`、`overstated`、`unsupported`、`contradicted`、`role_error`、`unchecked`、`needs_review`）
 - claim support 尚未檢查時只能進入 human review，不會輸出可直接呈現的 answer body
@@ -143,7 +157,7 @@ MCP stdio smoke：
 
 ```bash
 printf '%s\n' \
-  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"stdio-smoke","version":"0.3.0"}}}' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"stdio-smoke","version":"0.4.0"}}}' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
   | uv run --extra dev alr-tw-mcp
@@ -210,7 +224,9 @@ Official data source or compliant internal source
 最小資料建議：
 
 - search / semantic recall：先接 TLR 或其他語意索引，作為高召回 candidate source。
-- local verification cache：下載司法院裁判原始月檔，轉成本地 `verified_cache`，用來核對 jid、官方來源、hash 與 verified time。
+- official access prerequisite：本專案不提供司法院 API credential、不代為申請，也不重散布司法院資料；使用者須自行取得必要官方 access，或以合法方式下載官方原始檔。
+- local verification cache：使用者自行下載司法院裁判原始月檔後，轉成本地 `verified_cache`，用來核對 jid、官方來源、hash 與 verified time。
+- why local data is still needed：即使已接上 TLR，TLR 仍只是 candidate recall；final citation eligibility、content hash、可重現資料快照與敏感後續驗證仍必須回到本地官方資料快取。
 - law corpus：法規資料不屬於司法院裁判月檔，應另接法務部或其他官方法規來源。以官方法規 JSON 的實測量級估算，原始法規資料約數百 MB 以內；若另建法規 vector index，通常是 1-2GB 級別。明確條號查詢應優先走 exact article lookup，再補語意召回。
 - constitutional materials：司法院公開資料也可另外接釋字與憲法法庭資料，作為 constitutional materials 的本地驗證來源。以實測量級估算，raw zip 約 260MB、raw JSON 約 25MB，若保留附件與 OCR text，整體約 1GB 以內。
 - Judicial Yuan scope：這裡的司法院資料主要指司法院開放資料的裁判書月檔，以及可另行接入的釋字與憲法法庭公開資料。它不包含法規全文、行政函釋、法務部法規資料、未公開裁判或任何私有案件資料；實際可下載期間、欄位與遮蔽內容以司法院開放資料站為準。
@@ -219,9 +235,9 @@ Official data source or compliant internal source
 ## 規格文件
 
 - [docs/AGENTIC_WORKFLOW.md](docs/AGENTIC_WORKFLOW.md)：agentic RAG execution graph
-- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md)：v0.3.0 名稱與 release acceptance 條件
+- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md)：v0.4.0 名稱與 release acceptance 條件
 - [docs/TRUST_MODEL.md](docs/TRUST_MODEL.md)：source tier、citation use 與 fail-closed rules
-- [docs/TLR_CANDIDATE_MODE.md](docs/TLR_CANDIDATE_MODE.md)：外部語意召回 / TLR-like candidate-only 模式
+- [docs/TLR_CANDIDATE_MODE.zh-TW.md](docs/TLR_CANDIDATE_MODE.zh-TW.md)：外部語意召回 / TLR-like candidate-only 模式（[English](docs/TLR_CANDIDATE_MODE.md)）
 - [docs/TOOL_CONTRACT.md](docs/TOOL_CONTRACT.md)：MCP tool envelope 與工具契約
 - [docs/TRACE_SCHEMA.md](docs/TRACE_SCHEMA.md)：trace schema
 - [docs/VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md)：validation report 結構
@@ -240,4 +256,4 @@ Official data source or compliant internal source
 
 ## English Summary
 
-ALR-TW is an Agentic Legal RAG / MCP Harness for Taiwan Law. It demonstrates a bounded agentic legal RAG loop with source planning, retrieval, citation validation, coverage gates, trust gates, claim-grounding checks, trace schema, validation reports, and MCP tools using synthetic demo data only.
+ALR-TW is an Agentic Legal RAG / MCP Harness for Taiwan Law. It demonstrates a bounded agentic legal RAG loop with source planning, retrieval, citation validation, coverage gates, trust gates, claim-grounding checks, opt-in identifier-backed verified-cache checks, trace schema, validation reports, and MCP tools using synthetic demo data only.

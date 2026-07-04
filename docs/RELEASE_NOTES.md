@@ -1,5 +1,31 @@
 # Release Notes
 
+## v0.4.0 Identifier-Backed Verified Cache (Opt-In)
+
+- Adds an opt-in source-policy capability
+  (`ALR_TW_IDENTIFIER_BACKED_VERIFIED_CACHE`, default off): a stable official
+  identifier such as a judgment JID may substitute for the official URL in
+  `verified_cache` final-citation eligibility.
+- The substitution is enforced by a resolver extension point: the identifier
+  must resolve to a locally stored official original record and the recomputed
+  content hash must match the declared `official_hash`. Unresolved identifiers
+  and hash mismatches fail closed with explicit error codes
+  (`IDENTIFIER_BACKED_DISABLED`, `IDENTIFIER_MATERIAL_NOT_ELIGIBLE`,
+  `IDENTIFIER_UNRESOLVED`, `IDENTIFIER_HASH_MISMATCH`).
+- Identifier substitution is limited to judgment-type records
+  (`legal_material_type: "judgment"`); laws and constitutional materials keep
+  the strict official-URL rule.
+- Default behavior is unchanged from v0.3: without the opt-in, identifier-only
+  `verified_cache` records are rejected.
+- MCP `validate_citation` gains optional `legal_material_type`; resolution
+  status is computed server-side and cannot be declared by callers. The public
+  server ships only a synthetic demo resolver.
+- Verified-cache rejections now return specific error codes (for example
+  `VERIFIED_CACHE_INCOMPLETE`) instead of the generic rejection code.
+
+No production corpus, real legal full text, cache, index, user log, credential,
+or private retrieval parameter is included.
+
 ## v0.3.0 Claim-Grounding Patch
 
 - Adds v0.3 trace fields for claim grounding:

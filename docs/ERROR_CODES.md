@@ -10,6 +10,10 @@
 | `CANDIDATE_ONLY_SOURCE` | Source is only a candidate lead | refuse or verify elsewhere |
 | `SYNTHETIC_DEMO_ONLY` | Synthetic fixture cannot be legal authority | refuse |
 | `VERIFIED_CACHE_INCOMPLETE` | Verified cache metadata is incomplete | refuse |
+| `IDENTIFIER_BACKED_DISABLED` | Identifier-backed verified cache is opt-in and not enabled | refuse |
+| `IDENTIFIER_MATERIAL_NOT_ELIGIBLE` | Identifier substitution is limited to judgment records | refuse |
+| `IDENTIFIER_UNRESOLVED` | Official identifier did not resolve to a local original record | refuse |
+| `IDENTIFIER_HASH_MISMATCH` | Recomputed hash of the resolved original record does not match | refuse |
 | `COVERAGE_LOW_CONFIDENCE` | Required legal coverage is low | refuse |
 | `SOURCE_REJECTED` | Source tier or metadata rejected | refuse |
 | `SOURCE_UNVERIFIABLE` | Source could not be verified | refuse |

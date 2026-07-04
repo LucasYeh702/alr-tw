@@ -11,10 +11,12 @@ def test_agentic_harness_release_acceptance_artifacts_exist():
         "docs/AGENTIC_WORKFLOW.md",
         "docs/TRUST_MODEL.md",
         "docs/TLR_CANDIDATE_MODE.md",
+        "docs/TLR_CANDIDATE_MODE.zh-TW.md",
         "docs/TOOL_CONTRACT.md",
         "docs/TRACE_SCHEMA.md",
         "docs/VALIDATION_REPORT.md",
         "docs/RELEASE_NOTES.md",
+        "docs/RELEASE_AUDIT_PROCEDURE.md",
         "docs/PUBLIC_PRIVATE_BOUNDARY.md",
         "examples/agentic_runs/pass_official_source.json",
         "examples/reports/pass_official_source.md",
@@ -67,8 +69,10 @@ def test_agentic_harness_name_is_backed_by_graph_tools_and_scenarios():
 def test_acceptance_doc_states_current_claim_boundary():
     text = Path("docs/AGENTIC_HARNESS_ACCEPTANCE.md").read_text(encoding="utf-8")
 
+    assert "v0.4" in text
     assert "AI-agent-driven" in text
     assert "bounded agentic legal RAG harness" in text
+    assert "identifier-backed `verified_cache`" in text
     assert "Not Claimed" in text
     assert "unrestricted autonomous legal agent" in text
     assert "independently completes legal judgment" in text

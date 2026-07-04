@@ -13,6 +13,23 @@ ALR-TW separates source discovery from final citation authority.
 | `synthetic` | Demo and test fixture | No |
 | `unknown` | Missing or unsupported source tier | No |
 
+The public repo checks that `verified_cache` metadata fields are present.
+Byte-level re-verification of cached content against the official source is the
+deployer's promotion pipeline responsibility (see
+`docs/ARCHITECTURE_CONTRACT.md` extension points).
+
+## Identifier-Backed Verified Cache (Opt-In)
+
+By default, `verified_cache` requires an official URL, a content hash, and a
+verification time. A deployer may enable the identifier-backed capability
+(`ALR_TW_IDENTIFIER_BACKED_VERIFIED_CACHE`, default off) so a stable official
+identifier such as a judgment JID substitutes for the URL. The substitution is
+enforced, not declared: it applies to judgment-type records only, and a
+resolver must map the identifier to a locally downloaded official original
+record whose recomputed content hash matches the declared hash. Unresolved
+identifiers, hash mismatches, and non-judgment materials fail closed with
+explicit error codes.
+
 ## Citation Use
 
 - `allow_final`: may satisfy final citation requirement.

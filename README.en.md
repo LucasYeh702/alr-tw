@@ -39,6 +39,7 @@ Current ALR-TW capabilities:
 - coverage gate: report laws, judgments, constitutional materials, and other coverage states
 - trust gate: refuse output when final citations are missing, sources are unverifiable, coverage is low-confidence, or claim support is unchecked
 - claim grounding: v0.3 adds answer claim splitting and semantic alignment checks so each claim is traceable to evidence
+- identifier-backed verified cache: v0.4 adds an opt-in JID / official-identifier verification path, but the resolver must map back to a local official original and recompute the hash before it can pass
 - trace schema: emit `alr-tw.agentic_trace/v1` with steps, tool calls, decision trace, evidence, coverage, trust-gate output, and final action
 - validation report: convert an agent run into a Markdown review report
 - MCP server: expose agentic legal RAG tools over stdio for local MCP clients
@@ -55,7 +56,7 @@ Current ALR-TW capabilities:
 | `extract_answer_claims` | Splits answer text into traceable claims | Answer claims |
 | `check_claim_support` | Checks claim support against evidence segments | Claim support status |
 | `legal_search` | Synthetic legal search demo | Candidate retrieval |
-| `validate_citation` | Validates citation tier and use | Final eligibility |
+| `validate_citation` | Validates citation tier, metadata, and opt-in identifier-backed cache eligibility | Final eligibility |
 | `exact_law_lookup` | Synthetic exact statute lookup | Demo-only result |
 | `exact_judgment_lookup` | Synthetic exact judgment lookup | Demo-only result |
 | `exact_constitutional_lookup` | Synthetic Constitutional Court lookup | Demo-only result |
@@ -83,6 +84,18 @@ ALR-TW v0.3 adds a semantic safety layer without changing the source-first safet
 
 This remains a public-safe harness: it publishes schema, synthetic fixtures, MCP contracts, and tests. It does not publish the full private production semantic inference stack.
 
+## Identifier-Backed Verified Cache (v0.4)
+
+v0.4 adds an opt-in `verified_cache` path: for judgment records, a stable official identifier such as a JID may substitute for the official URL under strict conditions. This does not loosen the citation gate; it turns the gate into resolver-backed verification:
+
+- It is off by default and requires `ALR_TW_IDENTIFIER_BACKED_VERIFIED_CACHE=1`.
+- It is limited to `legal_material_type: "judgment"`; statutes and constitutional materials still require an official URL.
+- The resolver must map the identifier to a locally downloaded official original file.
+- The system must recompute the original record's content hash, and it must match the declared `official_hash`.
+- Unresolved identifiers, hash mismatches, disabled opt-in, and non-judgment materials fail closed.
+
+The public repo ships only a synthetic demo resolver for testing allow / reject paths. Production deployments must provide their own resolver over lawfully obtained Judicial Yuan original-data caches.
+
 ## Trust Gate
 
 The core ALR-TW rule is simple: a retrieval candidate is not a final citation.
@@ -90,7 +103,7 @@ The core ALR-TW rule is simple: a retrieval candidate is not a final citation.
 | Source tier | Role | Final citation |
 |---|---|---|
 | `official` | Official or official-grounded source | Yes |
-| `verified_cache` | Cache with official URL, content hash, and verified time | Conditional |
+| `verified_cache` | Cache with official URL, or opt-in identifier resolver + content hash + verified time | Conditional |
 | `staging` | Ingestion or audit candidate | No |
 | `external_semantic_recall` | External semantic recall candidate | No |
 | `synthetic` | Demo and test fixture | No |
@@ -103,6 +116,7 @@ The trust gate fails closed when:
 - only candidate-only sources were found
 - only synthetic demo sources were found
 - a verified cache lacks official URL, hash, or verification time
+- an identifier-backed verified cache is disabled, unresolved, hash-mismatched, or not a judgment record
 - claim support status is not safe-to-present (e.g., `partially_supported`, `overstated`, `unsupported`, `contradicted`, `role_error`, `unchecked`, `needs_review`)
 - coverage is absent or low-confidence
 - claim support has not been checked; the run can only require human review and must not return a directly presentable answer body
@@ -143,7 +157,7 @@ MCP stdio smoke:
 
 ```bash
 printf '%s\n' \
-  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"stdio-smoke","version":"0.3.0"}}}' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"stdio-smoke","version":"0.4.0"}}}' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
   | uv run --extra dev alr-tw-mcp
@@ -210,7 +224,9 @@ A local `verified_cache` should at least keep the official URL or stable officia
 Minimum data recommendation:
 
 - search / semantic recall: connect TLR or another semantic index first as the high-recall candidate source.
-- local verification cache: download Judicial Yuan monthly judgment originals and convert them into a local `verified_cache` for jid, official-source, hash, and verified-time checks.
+- official access prerequisite: this project does not provide Judicial Yuan API credentials, apply for access on the user's behalf, or redistribute Judicial Yuan data. Users must obtain any required official access themselves or otherwise lawfully download the official original files.
+- local verification cache: after users download Judicial Yuan monthly judgment originals themselves, convert them into a local `verified_cache` for jid, official-source, hash, and verified-time checks.
+- why local data is still needed: even when TLR is connected, it remains candidate recall only; final citation eligibility, content hashes, reproducible data snapshots, and sensitive follow-up verification must still return to the local official-data cache.
 - law corpus: statutes are not part of the Judicial Yuan judgment monthly archives. Connect a separate official law source such as MOJ or another official legal-data provider. Based on measured official-law JSON scale, raw statute data is within a few hundred MB; a separate statute vector index is usually in the 1-2GB range. Exact article lookup should take priority for explicit article queries, with semantic recall as a supplement.
 - constitutional materials: Judicial Yuan public data can also include Judicial Yuan Interpretations and Constitutional Court materials as a local verification source for constitutional materials. Based on measured scale, raw zip files are roughly 260MB and raw JSON is roughly 25MB; with attachments and OCR text retained, the total remains within about 1GB.
 - Judicial Yuan scope: in this section, Judicial Yuan data mainly means public monthly judgment archives, plus separately ingestible Judicial Yuan Interpretations and Constitutional Court public materials. It does not include statute full text, administrative interpretations, MOJ law data, unpublished judgments, or private case data. Actual downloadable periods, fields, and redaction behavior depend on the Judicial Yuan open-data source.
@@ -219,9 +235,9 @@ Minimum data recommendation:
 ## Specification Docs
 
 - [docs/AGENTIC_WORKFLOW.md](docs/AGENTIC_WORKFLOW.md): agentic RAG execution graph
-- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md): v0.3.0 naming and release acceptance criteria
+- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md): v0.4.0 naming and release acceptance criteria
 - [docs/TRUST_MODEL.md](docs/TRUST_MODEL.md): source tiers, citation use, and fail-closed rules
-- [docs/TLR_CANDIDATE_MODE.md](docs/TLR_CANDIDATE_MODE.md): external semantic recall / TLR-like candidate-only mode
+- [docs/TLR_CANDIDATE_MODE.md](docs/TLR_CANDIDATE_MODE.md): external semantic recall / TLR-like candidate-only mode ([zh-TW](docs/TLR_CANDIDATE_MODE.zh-TW.md))
 - [docs/TOOL_CONTRACT.md](docs/TOOL_CONTRACT.md): MCP tool envelope and contracts
 - [docs/TRACE_SCHEMA.md](docs/TRACE_SCHEMA.md): trace schema
 - [docs/VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md): validation report structure

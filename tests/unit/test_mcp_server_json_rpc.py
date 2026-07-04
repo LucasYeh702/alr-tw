@@ -2,6 +2,16 @@ import json
 from io import StringIO
 
 from tw_legal_rag_mcp.mcp_server.server import McpSession, handle_message, run_stdio_server, tool_definitions
+from tw_legal_rag_mcp.verification.identifier_resolver import (
+    SYNTHETIC_OFFICIAL_RECORDS,
+    compute_content_hash,
+)
+from tw_legal_rag_mcp.verification.source_policy import (
+    IDENTIFIER_BACKED_VERIFIED_CACHE_ENV,
+)
+
+DEMO_RESOLVER_JID = "DEMO,113,測,1,20990101,1"
+DEMO_RESOLVER_HASH = compute_content_hash(SYNTHETIC_OFFICIAL_RECORDS[DEMO_RESOLVER_JID])
 
 
 def test_mcp_initialize_returns_server_metadata():
@@ -19,7 +29,7 @@ def test_mcp_initialize_returns_server_metadata():
     assert response["result"]["protocolVersion"] == "2024-11-05"
     assert response["result"]["serverInfo"] == {
         "name": "alr-tw",
-        "version": "0.3.0",
+        "version": "0.4.0",
     }
     assert response["result"]["capabilities"] == {"tools": {}}
 
@@ -363,7 +373,11 @@ def test_mcp_validate_citation_allows_complete_verified_cache_metadata():
     assert payload["data"]["citation_eligibility"] == "final_eligible"
 
 
-def test_mcp_validate_citation_allows_verified_cache_with_official_identifier():
+def _validate_identifier_backed_citation(
+    official_hash: str,
+    legal_material_type: str = "judgment",
+    official_identifier: str = DEMO_RESOLVER_JID,
+) -> dict:
     response = McpSession(ready=True).handle_message(
         {
             "jsonrpc": "2.0",
@@ -374,18 +388,91 @@ def test_mcp_validate_citation_allows_verified_cache_with_official_identifier():
                 "arguments": {
                     "citation_id": "cache-jid-demo",
                     "source_tier": "verified_cache",
-                    "official_identifier": "TSTV,113,測,1,20240102,1",
-                    "official_hash": "sha256:raw-jsonl-line",
+                    "official_identifier": official_identifier,
+                    "official_hash": official_hash,
                     "verified_at": "2026-01-01T00:00:00Z",
+                    "legal_material_type": legal_material_type,
+                },
+            },
+        }
+    )
+    return json.loads(response["result"]["content"][0]["text"])["data"]
+
+
+def test_mcp_validate_citation_rejects_identifier_backed_cache_by_default(monkeypatch):
+    monkeypatch.delenv(IDENTIFIER_BACKED_VERIFIED_CACHE_ENV, raising=False)
+
+    data = _validate_identifier_backed_citation(DEMO_RESOLVER_HASH)
+
+    assert data["citation_use"] == "reject"
+    assert data["citation_eligibility"] == "rejected"
+    assert data["error_code"] == "IDENTIFIER_BACKED_DISABLED"
+
+
+def test_mcp_validate_citation_resolves_identifier_when_opted_in(monkeypatch):
+    monkeypatch.setenv(IDENTIFIER_BACKED_VERIFIED_CACHE_ENV, "1")
+
+    data = _validate_identifier_backed_citation(DEMO_RESOLVER_HASH)
+
+    assert data["citation_use"] == "allow_final"
+    assert data["citation_eligibility"] == "final_eligible"
+    assert data["identifier_resolution"] == "hash_match"
+    assert data["official_identifier"] == DEMO_RESOLVER_JID
+
+
+def test_mcp_validate_citation_rejects_fabricated_hash_when_opted_in(monkeypatch):
+    monkeypatch.setenv(IDENTIFIER_BACKED_VERIFIED_CACHE_ENV, "1")
+
+    data = _validate_identifier_backed_citation("sha256:fabricated")
+
+    assert data["citation_use"] == "reject"
+    assert data["error_code"] == "IDENTIFIER_HASH_MISMATCH"
+
+
+def test_mcp_validate_citation_rejects_unresolved_identifier_when_opted_in(monkeypatch):
+    monkeypatch.setenv(IDENTIFIER_BACKED_VERIFIED_CACHE_ENV, "1")
+
+    data = _validate_identifier_backed_citation(
+        DEMO_RESOLVER_HASH, official_identifier="DEMO,113,測,999,20990101,1"
+    )
+
+    assert data["citation_use"] == "reject"
+    assert data["error_code"] == "IDENTIFIER_UNRESOLVED"
+
+
+def test_mcp_validate_citation_rejects_identifier_backed_law_records(monkeypatch):
+    monkeypatch.setenv(IDENTIFIER_BACKED_VERIFIED_CACHE_ENV, "1")
+
+    data = _validate_identifier_backed_citation(
+        DEMO_RESOLVER_HASH, legal_material_type="law"
+    )
+
+    assert data["citation_use"] == "reject"
+    assert data["error_code"] == "IDENTIFIER_MATERIAL_NOT_ELIGIBLE"
+
+
+def test_mcp_validate_citation_rejects_caller_declared_resolution_status():
+    response = McpSession(ready=True).handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "validate_citation",
+                "arguments": {
+                    "citation_id": "cache-jid-demo",
+                    "source_tier": "verified_cache",
+                    "official_identifier": DEMO_RESOLVER_JID,
+                    "official_hash": DEMO_RESOLVER_HASH,
+                    "verified_at": "2026-01-01T00:00:00Z",
+                    "identifier_resolution": "hash_match",
                 },
             },
         }
     )
 
-    payload = json.loads(response["result"]["content"][0]["text"])
-    assert payload["data"]["citation_use"] == "allow_final"
-    assert payload["data"]["citation_eligibility"] == "final_eligible"
-    assert payload["data"]["official_identifier"] == "TSTV,113,測,1,20240102,1"
+    assert response["error"]["code"] == -32602
+    assert "unexpected arguments" in response["error"]["message"]
 
 
 def test_mcp_validate_citation_rejects_incomplete_verified_cache_metadata():

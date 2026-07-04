@@ -27,6 +27,13 @@
 - validation report sections for answer claims, claim-support review, semantic risk
 - v0.3 acceptance docs and boundary alignment
 
+## v0.4
+
+- opt-in identifier-backed `verified_cache` for judgment records
+- resolver extension point with synthetic demo resolver (resolve + rehash)
+- fail-closed identifier error codes and gate assertion tests
+- MCP `validate_citation` support for `legal_material_type`
+
 ## Future
 
 - official adapter contracts without bundled production cache

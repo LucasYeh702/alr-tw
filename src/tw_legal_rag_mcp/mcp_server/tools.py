@@ -12,6 +12,11 @@ from alr_tw.verification.claim_support import (
     extract_answer_claims,
 )
 from ..verification.citation_validator import validate_citation
+from ..verification.identifier_resolver import (
+    SyntheticIdentifierResolver,
+    resolve_identifier_status,
+)
+from ..verification.source_policy import source_policy_config_from_env
 
 
 def agentic_legal_research(query: str) -> dict:
@@ -30,20 +35,34 @@ def validate_citation_tool(
     official_hash: str | None = None,
     verified_at: str | None = None,
     source_label: str | None = None,
+    legal_material_type: str | None = None,
 ) -> dict:
-    return validate_citation(
-        {
-            "citation_id": citation_id,
-            "source_id": citation_id,
-            "source_tier": source_tier,
-            "official_url": official_url,
-            "official_identifier": official_identifier,
-            "official_hash": official_hash,
-            "verified_at": verified_at,
-            "source_label": source_label,
-        },
-        require_final=True,
-    )
+    config = source_policy_config_from_env()
+    citation = {
+        "citation_id": citation_id,
+        "source_id": citation_id,
+        "source_tier": source_tier,
+        "official_url": official_url,
+        "official_identifier": official_identifier,
+        "official_hash": official_hash,
+        "verified_at": verified_at,
+        "source_label": source_label,
+        "legal_material_type": legal_material_type,
+    }
+    # Resolution status is computed server-side by the resolver; callers cannot
+    # declare it. The public server only carries the synthetic demo resolver.
+    if (
+        config.identifier_backed_verified_cache
+        and source_tier == "verified_cache"
+        and official_identifier
+        and not official_url
+    ):
+        citation["identifier_resolution"] = resolve_identifier_status(
+            official_identifier,
+            official_hash,
+            SyntheticIdentifierResolver(),
+        ).value
+    return validate_citation(citation, require_final=True, config=config)
 
 
 def exact_law_lookup_tool(title: str, article_no: str) -> dict:

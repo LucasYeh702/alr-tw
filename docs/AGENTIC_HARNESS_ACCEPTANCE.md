@@ -3,9 +3,9 @@
 This document defines the minimum public evidence required before ALR-TW can
 describe itself as an Agentic Legal RAG / MCP Harness.
 
-## Accepted v0.3 Claim
+## Accepted v0.4 Claim
 
-ALR-TW v0.3 may claim to be an AI-agent-driven, bounded agentic legal RAG harness
+ALR-TW v0.4 may claim to be an AI-agent-driven, bounded agentic legal RAG harness
 because the repository includes:
 
 1. A deterministic execution graph:
@@ -24,8 +24,9 @@ because the repository includes:
    execution logs through `execution_mode`.
 8. Decision traces that show citation-validation counts and trust-gate output.
 9. Fail-closed trust behavior for candidate-only sources, synthetic-only
-   sources, incomplete verified-cache metadata, missing final citations, and
-   low coverage.
+   sources, incomplete verified-cache metadata, identifier-backed verified
+   cache without resolver confirmation, missing final citations, and low
+   coverage.
 10. Human-review-required traces that do not include directly presentable
     answer bodies.
 11. A public claim-grounding contract (AnswerClaim / ClaimSupport / Semantic
@@ -35,14 +36,20 @@ because the repository includes:
     `extract_answer_claims`, and `check_claim_support`.
 13. Markdown validation reports that include answer claims, claim-support review,
     and semantic hallucination risk.
-14. Public/private boundary checks that block production data, caches, indexes,
+14. An opt-in identifier-backed `verified_cache` path for judgment records,
+    where a server-side resolver must map the identifier to a locally stored
+    official original record and verify a matching content hash before final
+    citation eligibility is allowed.
+15. Fail-closed tests and error codes for disabled identifier-backed cache,
+    unresolved identifiers, hash mismatches, and non-judgment materials.
+16. Public/private boundary checks that block production data, caches, indexes,
     logs, credentials, and local sensitive paths.
-15. Tests and CI gates for the harness, trace schema, MCP server, reports,
+17. Tests and CI gates for the harness, trace schema, MCP server, reports,
     source policy, claim-grounding outputs, and public boundary.
 
 ## Not Claimed
 
-ALR-TW v0.3 does not claim to be:
+ALR-TW v0.4 does not claim to be:
 
 - an unrestricted autonomous legal agent
 - an autonomous legal agent that practices law or independently completes legal judgment
@@ -55,12 +62,16 @@ ALR-TW v0.3 does not claim to be:
 - a claim-support entailment engine that can always output legal conclusions without human review
 - a temporal law applicability engine
 - a procedural posture or appellate-lineage classifier
+- a bundled TLR service or third-party recall provider
+- a provider of Judicial Yuan API credentials or downloaded official data
+- a production raw-backed verifier over real Judicial Yuan archives
 - a replacement for official-source verification or human legal review
 
 ## Required Evidence Before Release
 
 Before publishing a release that uses the Agentic Legal RAG / MCP Harness name,
-the following commands must pass:
+complete the audit steps in `docs/RELEASE_AUDIT_PROCEDURE.md` and make sure
+the following commands pass:
 
 ```bash
 python3 scripts/check_no_forbidden_files.py
@@ -76,10 +87,12 @@ The release must also include at least these public artifacts:
 - `docs/AGENTIC_WORKFLOW.md`
 - `docs/TRUST_MODEL.md`
 - `docs/TLR_CANDIDATE_MODE.md`
+- `docs/TLR_CANDIDATE_MODE.zh-TW.md`
 - `docs/TOOL_CONTRACT.md`
 - `docs/TRACE_SCHEMA.md`
 - `docs/VALIDATION_REPORT.md`
 - `docs/RELEASE_NOTES.md`
+- `docs/RELEASE_AUDIT_PROCEDURE.md`
 - `docs/PUBLIC_PRIVATE_BOUNDARY.md`
 - `examples/agentic_runs/*.json`
 - `examples/reports/*.md`

@@ -44,7 +44,10 @@ Do not include any of the following in issues, pull requests, examples, screensh
 
 ## Release Checks
 
-Before publishing releases, changing visibility, or accepting data-related pull requests, run at least:
+The full, repeatable audit procedure is defined in
+[docs/RELEASE_AUDIT_PROCEDURE.md](docs/RELEASE_AUDIT_PROCEDURE.md). Before
+publishing releases, changing visibility, or accepting data-related pull
+requests, run at least:
 
 ```bash
 git status --short --branch
