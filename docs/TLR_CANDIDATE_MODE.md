@@ -27,7 +27,7 @@ building a local verification cache.
 ## Why Download Official Data If TLR Is Connected?
 
 TLR reduces discovery cost; it does not replace the local authority layer. In
-this branch, TLR is used to find candidate judgments quickly, but the final
+this mode, TLR is used to find candidate judgments quickly, but the final
 citation gate still depends on official or locally verified records.
 
 Downloading the Judicial Yuan originals is still required when operators need:

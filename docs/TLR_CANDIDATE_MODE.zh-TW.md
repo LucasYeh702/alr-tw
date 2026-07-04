@@ -16,7 +16,7 @@ TLR 可以被建議作為高 recall（高召回率）的資料源，用來尋找
 
 ## 若已接上 TLR，為何仍要下載官方資料？
 
-TLR 降低 discovery（探索）成本，但不取代本地 authority layer（權威驗證層）。在這個分支中，TLR 用來快速找出候選裁判；但 final citation gate（最終引用閘門）仍依賴官方來源或本地已驗證紀錄。
+TLR 降低 discovery（探索）成本，但不取代本地 authority layer（權威驗證層）。在這個模式中，TLR 用來快速找出候選裁判；但 final citation gate（最終引用閘門）仍依賴官方來源或本地已驗證紀錄。
 
 當 operator（部署或維運者）需要下列能力時，仍必須下載司法院原始檔：
 
