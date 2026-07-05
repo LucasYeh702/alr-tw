@@ -2,13 +2,13 @@
 
 語言版本：繁體中文 | [English](README.en.md)
 
-ALR-TW 是 **Agentic Legal RAG / MCP Harness for Taiwan Law** 的簡稱。它是一個約束外部 AI agent 的 agentic RAG harness：外部 agent 可以呼叫工具並取得 trace，但必須在 harness 的 deterministic graph、citation validation 與 trust gate 內運作。它不是自主執業、可自行完成法律判斷的 autonomous legal agent。
+ALR-TW 是 **Agentic Legal RAG / MCP Harness for Taiwan Law** 的簡稱。它是一個約束外部 MCP client 的 harness：外部 client 可以呼叫工具並取得 trace；ALR-TW records and gates externally driven tool runs，並要求流程通過 deterministic graph、citation validation 與 trust gate。
 
-本 repo 不包含 LLM，也不包含 agent 實作。規劃、選工具與自然語言推理的 agent 角色由呼叫端（外部 MCP client 或 LLM runtime）提供；ALR-TW 提供工具介面、確定性閘門圖與 trace / 報告契約，用來約束該外部 agent。Trust-gate decision 由 deterministic harness 做出，不由 agent 自行宣告。
+本 repo 不包含 LLM，也不包含 agent 實作。規劃、選工具與自然語言推理的 agent 角色由呼叫端（外部 MCP client 或 LLM runtime）提供；ALR-TW 提供工具介面、確定性閘門圖與 trace / 報告契約，用來約束該外部 client。Trust-gate decision 由 deterministic harness 做出，不由 client 自行宣告。
 
-本 repo 是 public-safe 的參考實作，用來示範法律 AI agent 在回答前如何規劃檢索、召回候選資料、判斷來源層級、驗證引用、檢查覆蓋率，最後在證據不足時 fail closed。
+本 repo 是 public-safe 的參考實作，用來示範法律 AI 工具流程在回答前如何規劃檢索、召回候選資料、判斷來源層級、驗證引用、檢查覆蓋率，最後在證據不足時 fail closed。
 
-這個 repo 的重點不是「內建台灣法律資料庫」，而是「讓法律 RAG agent 不跳過查證流程」。它提供 deterministic execution graph、MCP tools、trust gate、trace schema、validation report 與 synthetic scenarios，讓開發者可以用公開安全的方式檢查 agentic legal RAG 的工程邊界。
+這個 repo 的重點不是「內建台灣法律資料庫」，而是「讓法律 RAG 工具流程不跳過查證流程」。它提供 deterministic execution graph、MCP tools、trust gate、trace schema、validation report 與 synthetic scenarios，讓開發者可以用公開安全的方式檢查外部 client 與 harness 的工程邊界。
 
 > [!IMPORTANT]
 > 本專案只包含 synthetic demo data、framework code、tests、CI 與 docs。本專案不提供真實法律全文、production corpus、官方全文快取、向量資料庫、使用者紀錄、私有 eval set 或法律意見。
@@ -29,7 +29,7 @@ User Query
 -> Final Decision
 ```
 
-這個 loop 是用來約束外部 agent 的 bounded agentic workflow，不是無限制自治代理。外部 agent 可以使用工具並讀取 trace；final action 與 trust-gate decision 仍由 deterministic harness 根據 citation validation、coverage 與 claim support 狀態產生。
+這個 loop 是用來約束外部 MCP client 的 tool workflow。外部 client 可以使用工具並讀取 trace；final action 與 trust-gate decision 仍由 deterministic harness 根據 citation validation、coverage 與 claim support 狀態產生。
 
 ALR-TW 目前示範的能力：
 
@@ -42,9 +42,10 @@ ALR-TW 目前示範的能力：
 - trust gate：沒有 final citation、來源不可驗證、coverage 低信心或 claim support 未檢查時拒絕輸出
 - claim grounding：v0.3 新增 answer claim 切分與語意對齊檢核，讓主張與證據可追溯
 - identifier-backed verified cache：v0.4 新增 opt-in 的 JID / official identifier 驗證路徑，但必須由 resolver 回到本地官方原始檔並重算 hash 才能通過
+- externally driven trace recording：v0.5 新增 `begin_agentic_run` / `finalize_agentic_run`，records and gates externally driven tool runs
 - trace schema：輸出 `alr-tw.agentic_trace/v1`，保留 steps、tool calls、decision trace、evidence、coverage、trust gate 與 final action
-- validation report：把 agent run 轉成可 review 的 Markdown report
-- MCP server：用 stdio 暴露 agentic legal RAG tools，讓本機 MCP client 啟動
+- validation report：把 run trace 轉成可 review 的 Markdown report
+- MCP server：用 stdio 暴露 harness tools，讓本機 MCP client 啟動
 
 ## MCP Tools
 
@@ -52,6 +53,8 @@ ALR-TW 目前示範的能力：
 |---|---|---|
 | `agentic_legal_research` | 執行 synthetic agentic RAG loop | canonical trace、candidate、final citation、trust gate |
 | `run_agentic_demo` | 執行 deterministic ALR-TW scenario | `answer`、`refuse` 或 `human_review_required` |
+| `begin_agentic_run` | 開始記錄 externally driven tool run | `run_id` |
+| `finalize_agentic_run` | 組裝並 gate 已記錄的 externally driven tool run | canonical trace、final action |
 | `build_validation_report` | 產生 validation report | Markdown review artifact |
 | `get_trust_model` | 回傳 source tier 與 fail-closed policy | trust model |
 | `get_claim_grounding_policy` | 取得 v0.3 claim grounding 合約與支援狀態定義 | claim policy |
@@ -74,7 +77,7 @@ ALR-TW 目前示範的能力：
 }
 ```
 
-範例 trace 中的 `tool_calls` 會標示 `execution_mode: "harness_recorded"`，代表這是 deterministic harness record，不是 live external tool execution log。
+範例 trace 中的 `tool_calls` 會標示 `execution_mode: "harness_recorded"`，代表這是 deterministic harness record。由 `begin_agentic_run` / `finalize_agentic_run` 產生的 trace 會標示 `trace_kind: "externally_driven"`，且 recorded tool calls 會使用 `execution_mode: "actual_tool"`。
 
 ## Claim Grounding（v0.3）
 
@@ -159,7 +162,7 @@ MCP stdio smoke：
 
 ```bash
 printf '%s\n' \
-  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"stdio-smoke","version":"0.4.0"}}}' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"stdio-smoke","version":"0.5.0"}}}' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
   | uv run --extra dev alr-tw-mcp
@@ -237,9 +240,10 @@ Official data source or compliant internal source
 ## 規格文件
 
 - [docs/AGENTIC_WORKFLOW.md](docs/AGENTIC_WORKFLOW.md)：agentic RAG execution graph
-- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md)：v0.4.0 名稱與 release acceptance 條件
+- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md)：v0.5.0 名稱與 release acceptance 條件
 - [docs/TRUST_MODEL.md](docs/TRUST_MODEL.md)：source tier、citation use 與 fail-closed rules
 - [docs/TLR_CANDIDATE_MODE.zh-TW.md](docs/TLR_CANDIDATE_MODE.zh-TW.md)：外部語意召回 / TLR-like candidate-only 模式（[English](docs/TLR_CANDIDATE_MODE.md)）
+- [docs/AGENT_CLIENT_GUIDE.md](docs/AGENT_CLIENT_GUIDE.md)：外部 MCP client 連線與 externally driven trace flow
 - [docs/TOOL_CONTRACT.md](docs/TOOL_CONTRACT.md)：MCP tool envelope 與工具契約
 - [docs/TRACE_SCHEMA.md](docs/TRACE_SCHEMA.md)：trace schema
 - [docs/VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md)：validation report 結構
@@ -260,4 +264,4 @@ Official data source or compliant internal source
 
 ## English Summary
 
-ALR-TW is an Agentic Legal RAG / MCP Harness for Taiwan Law. It demonstrates a bounded agentic legal RAG loop with source planning, retrieval, citation validation, coverage gates, trust gates, claim-grounding checks, opt-in identifier-backed verified-cache checks, trace schema, validation reports, and MCP tools using synthetic demo data only.
+ALR-TW is an Agentic Legal RAG / MCP Harness for Taiwan Law. It records and gates externally driven tool runs with source planning, retrieval, citation validation, coverage gates, trust gates, claim-grounding checks, opt-in identifier-backed verified-cache checks, trace schema, validation reports, and MCP tools using synthetic demo data only.

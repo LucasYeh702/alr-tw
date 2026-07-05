@@ -10,7 +10,7 @@ reasoning or live external tool execution.
 
 ## Main Objects
 
-- `AgenticRunTrace`: query, normalized query, steps, tool calls, decision trace, evidence, coverage, trust gate, claim grounding outputs (`answer_claims`, `claim_support`, `semantic_grounding_summary`, `semantic_failure_reasons`), final action, optional answer, and human review notes.
+- `AgenticRunTrace`: optional trace kind, query, normalized query, steps, tool calls, decision trace, evidence, coverage, trust gate, claim grounding outputs (`answer_claims`, `claim_support`, `semantic_grounding_summary`, `semantic_failure_reasons`), final action, optional answer, and human review notes.
 - `ToolCallTrace`: tool name, execution mode, input summary, output summary, status, and optional error code.
 - `EvidenceRecord`: citation id, source id, source tier, citation use, title, snippet, official URL, and validation status.
 - `TrustGateTrace`: safe flag, failure reasons, validation summary, and recommended action.
@@ -26,11 +26,24 @@ public demo.
 | Value | Meaning |
 |---|---|
 | `harness_recorded` | Deterministic harness step recorded by the public demo graph. |
-| `actual_tool` | Reserved for implementations that record a live external tool call. |
+| `actual_tool` | Server-recorded MCP tool call made by an external client during an open run. |
 
 The public examples use `harness_recorded` and
 `output_summary.trace_kind: "deterministic_harness_step"`. They are not live
 external tool execution logs.
+
+## Trace Kind
+
+`trace_kind` is optional at the top level.
+
+| Value | When it appears | Meaning |
+|---|---|---|
+| absent | `agentic_legal_research`, `run_agentic_demo`, and existing example traces | Deterministic harness trace with per-tool `output_summary.trace_kind: "deterministic_harness_step"`. |
+| `externally_driven` | `begin_agentic_run` / `finalize_agentic_run` session traces | The server records and gates externally driven tool runs. Tool calls in these traces use `execution_mode: "actual_tool"`. |
+
+Externally driven traces prove tool invocation through the MCP server. They do
+not prove answer quality beyond the deterministic validation, claim-support,
+coverage, and trust-gate checks represented in the trace.
 
 ## Decision Trace
 

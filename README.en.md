@@ -2,13 +2,13 @@
 
 Languages: [繁體中文](README.zh-TW.md) | English
 
-ALR-TW is short for **Agentic Legal RAG / MCP Harness for Taiwan Law**. It is an agentic RAG harness that constrains an external AI agent: the external agent may call tools and read traces, but it must operate inside the harness's deterministic graph, citation validation, and trust gate. It is not an autonomous legal agent that practices law or independently completes legal judgment.
+ALR-TW is short for **Agentic Legal RAG / MCP Harness for Taiwan Law**. It is a harness that constrains an external MCP client: the external client may call tools and read traces; ALR-TW records and gates externally driven tool runs through a deterministic graph, citation validation, and trust gate.
 
-This repository does not ship an LLM or agent implementation. Planning, tool selection, and natural-language reasoning are supplied by the caller, such as an external MCP client or LLM runtime; ALR-TW provides tool interfaces, deterministic gate graphs, traces, and report contracts that constrain that external agent. The trust-gate decision is made by the deterministic harness, not asserted by the agent.
+This repository does not ship an LLM or agent implementation. Planning, tool selection, and natural-language reasoning are supplied by the caller, such as an external MCP client or LLM runtime; ALR-TW provides tool interfaces, deterministic gate graphs, traces, and report contracts that constrain that external client. The trust-gate decision is made by the deterministic harness, not asserted by the client.
 
-This repository is a public-safe reference implementation that demonstrates how a legal AI agent can plan retrieval, recall candidate materials, classify source tiers, validate citations, check coverage, and fail closed when evidence is not sufficient.
+This repository is a public-safe reference implementation that demonstrates how a legal AI tool flow can plan retrieval, recall candidate materials, classify source tiers, validate citations, check coverage, and fail closed when evidence is not sufficient.
 
-This repository is not a bundled Taiwan legal database. Its purpose is to make sure a legal RAG agent does not skip verification. It provides a deterministic execution graph, MCP tools, trust gates, trace schemas, validation reports, and synthetic scenarios so developers can inspect the engineering boundary of agentic legal RAG without exposing private or production data.
+This repository is not a bundled Taiwan legal database. Its purpose is to make sure a legal RAG tool flow does not skip verification. It provides a deterministic execution graph, MCP tools, trust gates, trace schemas, validation reports, and synthetic scenarios so developers can inspect the engineering boundary between an external client and the harness without exposing private or production data.
 
 > [!IMPORTANT]
 > This project contains only synthetic demo data, framework code, tests, CI, and documentation. It does not provide real legal full text, a production corpus, official full-text caches, vector databases, user records, private evaluation sets, or legal advice.
@@ -29,7 +29,7 @@ User Query
 -> Final Decision
 ```
 
-This is a bounded agentic workflow for constraining an external agent, not an unrestricted autonomous legal agent. The external agent may use tools and read traces; final actions and trust-gate decisions are still produced by the deterministic harness from citation validation, coverage, and claim-support state.
+This is a tool workflow for constraining an external MCP client. The external client may use tools and read traces; final actions and trust-gate decisions are still produced by the deterministic harness from citation validation, coverage, and claim-support state.
 
 Current ALR-TW capabilities:
 
@@ -42,9 +42,10 @@ Current ALR-TW capabilities:
 - trust gate: refuse output when final citations are missing, sources are unverifiable, coverage is low-confidence, or claim support is unchecked
 - claim grounding: v0.3 adds answer claim splitting and semantic alignment checks so each claim is traceable to evidence
 - identifier-backed verified cache: v0.4 adds an opt-in JID / official-identifier verification path, but the resolver must map back to a local official original and recompute the hash before it can pass
+- externally driven trace recording: v0.5 adds `begin_agentic_run` / `finalize_agentic_run` to record and gate externally driven tool runs
 - trace schema: emit `alr-tw.agentic_trace/v1` with steps, tool calls, decision trace, evidence, coverage, trust-gate output, and final action
-- validation report: convert an agent run into a Markdown review report
-- MCP server: expose agentic legal RAG tools over stdio for local MCP clients
+- validation report: convert a run trace into a Markdown review report
+- MCP server: expose harness tools over stdio for local MCP clients
 
 ## MCP Tools
 
@@ -52,6 +53,8 @@ Current ALR-TW capabilities:
 |---|---|---|
 | `agentic_legal_research` | Runs the synthetic agentic RAG loop | Canonical trace, candidates, final citations, trust gate |
 | `run_agentic_demo` | Runs a deterministic ALR-TW scenario | `answer`, `refuse`, or `human_review_required` |
+| `begin_agentic_run` | Starts recording an externally driven tool run | `run_id` |
+| `finalize_agentic_run` | Assembles and gates a recorded externally driven tool run | Canonical trace, final action |
 | `build_validation_report` | Builds a validation report | Markdown review artifact |
 | `get_trust_model` | Returns source tiers and fail-closed policy | Trust model |
 | `get_claim_grounding_policy` | Returns v0.3 claim grounding contract | Claim policy |
@@ -74,7 +77,7 @@ All MCP tool results use the same envelope:
 }
 ```
 
-Example traces mark `tool_calls` with `execution_mode: "harness_recorded"`. That means they are deterministic harness records, not live external tool execution logs.
+Example traces mark `tool_calls` with `execution_mode: "harness_recorded"`. That means they are deterministic harness records. Traces produced through `begin_agentic_run` / `finalize_agentic_run` include `trace_kind: "externally_driven"`, and recorded tool calls use `execution_mode: "actual_tool"`.
 
 ## Claim Grounding (v0.3)
 
@@ -159,7 +162,7 @@ MCP stdio smoke:
 
 ```bash
 printf '%s\n' \
-  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"stdio-smoke","version":"0.4.0"}}}' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"stdio-smoke","version":"0.5.0"}}}' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
   | uv run --extra dev alr-tw-mcp
@@ -237,9 +240,10 @@ Minimum data recommendation:
 ## Specification Docs
 
 - [docs/AGENTIC_WORKFLOW.md](docs/AGENTIC_WORKFLOW.md): agentic RAG execution graph
-- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md): v0.4.0 naming and release acceptance criteria
+- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md): v0.5.0 naming and release acceptance criteria
 - [docs/TRUST_MODEL.md](docs/TRUST_MODEL.md): source tiers, citation use, and fail-closed rules
 - [docs/TLR_CANDIDATE_MODE.md](docs/TLR_CANDIDATE_MODE.md): external semantic recall / TLR-like candidate-only mode ([zh-TW](docs/TLR_CANDIDATE_MODE.zh-TW.md))
+- [docs/AGENT_CLIENT_GUIDE.md](docs/AGENT_CLIENT_GUIDE.md): external MCP client setup and externally driven trace flow
 - [docs/TOOL_CONTRACT.md](docs/TOOL_CONTRACT.md): MCP tool envelope and contracts
 - [docs/TRACE_SCHEMA.md](docs/TRACE_SCHEMA.md): trace schema
 - [docs/VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md): validation report structure

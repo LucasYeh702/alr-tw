@@ -1,11 +1,11 @@
 # ALR-TW Agentic Workflow
 
-ALR-TW is a bounded agentic legal RAG harness that constrains an external agent.
-This repository does not ship an LLM or agent implementation. Planning, tool
-selection, and natural-language reasoning are supplied by the caller, such as an
-external MCP client or LLM runtime; ALR-TW provides tool interfaces,
-deterministic gate graphs, traces, and report contracts that constrain that
-external agent.
+ALR-TW is an MCP harness that constrains an external MCP client and records and
+gates externally driven tool runs. This repository does not ship an LLM or agent implementation.
+Planning, tool selection, and natural-language reasoning are supplied by the
+caller, such as an external MCP client or LLM runtime; ALR-TW provides tool
+interfaces, deterministic gate graphs, traces, and report contracts that
+constrain that external client.
 
 ```text
 Query
@@ -19,16 +19,18 @@ Query
   -> Final Decision
 ```
 
-The graph is deterministic. ALR-TW does not implement an unrestricted autonomous
-legal agent loop, and it is not an agent that practices law or independently
-completes legal judgment. Every final answer must pass citation validation and
+The graph is deterministic. Every final answer must pass citation validation and
 the trust gate; otherwise the harness refuses or requires human review. The
 trust-gate decision is made by the deterministic harness, not asserted by the
-external agent.
+external client.
 
 Public example traces are deterministic harness traces. Their `tool_calls` use
 `execution_mode: "harness_recorded"` and should not be read as live external
 tool execution logs.
+
+Session-recorded traces from `begin_agentic_run` / `finalize_agentic_run` use
+`trace_kind: "externally_driven"` and record tool calls with `execution_mode:
+"actual_tool"`.
 
 Clients should render answer content only when `trust_gate.safe_to_present` is
 true and `final_action` is `answer`.
