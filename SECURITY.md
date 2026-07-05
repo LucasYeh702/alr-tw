@@ -58,6 +58,7 @@ python scripts/check_no_forbidden_files.py
 Recommended additional checks:
 
 - GitHub secret scanning
+- GitHub secret scanning and push protection are also enabled at the repository settings level.
 - the CI history secret-scan job, currently backed by gitleaks
 - trufflehog
 - a tracked-file scan for database files, logs, archives, local paths, and generated caches
@@ -67,9 +68,8 @@ The repository guard scripts also check common Taiwan legal-data leak shapes,
 including real-shaped judgment identifiers outside the synthetic namespace and
 Taiwan national ID number patterns.
 
-The gitleaks CI action currently uses the maintained `v2` tag because no local
-offline cache of a reviewed full commit SHA is available; this tag reference is
-an accepted CI supply-chain trade-off until a reviewed SHA is recorded.
+The gitleaks CI action is pinned to a reviewed full commit SHA while first-party
+GitHub setup actions remain on maintained major tags.
 
 A clean current working tree does not prove that older commits are safe to publish.
 

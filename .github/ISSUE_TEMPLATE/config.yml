@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private security reporting
+    url: https://github.com/LucasYeh702/alr-tw/security/policy
+    about: >
+      Anything involving credentials, real case data, or a guard bypass must
+      NOT be filed as a public issue; use the repository SECURITY.md private
+      reporting path instead.
