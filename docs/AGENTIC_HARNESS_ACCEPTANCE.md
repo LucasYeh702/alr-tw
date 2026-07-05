@@ -3,10 +3,11 @@
 This document defines the minimum public evidence required before ALR-TW can
 describe itself as an Agentic Legal RAG / MCP Harness.
 
-## Accepted v0.4 Claim
+## Accepted v0.5 Claim
 
-ALR-TW v0.4 may claim to be a bounded agentic legal RAG harness that constrains
-an external agent because the repository includes:
+ALR-TW v0.5 may claim to be an MCP harness that constrains an external MCP
+client and records and gates externally driven tool runs because the repository
+includes:
 
 1. A deterministic execution graph:
    `query_understanding -> source_plan -> retrieval -> source_classification ->
@@ -42,14 +43,19 @@ an external agent because the repository includes:
     citation eligibility is allowed.
 15. Fail-closed tests and error codes for disabled identifier-backed cache,
     unresolved identifiers, hash mismatches, and non-judgment materials.
-16. Public/private boundary checks that block production data, caches, indexes,
+16. Session-recorded MCP tools `begin_agentic_run` and `finalize_agentic_run`
+    that produce `trace_kind: "externally_driven"` traces with
+    `execution_mode: "actual_tool"` tool calls.
+17. Server-side non-bypass checks for final action, presentation safety,
+    citation use, and identifier resolution.
+18. Public/private boundary checks that block production data, caches, indexes,
     logs, credentials, and local sensitive paths.
-17. Tests and CI gates for the harness, trace schema, MCP server, reports,
+19. Tests and CI gates for the harness, trace schema, MCP server, reports,
     source policy, claim-grounding outputs, and public boundary.
 
 ## Not Claimed
 
-ALR-TW v0.4 does not claim to be:
+ALR-TW v0.5 does not claim to be:
 
 - an unrestricted autonomous legal agent
 - an autonomous legal agent that practices law or independently completes legal judgment
@@ -81,6 +87,8 @@ uv run --extra dev ruff check .
 uv run --extra dev pytest
 uv run --extra dev alr-tw-demo
 uv run --extra dev python examples/agentic_mcp_client_demo.py
+uv run --extra dev python examples/identifier_backed_demo.py
+uv run --extra dev python examples/external_agent_trace_demo.py
 ```
 
 The release must also include at least these public artifacts:
@@ -89,6 +97,7 @@ The release must also include at least these public artifacts:
 - `docs/TRUST_MODEL.md`
 - `docs/TLR_CANDIDATE_MODE.md`
 - `docs/TLR_CANDIDATE_MODE.zh-TW.md`
+- `docs/AGENT_CLIENT_GUIDE.md`
 - `docs/TOOL_CONTRACT.md`
 - `docs/TRACE_SCHEMA.md`
 - `docs/VALIDATION_REPORT.md`
@@ -98,3 +107,5 @@ The release must also include at least these public artifacts:
 - `docs/PUBLIC_PRIVATE_BOUNDARY.md`
 - `examples/agentic_runs/*.json`
 - `examples/reports/*.md`
+- `examples/identifier_backed_demo.py`
+- `examples/external_agent_trace_demo.py`

@@ -12,6 +12,7 @@ def test_agentic_harness_release_acceptance_artifacts_exist():
         "docs/TRUST_MODEL.md",
         "docs/TLR_CANDIDATE_MODE.md",
         "docs/TLR_CANDIDATE_MODE.zh-TW.md",
+        "docs/AGENT_CLIENT_GUIDE.md",
         "docs/TOOL_CONTRACT.md",
         "docs/TRACE_SCHEMA.md",
         "docs/VALIDATION_REPORT.md",
@@ -21,6 +22,8 @@ def test_agentic_harness_release_acceptance_artifacts_exist():
         "docs/PUBLIC_PRIVATE_BOUNDARY.md",
         "examples/agentic_runs/pass_official_source.json",
         "examples/reports/pass_official_source.md",
+        "examples/identifier_backed_demo.py",
+        "examples/external_agent_trace_demo.py",
     ]
 
     for path in required_paths:
@@ -53,6 +56,8 @@ def test_agentic_harness_name_is_backed_by_graph_tools_and_scenarios():
         "build_validation_report",
         "get_trust_model",
         "validate_citation",
+        "begin_agentic_run",
+        "finalize_agentic_run",
     }.issubset(tool_names)
 
     pass_trace = run_agentic_demo("民法第184條 押金", scenario="pass_official_source")
@@ -70,9 +75,11 @@ def test_agentic_harness_name_is_backed_by_graph_tools_and_scenarios():
 def test_acceptance_doc_states_current_claim_boundary():
     text = Path("docs/AGENTIC_HARNESS_ACCEPTANCE.md").read_text(encoding="utf-8")
 
-    assert "v0.4" in text
+    assert "v0.5" in text
     assert "constrains" in text
-    assert "bounded agentic legal RAG harness" in text
+    assert "records and gates externally driven tool runs" in text
+    assert "externally_driven" in text
+    assert "actual_tool" in text
     assert "identifier-backed `verified_cache`" in text
     assert "an LLM or agent implementation shipped in this repo" in text
     assert "Not Claimed" in text

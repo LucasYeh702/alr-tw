@@ -1,5 +1,42 @@
 # Release Notes
 
+## v0.5.0 Externally Driven Tool Run Recording
+
+- Adds MCP `begin_agentic_run` and `finalize_agentic_run` so the public server
+  records and gates externally driven tool runs.
+- Emits canonical `alr-tw.agentic_trace/v1` traces with `trace_kind:
+  "externally_driven"` and recorded tool calls marked `execution_mode:
+  "actual_tool"`.
+- Keeps the repo boundary explicit: ALR-TW still ships no LLM and no agent
+  implementation; the external MCP client supplies that role.
+- Enforces non-bypass server-side computation for `final_action`,
+  `safe_to_present`, `citation_use`, and `identifier_resolution`.
+- Keeps answer retention fail-closed: client-drafted answer content is retained
+  only when the trust gate returns `final_action == "answer"` and
+  `safe_to_present == true`.
+- Adds `docs/AGENT_CLIENT_GUIDE.md` with stdio MCP client configuration,
+  suggested tool flow, and rendering rules.
+- Adds `examples/external_agent_trace_demo.py`, a stdio JSON-RPC client demo
+  showing one passing externally driven trace and one refused trace.
+- Includes the identifier-backed quickstart example
+  `examples/identifier_backed_demo.py`.
+- Adds contribution templates for issues and pull requests.
+- Notes platform protections in CI and release workflow, including the pinned
+  gitleaks action SHA
+  `ff98106e4c7b2bc287b24eaf42907196329070c7`.
+
+No production corpus, real legal full text, cache, index, user log, credential,
+or private retrieval parameter is included.
+
+### Release Audit Record
+
+- Date: 2026-07-05.
+- Method: guard scripts, Ruff, full pytest suite, deterministic demo,
+  agentic MCP client demo, identifier-backed demo, externally driven trace demo,
+  and MCP stdio smoke over initialize, tools/list, `begin_agentic_run`, and
+  `finalize_agentic_run`.
+- Result: pass before tagging; no push or tag performed in this working round.
+
 ## v0.4.0 Identifier-Backed Verified Cache and Hardening
 
 - Adds an opt-in source-policy capability

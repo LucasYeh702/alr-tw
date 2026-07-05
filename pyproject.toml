@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alr-tw"
-version = "0.4.0"
+version = "0.5.0"
 description = "Agentic Legal RAG / MCP trust harness for Taiwan law."
 requires-python = ">=3.11"
 dependencies = [

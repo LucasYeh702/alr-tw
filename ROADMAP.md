@@ -34,6 +34,15 @@
 - fail-closed identifier error codes and gate assertion tests
 - MCP `validate_citation` support for `legal_material_type`
 
+## v0.5
+
+- session-recorded MCP runs that record and gate externally driven tool runs
+- externally-driven traces with `trace_kind: "externally_driven"` and
+  `execution_mode: "actual_tool"`
+- external MCP client guide and stdio JSON-RPC example
+- identifier-backed quickstart example
+- contribution templates, platform protections, and pinned gitleaks action SHA
+
 ## Future
 
 - official adapter contracts without bundled production cache
