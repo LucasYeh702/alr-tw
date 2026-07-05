@@ -40,9 +40,9 @@ ALR-TW 目前示範的能力：
 - citation validation：判斷 citation 是否存在、是否可驗證、是否可作 final citation
 - coverage gate：回報 laws、judgments、constitutional materials 等覆蓋狀態
 - trust gate：沒有 final citation、來源不可驗證、coverage 低信心或 claim support 未檢查時拒絕輸出
-- claim grounding：v0.3 新增 answer claim 切分與語意對齊檢核，讓主張與證據可追溯
-- identifier-backed verified cache：v0.4 新增 opt-in 的 JID / official identifier 驗證路徑，但必須由 resolver 回到本地官方原始檔並重算 hash 才能通過
-- externally driven trace recording：v0.5 新增 `begin_agentic_run` / `finalize_agentic_run`，records and gates externally driven tool runs
+- claim grounding：answer claim 切分與語意對齊檢核，讓主張與證據可追溯
+- identifier-backed verified cache：opt-in 的 JID / official identifier 驗證路徑，必須由 resolver 回到本地官方原始檔並重算 hash 才能通過
+- externally driven trace recording：`begin_agentic_run` / `finalize_agentic_run`，可記錄並 gates 外部驅動的工具 run
 - trace schema：輸出 `alr-tw.agentic_trace/v1`，保留 steps、tool calls、decision trace、evidence、coverage、trust gate 與 final action
 - validation report：把 run trace 轉成可 review 的 Markdown report
 - MCP server：用 stdio 暴露 harness tools，讓本機 MCP client 啟動
@@ -57,7 +57,7 @@ ALR-TW 目前示範的能力：
 | `finalize_agentic_run` | 組裝並 gate 已記錄的 externally driven tool run | canonical trace、final action |
 | `build_validation_report` | 產生 validation report | Markdown review artifact |
 | `get_trust_model` | 回傳 source tier 與 fail-closed policy | trust model |
-| `get_claim_grounding_policy` | 取得 v0.3 claim grounding 合約與支援狀態定義 | claim policy |
+| `get_claim_grounding_policy` | 取得 claim grounding 合約與支援狀態定義 | claim policy |
 | `extract_answer_claims` | 將 answer 拆成可追溯的 claim 單位 | answer claims |
 | `check_claim_support` | 用 evidence segments 檢查 claim，輸出 claim_support 與 semantic failure summary | claim support status |
 | `legal_search` | synthetic legal search demo | candidate retrieval |
@@ -79,9 +79,9 @@ ALR-TW 目前示範的能力：
 
 範例 trace 中的 `tool_calls` 會標示 `execution_mode: "harness_recorded"`，代表這是 deterministic harness record。由 `begin_agentic_run` / `finalize_agentic_run` 產生的 trace 會標示 `trace_kind: "externally_driven"`，且 recorded tool calls 會使用 `execution_mode: "actual_tool"`。
 
-## Claim Grounding（v0.3）
+## Claim Grounding
 
-v0.3 在不改變來源安全門檻的前提下，新增語意層防線：
+在不改變來源安全門檻的前提下，新增語意層防線：
 
 - `extract_answer_claims`：把答案切成可追蹤的 claim 單位（`alr-tw.answer-claim/v1`）
 - `check_claim_support`：檢查每個 claim 是否有對應 evidence span 支持（`alr-tw.claim-support/v1`）
@@ -89,9 +89,9 @@ v0.3 在不改變來源安全門檻的前提下，新增語意層防線：
 
 此版本仍是 public-safe 的示範：僅公開 schema、synthetic fixture、MCP contract 與測試，不公開完整的 production 語意推理引擎。
 
-## Identifier-Backed Verified Cache（v0.4）
+## Identifier-Backed Verified Cache
 
-v0.4 新增 opt-in 的 `verified_cache` 路徑：對 judgment record，穩定官方識別碼（例如 JID）可以在特定條件下替代官方 URL。這不是放寬引用門檻；它把門檻改成 resolver-backed verification：
+新增 opt-in 的 `verified_cache` 路徑：對 judgment record，穩定官方識別碼（例如 JID）可以在特定條件下替代官方 URL。這不是放寬引用門檻；它把門檻改成 resolver-backed verification：
 
 - 預設關閉，必須設定 `ALR_TW_IDENTIFIER_BACKED_VERIFIED_CACHE=1` 才啟用。
 - 僅限 `legal_material_type: "judgment"`；法規與憲法資料仍要求官方 URL。
@@ -240,14 +240,13 @@ Official data source or compliant internal source
 ## 規格文件
 
 - [docs/AGENTIC_WORKFLOW.md](docs/AGENTIC_WORKFLOW.md)：agentic RAG execution graph
-- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md)：v0.5.0 名稱與 release acceptance 條件
+- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md)：名稱與 release acceptance 條件
 - [docs/TRUST_MODEL.md](docs/TRUST_MODEL.md)：source tier、citation use 與 fail-closed rules
 - [docs/TLR_CANDIDATE_MODE.zh-TW.md](docs/TLR_CANDIDATE_MODE.zh-TW.md)：外部語意召回 / TLR-like candidate-only 模式（[English](docs/TLR_CANDIDATE_MODE.md)）
 - [docs/AGENT_CLIENT_GUIDE.md](docs/AGENT_CLIENT_GUIDE.md)：外部 MCP client 連線與 externally driven trace flow
 - [docs/TOOL_CONTRACT.md](docs/TOOL_CONTRACT.md)：MCP tool envelope 與工具契約
 - [docs/TRACE_SCHEMA.md](docs/TRACE_SCHEMA.md)：trace schema
 - [docs/VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md)：validation report 結構
-- [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md)：release notes
 - [docs/RELEASE_AUDIT_PROCEDURE.md](docs/RELEASE_AUDIT_PROCEDURE.md)：公開 release audit 規程
 - [docs/DEPLOYMENT_STARTING_POINTS.md](docs/DEPLOYMENT_STARTING_POINTS.md)：illustrative deployment starting points
 - [docs/PUBLIC_PRIVATE_BOUNDARY.md](docs/PUBLIC_PRIVATE_BOUNDARY.md)：公開 repo 與 private runtime 邊界

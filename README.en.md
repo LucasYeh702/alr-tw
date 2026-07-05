@@ -40,9 +40,9 @@ Current ALR-TW capabilities:
 - citation validation: decide whether a citation exists, is verifiable, and may become a final citation
 - coverage gate: report laws, judgments, constitutional materials, and other coverage states
 - trust gate: refuse output when final citations are missing, sources are unverifiable, coverage is low-confidence, or claim support is unchecked
-- claim grounding: v0.3 adds answer claim splitting and semantic alignment checks so each claim is traceable to evidence
-- identifier-backed verified cache: v0.4 adds an opt-in JID / official-identifier verification path, but the resolver must map back to a local official original and recompute the hash before it can pass
-- externally driven trace recording: v0.5 adds `begin_agentic_run` / `finalize_agentic_run` to record and gate externally driven tool runs
+- claim grounding: answer claim splitting and semantic alignment checks keep claims traceable to evidence
+- identifier-backed verified cache: opt-in JID / official-identifier verification path that requires resolver mapping back to a local official original and hash recomputation before it can pass
+- externally driven trace recording: `begin_agentic_run` / `finalize_agentic_run` to record and gate externally driven tool runs
 - trace schema: emit `alr-tw.agentic_trace/v1` with steps, tool calls, decision trace, evidence, coverage, trust-gate output, and final action
 - validation report: convert a run trace into a Markdown review report
 - MCP server: expose harness tools over stdio for local MCP clients
@@ -57,7 +57,7 @@ Current ALR-TW capabilities:
 | `finalize_agentic_run` | Assembles and gates a recorded externally driven tool run | Canonical trace, final action |
 | `build_validation_report` | Builds a validation report | Markdown review artifact |
 | `get_trust_model` | Returns source tiers and fail-closed policy | Trust model |
-| `get_claim_grounding_policy` | Returns v0.3 claim grounding contract | Claim policy |
+| `get_claim_grounding_policy` | Returns claim grounding contract | Claim policy |
 | `extract_answer_claims` | Splits answer text into traceable claims | Answer claims |
 | `check_claim_support` | Checks claim support against evidence segments | Claim support status |
 | `legal_search` | Synthetic legal search demo | Candidate retrieval |
@@ -79,9 +79,9 @@ All MCP tool results use the same envelope:
 
 Example traces mark `tool_calls` with `execution_mode: "harness_recorded"`. That means they are deterministic harness records. Traces produced through `begin_agentic_run` / `finalize_agentic_run` include `trace_kind: "externally_driven"`, and recorded tool calls use `execution_mode: "actual_tool"`.
 
-## Claim Grounding (v0.3)
+## Claim Grounding
 
-ALR-TW v0.3 adds a semantic safety layer without changing the source-first safety model:
+ALR-TW adds a semantic safety layer without changing the source-first safety model:
 
 - `extract_answer_claims`: split answer text into trackable claim units (`alr-tw.answer-claim/v1`)
 - `check_claim_support`: evaluate each claim against evidence segments (`alr-tw.claim-support/v1`)
@@ -89,9 +89,9 @@ ALR-TW v0.3 adds a semantic safety layer without changing the source-first safet
 
 This remains a public-safe harness: it publishes schema, synthetic fixtures, MCP contracts, and tests. It does not publish the full private production semantic inference stack.
 
-## Identifier-Backed Verified Cache (v0.4)
+## Identifier-Backed Verified Cache
 
-v0.4 adds an opt-in `verified_cache` path: for judgment records, a stable official identifier such as a JID may substitute for the official URL under strict conditions. This does not loosen the citation gate; it turns the gate into resolver-backed verification:
+ALR-TW adds an opt-in `verified_cache` path: for judgment records, a stable official identifier such as a JID may substitute for the official URL under strict conditions. This does not loosen the citation gate; it turns the gate into resolver-backed verification:
 
 - It is off by default and requires `ALR_TW_IDENTIFIER_BACKED_VERIFIED_CACHE=1`.
 - It is limited to `legal_material_type: "judgment"`; statutes and constitutional materials still require an official URL.
@@ -240,14 +240,13 @@ Minimum data recommendation:
 ## Specification Docs
 
 - [docs/AGENTIC_WORKFLOW.md](docs/AGENTIC_WORKFLOW.md): agentic RAG execution graph
-- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md): v0.5.0 naming and release acceptance criteria
+- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md): naming and release acceptance criteria
 - [docs/TRUST_MODEL.md](docs/TRUST_MODEL.md): source tiers, citation use, and fail-closed rules
 - [docs/TLR_CANDIDATE_MODE.md](docs/TLR_CANDIDATE_MODE.md): external semantic recall / TLR-like candidate-only mode ([zh-TW](docs/TLR_CANDIDATE_MODE.zh-TW.md))
 - [docs/AGENT_CLIENT_GUIDE.md](docs/AGENT_CLIENT_GUIDE.md): external MCP client setup and externally driven trace flow
 - [docs/TOOL_CONTRACT.md](docs/TOOL_CONTRACT.md): MCP tool envelope and contracts
 - [docs/TRACE_SCHEMA.md](docs/TRACE_SCHEMA.md): trace schema
 - [docs/VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md): validation report structure
-- [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md): release notes
 - [docs/RELEASE_AUDIT_PROCEDURE.md](docs/RELEASE_AUDIT_PROCEDURE.md): public release audit procedure
 - [docs/DEPLOYMENT_STARTING_POINTS.md](docs/DEPLOYMENT_STARTING_POINTS.md): illustrative deployment starting points
 - [docs/PUBLIC_PRIVATE_BOUNDARY.md](docs/PUBLIC_PRIVATE_BOUNDARY.md): public repo and private runtime boundary
