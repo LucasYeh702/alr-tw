@@ -72,9 +72,9 @@ gitleaks detect --source . --log-opts="--all"
 
 | 檢核點 | 依據 |
 |---|---|
-| README 與 AGENTIC_WORKFLOW 含「本 repo 不含 LLM / agent，agent 角色由外部呼叫端供給」聲明 | v0.4 public hardening summary |
-| 不出現「no ranking weights」式絕對句；demo 公式標示為 illustrative | v0.4 public hardening summary |
-| THREAT_MODEL 與 TRUST_MODEL 可分辨「repo 已強制」與「部署者責任」 | v0.4 public hardening summary |
+| README 與 AGENTIC_WORKFLOW 含「本 repo 不含 LLM / agent，agent 角色由外部呼叫端供給」聲明 | README / AGENTIC_WORKFLOW |
+| 不出現「no ranking weights」式絕對句；demo 公式標示為 illustrative | DATA_POLICY / ARCHITECTURE_CONTRACT |
+| THREAT_MODEL 與 TRUST_MODEL 可分辨「repo 已強制」與「部署者責任」 | THREAT_MODEL / TRUST_MODEL |
 | `docs/AGENTIC_HARNESS_ACCEPTANCE.md` 的 Not Claimed 清單沒有被新文件或 README 措辭違反 | ACCEPTANCE |
 | 新增 MCP tool 或 schema 都已文件化且有測試 | v0.2.1 F5 / F7 |
 

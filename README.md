@@ -244,7 +244,6 @@ Official data source or compliant internal source
 - [docs/TRACE_SCHEMA.md](docs/TRACE_SCHEMA.md)：trace schema
 - [docs/VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md)：validation report 結構
 - [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md)：release notes
-- [docs/V0_4_HARDENING_SUMMARY.md](docs/V0_4_HARDENING_SUMMARY.md)：v0.4 public hardening summary
 - [docs/RELEASE_AUDIT_PROCEDURE.md](docs/RELEASE_AUDIT_PROCEDURE.md)：公開 release audit 規程
 - [docs/DEPLOYMENT_STARTING_POINTS.md](docs/DEPLOYMENT_STARTING_POINTS.md)：illustrative deployment starting points
 - [docs/PUBLIC_PRIVATE_BOUNDARY.md](docs/PUBLIC_PRIVATE_BOUNDARY.md)：公開 repo 與 private runtime 邊界
