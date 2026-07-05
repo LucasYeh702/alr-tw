@@ -1,6 +1,6 @@
 # Release Notes
 
-## v0.4.0 Identifier-Backed Verified Cache (Opt-In)
+## v0.4.0 Identifier-Backed Verified Cache and Hardening
 
 - Adds an opt-in source-policy capability
   (`ALR_TW_IDENTIFIER_BACKED_VERIFIED_CACHE`, default off): a stable official
@@ -22,9 +22,42 @@
   server ships only a synthetic demo resolver.
 - Verified-cache rejections now return specific error codes (for example
   `VERIFIED_CACHE_INCOMPLETE`) instead of the generic rejection code.
+- Clarifies the no-LLM and no-agent boundary in the READMEs and
+  `docs/AGENTIC_WORKFLOW.md`: ALR-TW constrains an external MCP client or LLM
+  runtime, while trust-gate decisions are deterministic harness decisions.
+- Calibrates ranking wording: the repo ships demo formulas and common defaults
+  for public tests, while tuned production ranking weights remain deliberately
+  unpublished.
+- Clarifies `docs/THREAT_MODEL.md` and `docs/TRUST_MODEL.md` responsibility
+  boundaries: public code checks field presence and policy state; byte-level
+  promotion verification belongs to the deployer's pipeline.
+- Hardens release guards for secret-assignment patterns, non-UTF-8 handling
+  including Big5 and UTF-16-like content, Taiwan-ID-shaped strings,
+  judgment-identifier-shaped strings, the synthetic judgment namespace, and
+  aligned file-size caps.
+- Adds a gitleaks history-scan CI job and keeps release-history scanning in the
+  published audit procedure.
+- Adds `docs/DEPLOYMENT_STARTING_POINTS.md` with illustrative, non-production
+  chunking, embedding, vector-index, lexical, and ranking starting points.
+- Adds a public ingestion staging adapter skeleton and a staging to
+  citation-validation test that proves staged records remain candidate-only and
+  not final-eligible.
+- Adopts `docs/RELEASE_AUDIT_PROCEDURE.md` as the repeatable release-readiness
+  procedure.
 
 No production corpus, real legal full text, cache, index, user log, credential,
 or private retrieval parameter is included.
+
+v0.2.1 shipped as an untagged commit on `main`; v0.3.0 is tagged on GitHub
+(tag `v0.3.0`).
+
+### Release Audit Record
+
+- Date: 2026-07-05.
+- Method: guard scripts, full test suite, demos, and manual history grep battery
+  over the unpushed commits; gitleaks runs in CI.
+- Result: no leaks found; all hardening gaps fixed pre-tag; publishing clone
+  cleaned of non-public refs before tagging.
 
 ## v0.3.0 Claim-Grounding Patch
 

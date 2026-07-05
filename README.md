@@ -54,9 +54,9 @@ ALR-TW 目前示範的能力：
 | `run_agentic_demo` | 執行 deterministic ALR-TW scenario | `answer`、`refuse` 或 `human_review_required` |
 | `build_validation_report` | 產生 validation report | Markdown review artifact |
 | `get_trust_model` | 回傳 source tier 與 fail-closed policy | trust model |
-| `get_claim_grounding_policy` | 回傳 v0.3 claim grounding 合約 | claim policy |
-| `extract_answer_claims` | 將答案拆成可追蹤的 claim 單位 | answer claims |
-| `check_claim_support` | 檢查 claim 與 evidence segments 對應關係 | claim support status |
+| `get_claim_grounding_policy` | 取得 v0.3 claim grounding 合約與支援狀態定義 | claim policy |
+| `extract_answer_claims` | 將 answer 拆成可追溯的 claim 單位 | answer claims |
+| `check_claim_support` | 用 evidence segments 檢查 claim，輸出 claim_support 與 semantic failure summary | claim support status |
 | `legal_search` | synthetic legal search demo | candidate retrieval |
 | `validate_citation` | 驗證 citation tier、metadata 與 opt-in identifier-backed cache 使用資格 | final eligibility |
 | `exact_law_lookup` | synthetic 法規精確查找 | demo-only result |
@@ -80,11 +80,11 @@ ALR-TW 目前示範的能力：
 
 v0.3 在不改變來源安全門檻的前提下，新增語意層防線：
 
-- `extract_answer_claims`：把答案切成可追溯的 claim 單位（`alr-tw.answer-claim/v1`）
-- `check_claim_support`：檢核每個 claim 對應 evidence span 的支撐情形（`alr-tw.claim-support/v1`）
-- `get_claim_grounding_policy`：公開 claim status、風險旗標與合約邊界（`alr-tw.claim-grounding-policy/v1`）
+- `extract_answer_claims`：把答案切成可追蹤的 claim 單位（`alr-tw.answer-claim/v1`）
+- `check_claim_support`：檢查每個 claim 是否有對應 evidence span 支持（`alr-tw.claim-support/v1`）
+- `get_claim_grounding_policy`：回傳 claim 狀態定義、風險旗標與合約邊界（`alr-tw.claim-grounding-policy/v1`）
 
-這版仍是 public-safe harness：公開 schema、synthetic fixture、MCP contract 與測試；未公開 production 版的完整語意推論引擎。
+此版本仍是 public-safe 的示範：僅公開 schema、synthetic fixture、MCP contract 與測試，不公開完整的 production 語意推理引擎。
 
 ## Identifier-Backed Verified Cache（v0.4）
 
@@ -120,7 +120,7 @@ Trust gate 會在下列情況 fail closed：
 - verified cache 缺少官方 URL、hash 或驗證時間
 - identifier-backed verified cache 未啟用、未解析、hash mismatch，或不是 judgment record
 - coverage 為 absent 或 low confidence
-- claim support 狀態非可直接展示的 safe 形態時（如 `partially_supported`、`overstated`、`unsupported`、`contradicted`、`role_error`、`unchecked`、`needs_review`）
+- claim support 狀態非安全展示形態（如 `partially_supported`、`overstated`、`unsupported`、`contradicted`、`role_error`、`unchecked`、`needs_review`）
 - claim support 尚未檢查時只能進入 human review，不會輸出可直接呈現的 answer body
 
 ## Demo Scenarios

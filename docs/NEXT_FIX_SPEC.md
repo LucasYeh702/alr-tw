@@ -1,5 +1,10 @@
 # ALR-TW 第二輪 Hardening 規格書（2026-07 審核落地）
 
+> Status for v0.4.0: G1-G10 shipped together in v0.4.0. The planned
+> v0.3.1/v0.4 split was collapsed into one release, and
+> `feature/tlr-raw-backed-verifier` was converged into `main` and deleted.
+> The historical planning body below is otherwise preserved.
+
 本規格書彙整 2026-07 多代理安全審查（資料洩漏面、MCP 執行期面、定位與邊界面，含逐項對抗式覆核）的結果，作為下一輪公開版 hardening 的工程規格。上一輪規格（v0.2.1，F1-F10）已於 v0.2.1 / v0.3.0 出貨完畢，內容見 git history 與 `docs/RELEASE_NOTES.md`。
 
 ## 審查結論
@@ -265,7 +270,7 @@ repo 刻意不出貨調校參數（正確），但完全不給起點，實作者
 9. G8 部署起點與 ingestion 骨架
 10. G1 識別碼替代 opt-in（獨立為 `v0.4`，含分支收斂）
 
-G2-G7 與 G10 應在下一個 release tag（`v0.3.1`）前完成。G1 完成前，`feature/tlr-raw-backed-verifier` 不應對外宣傳為可用的 onboarding 路徑。
+G2-G7 與 G10 原規劃在下一個 release tag（`v0.3.1`）前完成；G1 原規劃獨立進入 `v0.4`。實際發布時已收斂為 v0.4.0，一次完成 G1-G10；`feature/tlr-raw-backed-verifier` 已不再作為 onboarding 路徑。
 
 ## 必跑驗證
 

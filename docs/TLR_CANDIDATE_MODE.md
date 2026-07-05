@@ -71,6 +71,10 @@ This recipe lowers onboarding friction for judgment verification, but it is not
 out-of-the-box: operators still obtain official access and download the
 original files themselves.
 
+At the Python library level, `identifier_resolution` is part of the
+adapter/verifier trust boundary and must only be set by the deployer's resolver
+layer; setting it by hand is vouching for the record.
+
 For a local `verified_cache`, store at least:
 
 - official source URL or stable official identifier

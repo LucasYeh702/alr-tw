@@ -30,6 +30,12 @@ record whose recomputed content hash matches the declared hash. Unresolved
 identifiers, hash mismatches, and non-judgment materials fail closed with
 explicit error codes.
 
+Scope caveat: the server-side enforcement statement applies to the MCP surface.
+At the Python library level, `identifier_resolution` is part of the
+adapter/verifier trust boundary. It must be set only by the deployer's resolver
+layer, such as `resolve_identifier_citation`; setting it by hand is vouching for
+the record.
+
 ## Citation Use
 
 - `allow_final`: may satisfy final citation requirement.

@@ -65,6 +65,11 @@ server; callers cannot declare it, and a bare identifier with a fabricated
 hash is rejected with `IDENTIFIER_UNRESOLVED` or `IDENTIFIER_HASH_MISMATCH`.
 The public server carries only a synthetic demo resolver.
 
+That server-side rule is scoped to the MCP surface. At the Python library level,
+`identifier_resolution` is part of the adapter/verifier trust boundary and must
+only be set by the deployer's resolver layer, such as
+`resolve_identifier_citation`; setting it by hand is vouching for the record.
+
 `citation_eligibility` still describes source-tier eligibility only.
 `check_claim_support` provides explicit claim-grounding status with
 `supported` / `partially_supported` / `overstated` / `unsupported` / `contradicted`
