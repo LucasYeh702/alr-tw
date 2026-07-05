@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from tw_legal_rag_mcp.ingestion import staging
+from tw_legal_rag_mcp.verification.citation_validator import validate_citation
 
 
 def test_synthetic_staging_adapter_exposes_public_ingestion_shape():
@@ -32,3 +33,16 @@ def test_stage_records_preserves_source_ids_without_production_parameters():
     assert result.status == "staged"
     assert result.records[0]["source_id"] == "synthetic-staging-001"
     assert result.records[0]["source_tier"] == "staging"
+
+
+def test_synthetic_staging_records_fail_closed_for_final_citation_validation():
+    result = staging.SyntheticStagingAdapter().load()
+
+    validation = validate_citation(result.records[0], require_final=True)
+
+    assert validation["source_tier"] == "staging"
+    assert validation["citation_use"] == "allow_candidate_only"
+    assert validation["citation_eligibility"] == "candidate_only"
+    assert validation["status"] == "unverifiable"
+    assert validation["error_code"] == "CANDIDATE_ONLY_SOURCE"
+    assert validation["human_review_required"] is True
