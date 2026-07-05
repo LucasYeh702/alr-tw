@@ -222,16 +222,16 @@ Official data source or compliant internal source
 
 外部語意召回可以提高 recall，但在 ALR-TW 中永遠先視為 `external_semantic_recall`，只能當 candidate。Final citation 必須回到 `official` 或符合條件的 `verified_cache`。
 
-實務上可搭配 [TLR 專案](docs/TLR_CANDIDATE_MODE.zh-TW.md)（TLR）或其他語意索引作為高召回資料源，用來找候選裁判與相關線索。但 final citation 不應直接引用 TLR 召回結果；建議仍自司法院或其他官方來源下載原始檔，建立本地 `verified_cache`。
+實務上可搭配 [TLR 專案](https://github.com/aa0101181514/tw-legal-rag)（TLR）或其他語意索引作為高召回資料源，用來找候選裁判與相關線索。但 final citation 不應直接引用 TLR 召回結果；建議仍自司法院或其他官方來源下載原始檔，建立本地 `verified_cache`。
 
 本地 `verified_cache` 至少應保留官方 URL 或穩定官方識別碼、content hash、下載時間與 verified time。只有 `official` 或 metadata 完整的 `verified_cache` 才能通過 final-citation eligibility。
 
 最小資料建議：
 
-- search / semantic recall：可先接 [TLR 專案](docs/TLR_CANDIDATE_MODE.zh-TW.md)（TLR）或其他語意索引，作為高召回 candidate source。
+- search / semantic recall：可先接 [TLR 專案](https://github.com/aa0101181514/tw-legal-rag)（TLR）或其他語意索引，作為高召回 candidate source。
 - official access prerequisite：本專案不提供司法院 API credential、不代為申請，也不重散布司法院資料；使用者須自行取得必要官方 access，或以合法方式下載官方原始檔。
 - local verification cache：使用者自行下載司法院裁判原始月檔後，轉成本地 `verified_cache`，用來核對 jid、官方來源、hash 與 verified time。
-- why local data is still needed：即使已接上 [TLR 專案](docs/TLR_CANDIDATE_MODE.zh-TW.md)（TLR），TLR 仍只是 candidate recall；final citation eligibility、content hash、可重現資料快照與敏感後續驗證仍必須回到本地官方資料快取。
+- why local data is still needed：即使已接上 [TLR 專案](https://github.com/aa0101181514/tw-legal-rag)（TLR），TLR 仍只是 candidate recall；final citation eligibility、content hash、可重現資料快照與敏感後續驗證仍必須回到本地官方資料快取。
 - law corpus：法規資料不屬於司法院裁判月檔，應另接法務部或其他官方法規來源。以官方法規 JSON 的實測量級估算，原始法規資料約數百 MB 以內；若另建法規 vector index，通常是 1-2GB 級別。明確條號查詢應優先走 exact article lookup，再補語意召回。
 - constitutional materials：司法院公開資料也可另外接釋字與憲法法庭資料，作為 constitutional materials 的本地驗證來源。以實測量級估算，raw zip 約 260MB、raw JSON 約 25MB，若保留附件與 OCR text，整體約 1GB 以內。
 - Judicial Yuan scope：這裡的司法院資料主要指司法院開放資料的裁判書月檔，以及可另行接入的釋字與憲法法庭公開資料。它不包含法規全文、行政函釋、法務部法規資料、未公開裁判或任何私有案件資料；實際可下載期間、欄位與遮蔽內容以司法院開放資料站為準。
@@ -242,7 +242,7 @@ Official data source or compliant internal source
 - [docs/AGENTIC_WORKFLOW.md](docs/AGENTIC_WORKFLOW.md)：agentic RAG execution graph
 - [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md)：名稱與 release acceptance 條件
 - [docs/TRUST_MODEL.md](docs/TRUST_MODEL.md)：source tier、citation use 與 fail-closed rules
-- [docs/TLR_CANDIDATE_MODE.zh-TW.md](docs/TLR_CANDIDATE_MODE.zh-TW.md)：外部語意召回 / TLR-like candidate-only 模式（[English](docs/TLR_CANDIDATE_MODE.md)）
+- [TLR 專案](https://github.com/aa0101181514/tw-legal-rag)：語意檢索開源實作，可作為高召回候選來源
 - [docs/AGENT_CLIENT_GUIDE.md](docs/AGENT_CLIENT_GUIDE.md)：外部 MCP client 連線與 externally driven trace flow
 - [docs/TOOL_CONTRACT.md](docs/TOOL_CONTRACT.md)：MCP tool envelope 與工具契約
 - [docs/TRACE_SCHEMA.md](docs/TRACE_SCHEMA.md)：trace schema
