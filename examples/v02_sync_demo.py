@@ -47,7 +47,7 @@ def main() -> int:
         "law_versions": build_demo_law_timeline("demo-law-001"),
         "exact_lookup": {
             "law": exact_law_lookup("示範租賃規則", "第1條"),
-            "judgment": exact_judgment_lookup("DEMO,001,民,1,20260101,1"),
+            "judgment": exact_judgment_lookup("DEMO,113,測,1,20990101,1"),
         },
     }
     print(json.dumps(output, ensure_ascii=False, indent=2))

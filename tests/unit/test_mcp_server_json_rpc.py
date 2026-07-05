@@ -255,7 +255,7 @@ def test_mcp_tools_call_exact_lookup_tools_are_demo_only():
             "method": "tools/call",
             "params": {
                 "name": "exact_judgment_lookup",
-                "arguments": {"jid": "DEMO,001,民,1,20260101,1"},
+                "arguments": {"jid": "DEMO,113,測,1,20990101,1"},
             },
         }
     )

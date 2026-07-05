@@ -112,7 +112,7 @@ class SyntheticOfficialAdapter:
                 "source_tier": "external_semantic_recall",
                 "title": "Synthetic TLR Candidate",
                 "text": "Synthetic candidate-only judgment lead. It must be verified elsewhere.",
-                "jid": "DEMO,001,民,1,20260101,1",
+                "jid": "DEMO,113,測,1,20990101,1",
                 "manifest_id": manifest.dataset_name,
             },
         ]

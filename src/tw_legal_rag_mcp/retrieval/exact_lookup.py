@@ -16,11 +16,11 @@ SYNTHETIC_LAWS = {
 }
 
 SYNTHETIC_JUDGMENTS = {
-    "DEMO,001,民,1,20260101,1": {
+    "DEMO,113,測,1,20990101,1": {
         "citation_id": "demo-judgment-001",
         "source_id": "demo-judgment-001",
         "source_tier": "synthetic",
-        "jid": "DEMO,001,民,1,20260101,1",
+        "jid": "DEMO,113,測,1,20990101,1",
     }
 }
 

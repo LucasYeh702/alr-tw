@@ -98,7 +98,7 @@ def test_law_version_timeline_marks_versions_as_synthetic_not_current_law():
 
 def test_exact_lookup_tools_return_demo_only_citations():
     law = exact_law_lookup("示範租賃規則", "第1條")
-    judgment = exact_judgment_lookup("DEMO,001,民,1,20260101,1")
+    judgment = exact_judgment_lookup("DEMO,113,測,1,20990101,1")
     constitutional = exact_constitutional_lookup("demo-constitutional-001")
 
     assert law["citation_use"] == "demo_only"
