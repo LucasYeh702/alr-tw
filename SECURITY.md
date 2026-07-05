@@ -67,6 +67,10 @@ The repository guard scripts also check common Taiwan legal-data leak shapes,
 including real-shaped judgment identifiers outside the synthetic namespace and
 Taiwan national ID number patterns.
 
+The gitleaks CI action currently uses the maintained `v2` tag because no local
+offline cache of a reviewed full commit SHA is available; this tag reference is
+an accepted CI supply-chain trade-off until a reviewed SHA is recorded.
+
 A clean current working tree does not prove that older commits are safe to publish.
 
 ## Out Of Scope
