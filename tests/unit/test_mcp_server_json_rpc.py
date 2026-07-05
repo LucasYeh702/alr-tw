@@ -419,6 +419,39 @@ def test_mcp_actual_tool_run_answers_when_official_evidence_passes():
     )
 
 
+def test_mcp_actual_tool_run_requires_claim_support_before_answering():
+    session = McpSession(ready=True)
+    run_id = _call_tool_json(
+        session,
+        2,
+        "begin_agentic_run",
+        {"query": "民法第184條 押金"},
+    )["run_id"]
+
+    _call_tool_json(
+        session,
+        3,
+        "validate_citation",
+        {
+            "citation_id": "official-demo-law-184",
+            "source_tier": "official",
+            "official_url": "https://example.test/synthetic-official/civil-law-demo#article-184",
+            "source_label": "Synthetic Civil Code Article 184",
+            "legal_material_type": "law",
+        },
+    )
+    trace = _call_tool_json(
+        session,
+        4,
+        "finalize_agentic_run",
+        {"run_id": run_id, "answer": "Official citation alone is not enough."},
+    )
+
+    assert trace["final_action"] == "human_review_required"
+    assert trace["answer"] is None
+    assert "CLAIM_SUPPORT_NOT_CHECKED" in trace["trust_gate"]["failure_reasons"]
+
+
 def test_mcp_actual_tool_run_refuses_candidate_only_evidence_and_drops_answer():
     session = McpSession(ready=True)
     run_id = _call_tool_json(

@@ -35,6 +35,11 @@ Use stdio. The public server needs no API keys and makes no network calls.
 7. Render the answer only when `final_action == "answer"` and
    `trust_gate.safe_to_present == true`.
 
+An externally driven run reaches `answer` only if the client recorded a
+`check_claim_support` step whose result is safe; a run with a final citation
+but no claim-support step routes to `human_review_required` because claim
+grounding is not optional for a presentable answer.
+
 If the gate refuses or requires review, the trace keeps `answer: null`. The
 client must not render the dropped answer body from its own draft state.
 

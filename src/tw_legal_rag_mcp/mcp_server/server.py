@@ -6,7 +6,7 @@ import sys
 from typing import Any, TextIO
 from uuid import uuid4
 
-from alr_tw.harness.constants import FinalAction, ToolExecutionMode
+from alr_tw.harness.constants import FinalAction, ToolExecutionMode, TrustFailureReason
 from alr_tw.harness.orchestrator import _trust_gate_trace
 from alr_tw.harness.trace_schema import AgenticRunTrace, EvidenceRecord, ToolCallTrace
 from alr_tw.verification.claim_support import (
@@ -66,6 +66,7 @@ class AgenticRunState:
     validations: list[dict[str, Any]] = field(default_factory=list)
     answer_claims: list[dict[str, Any]] = field(default_factory=list)
     claim_support: list[dict[str, Any]] = field(default_factory=list)
+    claim_support_checked: bool = False
     semantic_summary: dict[str, Any] | None = None
     semantic_failure_reasons: list[str] = field(default_factory=list)
 
@@ -183,6 +184,7 @@ class McpSession:
         elif tool_name == "extract_answer_claims":
             state.answer_claims = list(payload.get("claims", []))
         elif tool_name == "check_claim_support":
+            state.claim_support_checked = True
             state.answer_claims = list(arguments.get("claims", state.answer_claims))
             state.claim_support = list(payload.get("claim_support", []))
             summary = payload.get("summary")
@@ -628,6 +630,7 @@ def _summary_value(value: Any) -> Any:
 def _external_agentic_trace(state: AgenticRunState, answer: str) -> AgenticRunTrace:
     evidence = _evidence_from_recorded_validations(state.validations)
     coverage = _coverage_from_recorded_validations(state.validations)
+    final_citation_count = sum(1 for item in evidence if item.citation_use == "allow_final")
     answer_claims = [AnswerClaim.model_validate(item) for item in state.answer_claims]
     claim_support = [ClaimSupport.model_validate(item) for item in state.claim_support]
     semantic_summary = (
@@ -635,9 +638,11 @@ def _external_agentic_trace(state: AgenticRunState, answer: str) -> AgenticRunTr
         if state.semantic_summary is not None
         else SemanticGroundingSummary()
     )
-    semantic_reasons = state.semantic_failure_reasons or claim_support_failure_reasons(
-        semantic_summary
+    semantic_reasons = list(
+        state.semantic_failure_reasons or claim_support_failure_reasons(semantic_summary)
     )
+    if final_citation_count and not state.claim_support_checked:
+        semantic_reasons.append(TrustFailureReason.CLAIM_SUPPORT_NOT_CHECKED.value)
     trust_gate = _trust_gate_trace(
         evidence=evidence,
         coverage=coverage,
@@ -651,7 +656,6 @@ def _external_agentic_trace(state: AgenticRunState, answer: str) -> AgenticRunTr
     answer_to_retain = (
         answer if final_action == FinalAction.ANSWER.value and trust_gate.safe_to_present else None
     )
-    final_citation_count = sum(1 for item in evidence if item.citation_use == "allow_final")
     tool_names = [tool_call.tool_name for tool_call in state.tool_calls]
 
     return AgenticRunTrace(

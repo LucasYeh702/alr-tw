@@ -65,6 +65,11 @@ Flow:
    and returns `alr-tw.agentic_trace/v1` with `trace_kind:
    "externally_driven"`.
 
+An externally driven run reaches `answer` only if the client recorded a
+`check_claim_support` step whose result is safe; a run with a final citation
+but no claim-support step routes to `human_review_required` because claim
+grounding is not optional for a presentable answer.
+
 This repository still ships no LLM and no agent implementation. The external
 MCP client supplies the agent role; ALR-TW records and gates externally driven
 tool runs.

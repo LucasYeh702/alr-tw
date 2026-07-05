@@ -14,6 +14,9 @@
 - Keeps answer retention fail-closed: client-drafted answer content is retained
   only when the trust gate returns `final_action == "answer"` and
   `safe_to_present == true`.
+- Requires externally driven runs to record a safe `check_claim_support` step
+  before answering; a final citation without claim grounding now routes to
+  `human_review_required`.
 - Adds `docs/AGENT_CLIENT_GUIDE.md` with stdio MCP client configuration,
   suggested tool flow, and rendering rules.
 - Adds `examples/external_agent_trace_demo.py`, a stdio JSON-RPC client demo
