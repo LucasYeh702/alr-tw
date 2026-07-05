@@ -75,6 +75,12 @@ At the Python library level, `identifier_resolution` is part of the
 adapter/verifier trust boundary and must only be set by the deployer's resolver
 layer; setting it by hand is vouching for the record.
 
+Runnable quickstart:
+[`examples/identifier_backed_demo.py`](../examples/identifier_backed_demo.py)
+demonstrates the TLR candidate to identifier-backed `verified_cache` flow with
+synthetic records, including the opt-in hash-match path and the fail-closed
+mismatch and default-disabled paths.
+
 For a local `verified_cache`, store at least:
 
 - official source URL or stable official identifier
