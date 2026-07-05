@@ -14,6 +14,21 @@ DEMO_RESOLVER_JID = "DEMO,113,測,1,20990101,1"
 DEMO_RESOLVER_HASH = compute_content_hash(SYNTHETIC_OFFICIAL_RECORDS[DEMO_RESOLVER_JID])
 
 
+def _call_tool_json(session: McpSession, request_id: int, name: str, arguments: dict) -> dict:
+    response = session.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        }
+    )
+    assert response["result"]["isError"] is False
+    payload = json.loads(response["result"]["content"][0]["text"])
+    assert payload["ok"] is True
+    return payload["data"]
+
+
 def test_mcp_initialize_returns_server_metadata():
     response = handle_message(
         {
@@ -29,7 +44,7 @@ def test_mcp_initialize_returns_server_metadata():
     assert response["result"]["protocolVersion"] == "2024-11-05"
     assert response["result"]["serverInfo"] == {
         "name": "alr-tw",
-        "version": "0.4.0",
+        "version": "0.5.0",
     }
     assert response["result"]["capabilities"] == {"tools": {}}
 
@@ -60,6 +75,8 @@ def test_mcp_tool_list_exposes_agentic_legal_research():
     assert "exact_law_lookup" in names
     assert "run_agentic_demo" in names
     assert "build_validation_report" in names
+    assert "begin_agentic_run" in names
+    assert "finalize_agentic_run" in names
 
 
 def test_mcp_tools_call_runs_agentic_legal_research():
@@ -329,6 +346,217 @@ def test_mcp_tools_call_rejects_invalid_enum_argument():
 
     assert response["error"]["code"] == -32602
     assert "source_tier must be one of" in response["error"]["message"]
+
+
+def test_mcp_actual_tool_run_answers_when_official_evidence_passes():
+    session = McpSession(ready=True)
+    begin = _call_tool_json(
+        session,
+        2,
+        "begin_agentic_run",
+        {"query": "民法第184條 押金"},
+    )
+    run_id = begin["run_id"]
+
+    _call_tool_json(session, 3, "legal_search", {"query": "民法第184條 押金"})
+    _call_tool_json(
+        session,
+        4,
+        "validate_citation",
+        {
+            "citation_id": "official-demo-law-184",
+            "source_tier": "official",
+            "official_url": "https://example.test/synthetic-official/civil-law-demo#article-184",
+            "source_label": "Synthetic Civil Code Article 184",
+            "legal_material_type": "law",
+        },
+    )
+    answer = "法院認為押金可否返還需依契約約定與事實情節判斷。"
+    claims = _call_tool_json(session, 5, "extract_answer_claims", {"answer": answer})["claims"]
+    claims[0]["referenced_citation_ids"] = ["official-demo-law-184"]
+    _call_tool_json(
+        session,
+        6,
+        "check_claim_support",
+        {
+            "answer": answer,
+            "claims": claims,
+            "segments": [
+                {
+                    "segment_id": "official-demo-law-184-seg-01",
+                    "source_id": "official-demo-law-184",
+                    "citation_id": "official-demo-law-184",
+                    "source_tier": "official",
+                    "legal_material_type": "law",
+                    "section_role": "statute_text",
+                    "span_start": 0,
+                    "span_end": 36,
+                    "text": "法院認為押金可否返還需依契約約定與事實情節判斷。",
+                    "official_url": (
+                        "https://example.test/synthetic-official/civil-law-demo#article-184"
+                    ),
+                    "content_hash": "sha256:synthetic-official-law-184",
+                    "verified_at": "2099-01-01T00:00:00Z",
+                }
+            ],
+        },
+    )
+    trace = _call_tool_json(
+        session,
+        7,
+        "finalize_agentic_run",
+        {"run_id": run_id, "answer": answer},
+    )
+
+    assert trace["schema_version"] == "alr-tw.agentic_trace/v1"
+    assert trace["trace_kind"] == "externally_driven"
+    assert trace["final_action"] == "answer"
+    assert trace["answer"] == answer
+    assert trace["trust_gate"]["safe_to_present"] is True
+    assert {call["execution_mode"] for call in trace["tool_calls"]} == {"actual_tool"}
+    assert {"legal_search", "validate_citation", "extract_answer_claims", "check_claim_support"}.issubset(
+        {call["tool_name"] for call in trace["tool_calls"]}
+    )
+
+
+def test_mcp_actual_tool_run_refuses_candidate_only_evidence_and_drops_answer():
+    session = McpSession(ready=True)
+    run_id = _call_tool_json(
+        session,
+        2,
+        "begin_agentic_run",
+        {"query": "民法第184條 押金"},
+    )["run_id"]
+
+    _call_tool_json(
+        session,
+        3,
+        "validate_citation",
+        {
+            "citation_id": "tlr-candidate-demo-001",
+            "source_tier": "external_semantic_recall",
+            "source_label": "Synthetic TLR Candidate",
+            "legal_material_type": "judgment",
+        },
+    )
+    trace = _call_tool_json(
+        session,
+        4,
+        "finalize_agentic_run",
+        {"run_id": run_id, "answer": "Candidate-only answer must be dropped."},
+    )
+
+    assert trace["final_action"] == "refuse"
+    assert trace["answer"] is None
+    assert "NO_FINAL_CITATION" in trace["trust_gate"]["failure_reasons"]
+    assert trace["evidence"][0]["citation_use"] == "allow_candidate_only"
+
+
+def test_mcp_actual_tool_run_refuses_synthetic_only_evidence():
+    session = McpSession(ready=True)
+    run_id = _call_tool_json(
+        session,
+        2,
+        "begin_agentic_run",
+        {"query": "民法第184條 押金"},
+    )["run_id"]
+
+    _call_tool_json(
+        session,
+        3,
+        "validate_citation",
+        {
+            "citation_id": "synthetic-demo-001",
+            "source_tier": "synthetic",
+            "source_label": "Synthetic Demo Source",
+        },
+    )
+    trace = _call_tool_json(
+        session,
+        4,
+        "finalize_agentic_run",
+        {"run_id": run_id, "answer": "Synthetic-only answer must be dropped."},
+    )
+
+    assert trace["final_action"] == "refuse"
+    assert trace["answer"] is None
+    assert trace["evidence"][0]["citation_use"] == "demo_only"
+
+
+def test_mcp_actual_tool_run_rejects_client_supplied_computed_fields():
+    session = McpSession(ready=True)
+    begin = session.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "begin_agentic_run",
+                "arguments": {"query": "民法第184條", "final_action": "answer"},
+            },
+        }
+    )
+    assert begin["error"]["code"] == -32602
+    assert "unexpected arguments" in begin["error"]["message"]
+
+    run_id = _call_tool_json(
+        session,
+        3,
+        "begin_agentic_run",
+        {"query": "民法第184條 押金"},
+    )["run_id"]
+    finalize = session.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "finalize_agentic_run",
+                "arguments": {
+                    "run_id": run_id,
+                    "answer": "answer",
+                    "safe_to_present": True,
+                },
+            },
+        }
+    )
+    assert finalize["error"]["code"] == -32602
+    assert "unexpected arguments" in finalize["error"]["message"]
+
+    validation = session.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
+                "name": "validate_citation",
+                "arguments": {
+                    "citation_id": "cache-demo",
+                    "source_tier": "verified_cache",
+                    "identifier_resolution": "resolved",
+                },
+            },
+        }
+    )
+    assert validation["error"]["code"] == -32602
+    assert "unexpected arguments" in validation["error"]["message"]
+
+
+def test_mcp_actual_tool_run_unknown_run_id_returns_json_rpc_error():
+    response = McpSession(ready=True).handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "finalize_agentic_run",
+                "arguments": {"run_id": "missing-run", "answer": "answer"},
+            },
+        }
+    )
+
+    assert response["error"]["code"] == -32602
+    assert "unknown run_id" in response["error"]["message"]
 
 
 def test_mcp_validate_citation_uses_eligibility_without_claim_support_overclaim():

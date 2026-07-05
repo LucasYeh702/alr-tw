@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from alr_tw.verification.claim_support import (
     AnswerClaim,
@@ -40,6 +40,7 @@ class TrustGateTrace(BaseModel):
 
 class AgenticRunTrace(BaseModel):
     schema_version: str = "alr-tw.agentic_trace/v1"
+    trace_kind: Literal["externally_driven"] | None = None
     query: str
     normalized_query: str | None = None
     steps: list[dict[str, Any]] = Field(default_factory=list)
@@ -57,3 +58,10 @@ class AgenticRunTrace(BaseModel):
     final_action: Literal["answer", "refuse", "human_review_required"]
     answer: str | None = None
     human_review_notes: list[str] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def _serialize_trace(self, handler):
+        data = handler(self)
+        if self.trace_kind is None:
+            data.pop("trace_kind", None)
+        return data

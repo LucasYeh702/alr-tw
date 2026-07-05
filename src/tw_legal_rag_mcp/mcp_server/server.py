@@ -1,8 +1,20 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import json
 import sys
 from typing import Any, TextIO
+from uuid import uuid4
+
+from alr_tw.harness.constants import FinalAction, ToolExecutionMode
+from alr_tw.harness.orchestrator import _trust_gate_trace
+from alr_tw.harness.trace_schema import AgenticRunTrace, EvidenceRecord, ToolCallTrace
+from alr_tw.verification.claim_support import (
+    AnswerClaim,
+    ClaimSupport,
+    SemanticGroundingSummary,
+    claim_support_failure_reasons,
+)
 
 from .tools import (
     agentic_legal_research,
@@ -18,9 +30,11 @@ from .tools import (
     run_agentic_demo_tool,
     validate_citation_tool,
 )
+from ..legal_nlp.privacy import mask_sensitive_text
+from ..legal_nlp.query_normalizer import normalize_query
 
 SERVER_NAME = "alr-tw"
-SERVER_VERSION = "0.4.0"
+SERVER_VERSION = "0.5.0"
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"
 SUPPORTED_PROTOCOL_VERSIONS = {DEFAULT_PROTOCOL_VERSION}
 SOURCE_TIER_VALUES = {
@@ -32,6 +46,28 @@ SOURCE_TIER_VALUES = {
     "unknown",
 }
 LEGAL_MATERIAL_TYPE_VALUES = {"judgment", "law", "constitutional"}
+RECORDED_AGENTIC_TOOLS = {
+    "legal_search",
+    "validate_citation",
+    "exact_law_lookup",
+    "exact_judgment_lookup",
+    "exact_constitutional_lookup",
+    "extract_answer_claims",
+    "check_claim_support",
+}
+
+
+@dataclass
+class AgenticRunState:
+    run_id: str
+    query: str
+    normalized_query: str
+    tool_calls: list[ToolCallTrace] = field(default_factory=list)
+    validations: list[dict[str, Any]] = field(default_factory=list)
+    answer_claims: list[dict[str, Any]] = field(default_factory=list)
+    claim_support: list[dict[str, Any]] = field(default_factory=list)
+    semantic_summary: dict[str, Any] | None = None
+    semantic_failure_reasons: list[str] = field(default_factory=list)
 
 
 def main() -> None:
@@ -62,6 +98,8 @@ class McpSession:
     def __init__(self, *, ready: bool = False) -> None:
         self._initialize_seen = ready
         self._ready = ready
+        self._agentic_runs: dict[str, AgenticRunState] = {}
+        self._active_agentic_run_id: str | None = None
 
     def handle_message(self, message: dict[str, Any]) -> dict[str, Any] | None:
         if not isinstance(message, dict):
@@ -90,7 +128,10 @@ class McpSession:
             if method == "tools/call":
                 return success_response(
                     request_id,
-                    call_tool(_object_params(message.get("params"), "tool call params")),
+                    call_tool(
+                        _object_params(message.get("params"), "tool call params"),
+                        session=self,
+                    ),
                 )
         except ValueError as exc:
             return error_response(request_id, -32602, str(exc))
@@ -98,6 +139,65 @@ class McpSession:
             return error_response(request_id, -32000, str(exc))
 
         return error_response(request_id, -32601, f"Unknown method: {method}")
+
+    def begin_agentic_run(self, query: str) -> dict[str, Any]:
+        if self._active_agentic_run_id is not None:
+            raise ValueError("agentic run already open")
+        public_query = mask_sensitive_text(query.strip(), mask_names=True)
+        normalized_query = normalize_query(public_query)
+        run_id = f"run_{uuid4().hex}"
+        self._agentic_runs[run_id] = AgenticRunState(
+            run_id=run_id,
+            query=public_query,
+            normalized_query=normalized_query,
+        )
+        self._active_agentic_run_id = run_id
+        return {
+            "schema_version": "alr-tw.agentic_run_session/v1",
+            "run_id": run_id,
+            "trace_kind": "externally_driven",
+            "query": public_query,
+            "normalized_query": normalized_query,
+        }
+
+    def record_agentic_tool_call(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> None:
+        if self._active_agentic_run_id is None:
+            return
+        state = self._agentic_runs[self._active_agentic_run_id]
+        state.tool_calls.append(
+            ToolCallTrace(
+                tool_name=tool_name,
+                execution_mode=ToolExecutionMode.ACTUAL_TOOL.value,
+                input_summary=_summarize_tool_input(tool_name, arguments),
+                output_summary=_summarize_tool_output(tool_name, payload),
+                status="success",
+            )
+        )
+        if tool_name == "validate_citation":
+            state.validations.append({"input": dict(arguments), "output": dict(payload)})
+        elif tool_name == "extract_answer_claims":
+            state.answer_claims = list(payload.get("claims", []))
+        elif tool_name == "check_claim_support":
+            state.answer_claims = list(arguments.get("claims", state.answer_claims))
+            state.claim_support = list(payload.get("claim_support", []))
+            summary = payload.get("summary")
+            state.semantic_summary = dict(summary) if isinstance(summary, dict) else None
+            state.semantic_failure_reasons = list(payload.get("failure_reasons", []))
+
+    def finalize_agentic_run(self, run_id: str, answer: str) -> dict[str, Any]:
+        state = self._agentic_runs.get(run_id)
+        if state is None:
+            raise ValueError(f"unknown run_id: {run_id}")
+        trace = _external_agentic_trace(state, answer)
+        del self._agentic_runs[run_id]
+        if self._active_agentic_run_id == run_id:
+            self._active_agentic_run_id = None
+        return trace.model_dump()
 
 
 def initialize_result(params: dict[str, Any]) -> dict[str, Any]:
@@ -147,6 +247,43 @@ def tool_definitions() -> list[dict[str, Any]]:
                     "query": {"type": "string", "description": "Synthetic legal search query."}
                 },
                 "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "begin_agentic_run",
+            "description": (
+                "Begin recording an externally driven tool run. The repo ships no LLM "
+                "or agent; the MCP client supplies that role."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Public-safe synthetic legal query.",
+                    }
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "finalize_agentic_run",
+            "description": (
+                "Assemble and gate the recorded externally driven tool run. The server "
+                "computes the final action and presentation safety."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "run_id": {"type": "string"},
+                    "answer": {
+                        "type": "string",
+                        "description": "Client-drafted answer retained only when the gate passes.",
+                    },
+                },
+                "required": ["run_id", "answer"],
                 "additionalProperties": False,
             },
         },
@@ -301,14 +438,27 @@ def tool_definitions() -> list[dict[str, Any]]:
     ]
 
 
-def call_tool(params: dict[str, Any]) -> dict[str, Any]:
+def call_tool(params: dict[str, Any], *, session: McpSession | None = None) -> dict[str, Any]:
     _reject_unexpected_keys(params, {"name", "arguments"})
     name = _required_string(params, "name")
     arguments = params.get("arguments") or {}
     if not isinstance(arguments, dict):
         raise ValueError("tool arguments must be an object")
 
-    if name == "agentic_legal_research":
+    if name == "begin_agentic_run":
+        if session is None:
+            raise ValueError("begin_agentic_run requires an MCP session")
+        _reject_unexpected_keys(arguments, {"query"})
+        payload = session.begin_agentic_run(_required_string(arguments, "query"))
+    elif name == "finalize_agentic_run":
+        if session is None:
+            raise ValueError("finalize_agentic_run requires an MCP session")
+        _reject_unexpected_keys(arguments, {"run_id", "answer"})
+        payload = session.finalize_agentic_run(
+            _required_string(arguments, "run_id"),
+            _required_string(arguments, "answer"),
+        )
+    elif name == "agentic_legal_research":
         _reject_unexpected_keys(arguments, {"query"})
         payload = agentic_legal_research(_required_string(arguments, "query"))
     elif name == "get_claim_grounding_policy":
@@ -390,6 +540,9 @@ def call_tool(params: dict[str, Any]) -> dict[str, Any]:
     else:
         raise ValueError(f"Unknown tool: {name}")
 
+    if session is not None and name in RECORDED_AGENTIC_TOOLS:
+        session.record_agentic_tool_call(name, arguments, payload)
+
     return {
         "content": [
             {
@@ -399,6 +552,195 @@ def call_tool(params: dict[str, Any]) -> dict[str, Any]:
         ],
         "isError": False,
     }
+
+
+def _summarize_tool_input(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    if tool_name == "extract_answer_claims":
+        return {"answer_length": len(str(arguments.get("answer", "")))}
+    if tool_name == "check_claim_support":
+        return {
+            "answer_length": len(str(arguments.get("answer", ""))),
+            "claim_count": len(arguments.get("claims", [])),
+            "segment_count": len(arguments.get("segments", [])),
+        }
+    return {
+        key: _summary_value(value)
+        for key, value in arguments.items()
+        if key not in {"answer", "claims", "segments"}
+    }
+
+
+def _summarize_tool_output(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if tool_name == "validate_citation":
+        return {
+            "citation_id": payload.get("citation_id"),
+            "source_tier": payload.get("source_tier"),
+            "citation_use": payload.get("citation_use"),
+            "status": payload.get("status"),
+            "citation_eligibility": payload.get("citation_eligibility"),
+            "identifier_resolution": payload.get("identifier_resolution"),
+        }
+    if tool_name == "extract_answer_claims":
+        claims = payload.get("claims", [])
+        return {
+            "claim_count": payload.get("count", len(claims)),
+            "claim_ids": [claim.get("claim_id") for claim in claims if isinstance(claim, dict)],
+        }
+    if tool_name == "check_claim_support":
+        items = payload.get("claim_support", [])
+        return {
+            "summary": payload.get("summary", {}),
+            "support_statuses": [
+                item.get("support_status") for item in items if isinstance(item, dict)
+            ],
+            "failure_reasons": payload.get("failure_reasons", []),
+        }
+    if tool_name == "legal_search":
+        coverage = payload.get("coverage", {})
+        return {
+            "normalized_query": payload.get("normalized_query"),
+            "coverage": coverage if isinstance(coverage, dict) else {},
+            "result_keys": sorted(payload.keys()),
+        }
+    if tool_name.startswith("exact_"):
+        return {
+            "citation_id": payload.get("citation_id"),
+            "source_id": payload.get("source_id"),
+            "source_tier": payload.get("source_tier"),
+            "status": payload.get("status"),
+            "citation_use": payload.get("citation_use"),
+        }
+    return {"result_keys": sorted(payload.keys())}
+
+
+def _summary_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return value if len(value) <= 120 else value[:117] + "..."
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    if isinstance(value, list):
+        return {"type": "array", "count": len(value)}
+    if isinstance(value, dict):
+        return {"type": "object", "keys": sorted(value.keys())}
+    return str(type(value).__name__)
+
+
+def _external_agentic_trace(state: AgenticRunState, answer: str) -> AgenticRunTrace:
+    evidence = _evidence_from_recorded_validations(state.validations)
+    coverage = _coverage_from_recorded_validations(state.validations)
+    answer_claims = [AnswerClaim.model_validate(item) for item in state.answer_claims]
+    claim_support = [ClaimSupport.model_validate(item) for item in state.claim_support]
+    semantic_summary = (
+        SemanticGroundingSummary.model_validate(state.semantic_summary)
+        if state.semantic_summary is not None
+        else SemanticGroundingSummary()
+    )
+    semantic_reasons = state.semantic_failure_reasons or claim_support_failure_reasons(
+        semantic_summary
+    )
+    trust_gate = _trust_gate_trace(
+        evidence=evidence,
+        coverage=coverage,
+        semantic_summary=semantic_summary,
+        semantic_reason_override=semantic_reasons,
+    )
+    if trust_gate.recommended_action != FinalAction.ANSWER.value:
+        semantic_summary.semantic_safe_to_present = False
+
+    final_action = trust_gate.recommended_action
+    answer_to_retain = (
+        answer if final_action == FinalAction.ANSWER.value and trust_gate.safe_to_present else None
+    )
+    final_citation_count = sum(1 for item in evidence if item.citation_use == "allow_final")
+    tool_names = [tool_call.tool_name for tool_call in state.tool_calls]
+
+    return AgenticRunTrace(
+        trace_kind="externally_driven",
+        query=state.query,
+        normalized_query=state.normalized_query,
+        steps=[
+            {"from": source, "to": target}
+            for source, target in zip(tool_names, tool_names[1:], strict=False)
+        ],
+        tool_calls=state.tool_calls,
+        decision_trace=[
+            {
+                "step": "citation_validation",
+                "final_citation_count": final_citation_count,
+                "candidate_count": len(evidence),
+            },
+            {
+                "step": "claim_support",
+                "claim_count": semantic_summary.claim_count,
+                "semantic_safe_to_present": semantic_summary.semantic_safe_to_present,
+                "failure_reasons": list(semantic_reasons),
+            },
+            {
+                "step": "trust_gate",
+                "safe_to_present": trust_gate.safe_to_present,
+                "failure_reasons": list(trust_gate.failure_reasons),
+                "final_action": final_action,
+                "answer_present": answer_to_retain is not None,
+            },
+        ],
+        evidence=evidence,
+        coverage=coverage,
+        answer_claims=answer_claims,
+        claim_support=claim_support,
+        semantic_grounding_summary=semantic_summary,
+        semantic_failure_reasons=list(semantic_reasons),
+        trust_gate=trust_gate,
+        final_action=final_action,
+        answer=answer_to_retain,
+        human_review_notes=_human_review_notes(final_action),
+    )
+
+
+def _evidence_from_recorded_validations(
+    validations: list[dict[str, Any]],
+) -> list[EvidenceRecord]:
+    evidence: list[EvidenceRecord] = []
+    for item in validations:
+        tool_input = item["input"]
+        output = item["output"]
+        citation_id = str(output["citation_id"])
+        evidence.append(
+            EvidenceRecord(
+                citation_id=citation_id,
+                source_id=str(tool_input.get("source_id") or citation_id),
+                source_tier=str(output["source_tier"]),
+                citation_use=str(output["citation_use"]),
+                title=tool_input.get("source_label"),
+                snippet=None,
+                official_url=output.get("official_url"),
+                validation_status=str(output["status"]),
+            )
+        )
+    return evidence
+
+
+def _coverage_from_recorded_validations(validations: list[dict[str, Any]]) -> dict[str, str]:
+    if not validations:
+        return {"has_laws": "absent", "has_judgments": "not_checked"}
+
+    material_types = {
+        item["input"].get("legal_material_type")
+        for item in validations
+        if item["input"].get("legal_material_type")
+    }
+    has_laws = (
+        "present"
+        if not material_types or "law" in material_types
+        else "not_checked"
+    )
+    has_judgments = "present" if "judgment" in material_types else "not_checked"
+    return {"has_laws": has_laws, "has_judgments": has_judgments}
+
+
+def _human_review_notes(final_action: str) -> list[str]:
+    if final_action == FinalAction.HUMAN_REVIEW_REQUIRED.value:
+        return ["Recorded tool run requires human legal review before presenting an answer."]
+    return []
 
 
 def _required_string(arguments: dict[str, Any], name: str) -> str:

@@ -32,8 +32,38 @@ def test_demo_trace_marks_harness_recorded_tool_calls_and_decisions():
 
     assert trace.tool_calls
     assert {tool_call.execution_mode for tool_call in trace.tool_calls} == {"harness_recorded"}
+    assert "trace_kind" not in trace.model_dump()
     assert trace.decision_trace[-1]["final_action"] == "answer"
     assert trace.decision_trace[-1]["safe_to_present"] is True
+
+
+def test_external_trace_schema_accepts_actual_tool_and_externally_driven_marker():
+    trace = AgenticRunTrace.model_validate(
+        {
+            "schema_version": "alr-tw.agentic_trace/v1",
+            "trace_kind": "externally_driven",
+            "query": "民法第184條 押金",
+            "tool_calls": [
+                {
+                    "tool_name": "validate_citation",
+                    "execution_mode": "actual_tool",
+                    "input_summary": {"citation_id": "official-demo-law-184"},
+                    "output_summary": {"citation_use": "allow_final"},
+                    "status": "success",
+                }
+            ],
+            "trust_gate": {
+                "safe_to_present": True,
+                "recommended_action": "answer",
+            },
+            "final_action": "answer",
+            "answer": "Synthetic answer.",
+        }
+    )
+
+    dumped = trace.model_dump()
+    assert dumped["trace_kind"] == "externally_driven"
+    assert dumped["tool_calls"][0]["execution_mode"] == "actual_tool"
 
 
 def test_non_answer_example_traces_do_not_include_answer_body():
