@@ -244,6 +244,7 @@ Minimum data recommendation:
 - [docs/TRACE_SCHEMA.md](docs/TRACE_SCHEMA.md): trace schema
 - [docs/VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md): validation report structure
 - [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md): release notes
+- [docs/V0_4_HARDENING_SUMMARY.md](docs/V0_4_HARDENING_SUMMARY.md): v0.4 public hardening summary
 - [docs/RELEASE_AUDIT_PROCEDURE.md](docs/RELEASE_AUDIT_PROCEDURE.md): public release audit procedure
 - [docs/DEPLOYMENT_STARTING_POINTS.md](docs/DEPLOYMENT_STARTING_POINTS.md): illustrative deployment starting points
 - [docs/PUBLIC_PRIVATE_BOUNDARY.md](docs/PUBLIC_PRIVATE_BOUNDARY.md): public repo and private runtime boundary
