@@ -15,7 +15,7 @@ from alr_tw.providers.official.judgments import (
 )
 from alr_tw.providers.official.judicial_site import JudicialSiteResponse
 
-JID = "TSDM,130,測訴,42,20410102,1"
+JID = "TSTV,130,測,42,20990102,1"
 
 
 def _detail_page(jid: str = JID, *, title: str = "臺灣示範地方法院刑事判決") -> str:
@@ -52,10 +52,10 @@ def _search_form() -> str:
     """
 
 
-def _result_frame(token: str = "fixture-token", count: int = 1) -> str:
+def _result_frame(query_handle: str = "fixture-handle", count: int = 1) -> str:
     return f"""
-    <a href="qryresultlst.aspx?ty=JUDBOOK&amp;q={token}">查詢結果<span class="badge">{count}</span></a>
-    <iframe name="iframe-data" src="qryresultlst.aspx?ty=JUDBOOK&amp;q={token}"></iframe>
+    <a href="qryresultlst.aspx?ty=JUDBOOK&amp;q={query_handle}">查詢結果<span class="badge">{count}</span></a>
+    <iframe name="iframe-data" src="qryresultlst.aspx?ty=JUDBOOK&amp;q={query_handle}"></iframe>
     """
 
 
@@ -116,7 +116,7 @@ def test_official_judgment_exact_lookup_creates_sectioned_website_snapshot() -> 
 
     assert transport.calls[0][0] == "GET"
     assert transport.calls[0][1].startswith(JUDGMENT_DATA_URL)
-    assert "id=TSDM%2C130%2C" in transport.calls[0][1]
+    assert "id=TSTV%2C130%2C" in transport.calls[0][1]
     assert result.status == ProviderResultStatus.FOUND
     assert source is not None and source.trust_status == TrustStatus.EVIDENCE_ELIGIBLE
     assert source.official_url.startswith(JUDGMENT_DATA_URL)
@@ -173,7 +173,7 @@ def test_official_judgment_page_schema_failure_is_not_not_found() -> None:
 
 
 def test_official_judgment_identifier_mismatch_fails_closed() -> None:
-    other = "TSDM,130,測訴,43,20410102,1"
+    other = "TSTV,130,測,43,20990102,1"
     provider = OfficialJudgmentProvider(
         FixtureSiteTransport([_response(_detail_page(other))])
     )
@@ -186,20 +186,23 @@ def test_official_judgment_identifier_mismatch_fails_closed() -> None:
 
 def test_jid_normalization_is_strict() -> None:
     assert OfficialJudgmentProvider.normalize_jid(f" {JID} ") == JID
-    assert OfficialJudgmentProvider.normalize_jid("TSDM,130,測訴,42,20410102") is None
+    assert OfficialJudgmentProvider.normalize_jid("TSTV,130,測,42,20990102") is None
     assert OfficialJudgmentProvider.normalize_jid("https://attacker.invalid/value") is None
 
 
 def test_formal_citation_resolves_then_downloads_official_html() -> None:
-    resolved_jid = "TPSV,130,測上,930,20410103,1"
-    detail = _detail_page(resolved_jid, title="最高法院 130 年度測上字第 930 號民事判決")
+    resolved_jid = "TSTV,130,測上,930,20990103,1"
+    detail = _detail_page(
+        resolved_jid,
+        title="臺灣示範地方法院 130 年度測上字第 930 號民事判決",
+    )
     transport = FixtureSiteTransport(
         [_response(_result_frame()), _response(_result_list(resolved_jid)), _response(detail)]
     )
     provider = OfficialJudgmentProvider(transport)
 
     result, source, _ = asyncio.run(
-        provider.exact_lookup("最高法院 130 年度測上字第 930 號民事判決")
+        provider.exact_lookup("臺灣示範地方法院 130 年度測上字第 930 號民事判決")
     )
 
     assert result.status == ProviderResultStatus.FOUND
@@ -209,8 +212,8 @@ def test_formal_citation_resolves_then_downloads_official_html() -> None:
 
 
 def test_ambiguous_formal_citation_fails_closed() -> None:
-    jid_v = "TPSV,130,測上,930,20410103,1"
-    jid_m = "TPSM,130,測上,930,20410104,1"
+    jid_v = "TSTV,130,測上,930,20990103,1"
+    jid_m = "TSTV,130,測上,930,20990104,2"
     transport = FixtureSiteTransport(
         [
             _response(_result_frame("all", count=2)),
@@ -220,12 +223,12 @@ def test_ambiguous_formal_citation_fails_closed() -> None:
     provider = OfficialJudgmentProvider(transport)
 
     result, source, evidence = asyncio.run(
-        provider.exact_lookup("最高法院130年度測上字第930號")
+        provider.exact_lookup("臺灣示範地方法院130年度測上字第930號")
     )
 
     assert result.status == ProviderResultStatus.ERROR
     assert result.error_code == ProviderErrorCode.AMBIGUOUS_FORMAL_CITATION
-    assert result.metadata["candidate_jids"] == [jid_m, jid_v]
+    assert result.metadata["candidate_jids"] == sorted([jid_m, jid_v])
     assert source is None and evidence == []
 
 
@@ -262,9 +265,9 @@ def test_keyword_search_posts_official_form_and_returns_unverified_candidates() 
 
 def test_search_hit_parser_stops_at_requested_candidate_cap() -> None:
     jids = (
-        "TSDM,130,測訴,41,20410101,1",
-        "TSDM,130,測訴,42,20410102,1",
-        "TSDM,130,測訴,43,20410103,1",
+        "TSTV,130,測,41,20990101,1",
+        "TSTV,130,測,42,20990102,1",
+        "TSTV,130,測,43,20990103,1",
     )
 
     hits = OfficialJudgmentProvider.parse_search_hits(_result_list(*jids), limit=2)

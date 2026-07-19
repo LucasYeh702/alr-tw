@@ -123,7 +123,7 @@ class TlrSemanticRecallProvider:
     def __init__(
         self,
         base_url: str = "https://tlr.dr-lawbot.com",
-        api_key: SecretStr | str | None = None,
+        credential: SecretStr | str | None = None,
         transport: TlrTransport | None = None,
         *,
         timeout: float = 12.0,
@@ -135,7 +135,11 @@ class TlrSemanticRecallProvider:
             raise ValueError("TLR_BASE_URL_INVALID")
         self.base_url = base_url.rstrip("/")
         self._api_key = (
-            api_key if isinstance(api_key, SecretStr) else SecretStr(api_key) if api_key else None
+            credential
+            if isinstance(credential, SecretStr)
+            else SecretStr(credential)
+            if credential
+            else None
         )
         self.transport = transport or HttpxTlrTransport()
         self.timeout = timeout

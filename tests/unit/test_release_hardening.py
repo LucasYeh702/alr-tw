@@ -109,6 +109,20 @@ def test_forbidden_checker_detects_large_text_secret_assignment(tmp_path: Path):
     assert "api_key" in result.stderr
 
 
+def test_public_guards_scan_untracked_files_in_git_worktree(tmp_path: Path):
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    candidate = tmp_path / "untracked.env"
+    secret_assignment = "api" + "_key = 'synthetic'"
+    candidate.write_text(f"{secret_assignment}\n", encoding="utf-8")
+
+    result = _run_forbidden_check(tmp_path)
+    public_boundary_violations = find_public_boundary_violations(tmp_path)
+
+    assert result.returncode == 1
+    assert "api_key" in result.stderr
+    assert any("api_key" in item for item in public_boundary_violations)
+
+
 def test_public_boundary_scans_large_text_instead_of_silently_skipping(tmp_path: Path):
     candidate = tmp_path / "large_public_doc.txt"
     secret_assignment = "to" + "ken = 'synthetic'"

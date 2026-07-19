@@ -61,7 +61,7 @@ class Settings(BaseModel):
         mode_value = env.get("ALR_TW_DATA_MODE", DataMode.SYNTHETIC.value)
         retention = parse_retention(env.get("ALR_TW_RETENTION", "24h"))
         storage_path = env.get("ALR_TW_STORAGE_PATH") or None
-        api_key = env.get("ALR_TW_TLR_API_KEY") or None
+        configured_key = env.get("ALR_TW_TLR_API_KEY") or None
         return cls.model_validate(
             {
                 "data_mode": mode_value,
@@ -70,7 +70,7 @@ class Settings(BaseModel):
                 "tlr_base_url": env.get(
                     "ALR_TW_TLR_BASE_URL", "https://tlr.dr-lawbot.com"
                 ),
-                "tlr_api_key": SecretStr(api_key) if api_key else None,
+                "tlr_api_key": SecretStr(configured_key) if configured_key else None,
             }
         )
 

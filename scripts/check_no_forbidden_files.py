@@ -68,7 +68,16 @@ def _iter_files(root: Path) -> list[Path]:
     if (root / ".git").exists():
         try:
             output = subprocess.check_output(
-                ["git", "-C", str(root), "ls-files", "-z"],
+                [
+                    "git",
+                    "-C",
+                    str(root),
+                    "ls-files",
+                    "-z",
+                    "--cached",
+                    "--others",
+                    "--exclude-standard",
+                ],
                 text=False,
             )
         except (OSError, subprocess.CalledProcessError):

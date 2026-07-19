@@ -146,7 +146,7 @@ def _empty_judgments() -> OfficialJudgmentProvider:
 
 
 class JudgmentFlowTransport:
-    jid = "DEMO,130,測訴,42,20410102,1"
+    jid = "DEMO,130,測,42,20990102,1"
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []

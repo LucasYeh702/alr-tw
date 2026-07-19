@@ -40,7 +40,7 @@ Observed result:
 
 - Ruff: passed.
 - Mypy: 88 source files checked, no issues.
-- Pytest: 226 passed.
+- Pytest: 227 passed.
 - Forbidden-file scan: passed.
 - Public/private boundary scan: passed.
 - Patch whitespace validation: passed.
@@ -58,8 +58,8 @@ Artifacts:
 
 | Artifact | Size | SHA-256 |
 | --- | ---: | --- |
-| `alr_tw-0.6.0-py3-none-any.whl` | 112 KiB | `506d48f083243b8512951adce1724b02ffe07956c8255216e3f27ce05ec95104` |
-| `alr_tw-0.6.0.tar.gz` | 88 KiB | `70eec8c6fc8df6179ad265d431fa0dd43d183f9ee8e80fa0b4edaba4e727adad` |
+| `alr_tw-0.6.0-py3-none-any.whl` | 113 KiB | `5db564d842f3fcaf2700d0faf224c7ee2dc788fe414afb8c121bfe0e9d2a4530` |
+| `alr_tw-0.6.0.tar.gz` | 88 KiB | `b086a5d5371ede6c37b324de282ce4c51fa452db52bc4b681db2f44889ee87ba` |
 
 Fresh-install checks:
 
@@ -86,9 +86,9 @@ Public, read-only smoke checks from the freshly installed wheel passed:
   `external_semantic_recall` / `external_candidate` records and no evidence IDs.
 - Judicial judgment health was `healthy`; a public, non-personal keyword query returned
   three `official_search_result` candidates.
-- `最高法院112年度台上字第930號民事判決` resolved unambiguously to
-  `TPSV,112,台上,930,20240103,1`, downloaded the official detail page, and produced 24
-  separately typed evidence spans. The source-tree live run took 445 ms and the packaged
+- A public Supreme Court civil citation resolved unambiguously to its canonical official
+  identifier, downloaded the official detail page, and produced 24 separately typed
+  evidence spans. The source-tree live run took 445 ms and the packaged
   wheel run took 927 ms on this network; source-tree health and keyword calls took 134 ms
   and 594 ms respectively. These are smoke timings, not benchmark guarantees.
 
