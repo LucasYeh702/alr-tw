@@ -1,14 +1,29 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 import json
+from pathlib import Path
 import sys
-from typing import Any, TextIO
+from typing import Any, TextIO, overload
 from uuid import uuid4
 
+from alr_tw import __version__
+from alr_tw.config import Settings, parse_retention
+from alr_tw.contracts.research import ResearchDepth
 from alr_tw.harness.constants import FinalAction, ToolExecutionMode, TrustFailureReason
 from alr_tw.harness.orchestrator import _trust_gate_trace
 from alr_tw.harness.trace_schema import AgenticRunTrace, EvidenceRecord, ToolCallTrace
+from alr_tw.providers.official import (
+    OfficialConstitutionalProvider,
+    OfficialJudgmentProvider,
+    OfficialLawProvider,
+)
+from alr_tw.providers.tlr import TlrSemanticRecallProvider
+from alr_tw.research.provider_executor import ProviderObligationExecutor, ProviderSet
+from alr_tw.research.service import ResearchService
+from alr_tw.storage.purge import PurgeService
+from alr_tw.storage.sqlite_store import SqliteStore
 from alr_tw.verification.claim_support import (
     AnswerClaim,
     ClaimSupport,
@@ -34,9 +49,14 @@ from ..legal_nlp.privacy import mask_sensitive_text
 from ..legal_nlp.query_normalizer import normalize_query
 
 SERVER_NAME = "alr-tw"
-SERVER_VERSION = "0.5.0"
-DEFAULT_PROTOCOL_VERSION = "2024-11-05"
-SUPPORTED_PROTOCOL_VERSIONS = {DEFAULT_PROTOCOL_VERSION}
+SERVER_VERSION = __version__
+DEFAULT_PROTOCOL_VERSION = "2025-11-25"
+SUPPORTED_PROTOCOL_VERSIONS = {
+    DEFAULT_PROTOCOL_VERSION,
+    "2025-06-18",
+    "2025-03-26",
+    "2024-11-05",
+}
 SOURCE_TIER_VALUES = {
     "official",
     "verified_cache",
@@ -54,6 +74,14 @@ RECORDED_AGENTIC_TOOLS = {
     "exact_constitutional_lookup",
     "extract_answer_claims",
     "check_claim_support",
+}
+V060_TOOLS = {
+    "research_legal_question",
+    "continue_legal_research",
+    "get_legal_research_state",
+    "lookup_legal_source",
+    "validate_legal_answer",
+    "purge_research_storage",
 }
 
 
@@ -96,11 +124,44 @@ def handle_message(message: dict[str, Any]) -> dict[str, Any] | None:
 
 
 class McpSession:
-    def __init__(self, *, ready: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        ready: bool = False,
+        research_service: ResearchService | None = None,
+    ) -> None:
         self._initialize_seen = ready
         self._ready = ready
         self._agentic_runs: dict[str, AgenticRunState] = {}
         self._active_agentic_run_id: str | None = None
+        self._research_service = research_service
+
+    def research_service(self) -> ResearchService:
+        if self._research_service is None:
+            settings = Settings.from_env()
+            root = settings.storage_path or Path.home() / ".cache" / "alr-tw"
+            store = SqliteStore(root)
+            if settings.data_mode.value == "synthetic":
+                self._research_service = ResearchService(store)
+            else:
+                providers = ProviderSet(
+                    laws=OfficialLawProvider(),
+                    constitutional=OfficialConstitutionalProvider(),
+                    judgments=OfficialJudgmentProvider(),
+                    tlr=(
+                        TlrSemanticRecallProvider(
+                            settings.tlr_base_url,
+                            settings.tlr_api_key,
+                        )
+                        if settings.external_query_enabled
+                        else None
+                    ),
+                )
+                self._research_service = ResearchService(
+                    store,
+                    ProviderObligationExecutor(store, providers),
+                )
+        return self._research_service
 
     def handle_message(self, message: dict[str, Any]) -> dict[str, Any] | None:
         if not isinstance(message, dict):
@@ -209,7 +270,7 @@ def initialize_result(params: dict[str, Any]) -> dict[str, Any]:
     if requested not in SUPPORTED_PROTOCOL_VERSIONS:
         raise ValueError(f"Unsupported protocol version: {requested}")
     return {
-        "protocolVersion": DEFAULT_PROTOCOL_VERSION,
+        "protocolVersion": requested,
         "serverInfo": {
             "name": SERVER_NAME,
             "version": SERVER_VERSION,
@@ -221,7 +282,7 @@ def initialize_result(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def tool_definitions() -> list[dict[str, Any]]:
-    return [
+    return _v060_tool_definitions() + [
         {
             "name": "agentic_legal_research",
             "description": (
@@ -440,6 +501,105 @@ def tool_definitions() -> list[dict[str, Any]]:
     ]
 
 
+def _v060_tool_definitions() -> list[dict[str, Any]]:
+    object_schema = {"type": "object", "additionalProperties": False}
+    return [
+        {
+            "name": "research_legal_question",
+            "description": "Create a server-owned legal research run without drafting an answer.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "constraints": {
+                        "type": "object",
+                        "properties": {
+                            "as_of_date": {"type": "string", "format": "date"},
+                            "research_depth": {
+                                "type": "string",
+                                "enum": ["quick", "standard", "deep"],
+                            },
+                            "include_counter_authority": {"type": "boolean"},
+                            "retention": {"type": "string"},
+                        },
+                        "additionalProperties": False,
+                    },
+                    "client_id": {"type": "string"},
+                    "request_id": {"type": "string"},
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "continue_legal_research",
+            "description": "Execute exactly one next server-owned research obligation.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "run_id": {"type": "string"},
+                    "operation_id": {"type": "string"},
+                    "request_id": {"type": "string"},
+                },
+                "required": ["run_id", "operation_id"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "get_legal_research_state",
+            "description": "Read research state without network calls or TTL extension.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"run_id": {"type": "string"}},
+                "required": ["run_id"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "lookup_legal_source",
+            "description": "Perform an exact legal source lookup; lookup alone does not verify a claim.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "run_id": {"type": "string"},
+                    "operation_id": {"type": "string"},
+                },
+                "required": ["text"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "validate_legal_answer",
+            "description": "Validate an answer only against server-owned run evidence.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "run_id": {"type": "string"},
+                    "answer_text": {"type": "string"},
+                    "operation_id": {"type": "string"},
+                    "request_id": {"type": "string"},
+                },
+                "required": ["run_id", "answer_text", "operation_id"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "purge_research_storage",
+            "description": "Synchronously purge one run or all ALR-TW managed research storage.",
+            "inputSchema": {
+                **object_schema,
+                "properties": {
+                    "scope": {"type": "string", "enum": ["run", "all"]},
+                    "run_id": {"type": "string"},
+                    "confirm": {"type": "boolean"},
+                },
+                "required": ["scope", "confirm"],
+            },
+        },
+    ]
+
+
 def call_tool(params: dict[str, Any], *, session: McpSession | None = None) -> dict[str, Any]:
     _reject_unexpected_keys(params, {"name", "arguments"})
     name = _required_string(params, "name")
@@ -447,7 +607,11 @@ def call_tool(params: dict[str, Any], *, session: McpSession | None = None) -> d
     if not isinstance(arguments, dict):
         raise ValueError("tool arguments must be an object")
 
-    if name == "begin_agentic_run":
+    if name in V060_TOOLS:
+        if session is None:
+            raise ValueError(f"{name} requires an MCP session")
+        payload = _call_v060_tool(name, arguments, session)
+    elif name == "begin_agentic_run":
         if session is None:
             raise ValueError("begin_agentic_run requires an MCP session")
         _reject_unexpected_keys(arguments, {"query"})
@@ -554,6 +718,93 @@ def call_tool(params: dict[str, Any], *, session: McpSession | None = None) -> d
         ],
         "isError": False,
     }
+
+
+def _call_v060_tool(
+    name: str,
+    arguments: dict[str, Any],
+    session: McpSession,
+) -> dict[str, Any]:
+    service = session.research_service()
+    if name == "research_legal_question":
+        _reject_unexpected_keys(arguments, {"query", "constraints", "client_id", "request_id"})
+        constraints = arguments.get("constraints") or {}
+        if not isinstance(constraints, dict):
+            raise ValueError("constraints must be an object")
+        _reject_unexpected_keys(
+            constraints,
+            {"as_of_date", "research_depth", "include_counter_authority", "retention"},
+        )
+        settings = Settings.from_env()
+        depth = ResearchDepth(str(constraints.get("research_depth", "standard")))
+        as_of_value = constraints.get("as_of_date")
+        if as_of_value is not None and not isinstance(as_of_value, str):
+            raise ValueError("as_of_date must be an ISO date string")
+        retention_value = constraints.get("retention", "24h")
+        if not isinstance(retention_value, str):
+            raise ValueError("retention must be a duration string")
+        include_counter = constraints.get("include_counter_authority", True)
+        if not isinstance(include_counter, bool):
+            raise ValueError("include_counter_authority must be a boolean")
+        ephemeral = retention_value.strip().lower() == "ephemeral"
+        run = service.create_run(
+            _required_string(arguments, "query"),
+            mode=settings.data_mode,
+            depth=depth,
+            include_counter_authority=include_counter,
+            ephemeral=ephemeral,
+            as_of_date=date.fromisoformat(as_of_value) if as_of_value else None,
+            retention_seconds=(86400 if ephemeral else parse_retention(retention_value)),
+        )
+        return {
+            "schema_version": "alr-tw.research-created/v1",
+            "run": run.model_dump(mode="json"),
+        }
+    if name == "continue_legal_research":
+        _reject_unexpected_keys(arguments, {"run_id", "operation_id", "request_id"})
+        return service.continue_run(
+            _required_string(arguments, "run_id"),
+            _required_string(arguments, "operation_id"),
+        )
+    if name == "get_legal_research_state":
+        _reject_unexpected_keys(arguments, {"run_id"})
+        return service.get_state(_required_string(arguments, "run_id"))
+    if name == "lookup_legal_source":
+        _reject_unexpected_keys(arguments, {"text", "run_id", "operation_id"})
+        run_value = arguments.get("run_id")
+        operation_value = arguments.get("operation_id")
+        if run_value is not None and not isinstance(run_value, str):
+            raise ValueError("run_id must be a string")
+        if operation_value is not None and not isinstance(operation_value, str):
+            raise ValueError("operation_id must be a string")
+        return service.lookup_source(
+            _required_string(arguments, "text"),
+            run_id=run_value,
+            operation_id=operation_value,
+        )
+    if name == "validate_legal_answer":
+        _reject_unexpected_keys(
+            arguments,
+            {"run_id", "answer_text", "operation_id", "request_id"},
+        )
+        return service.validate_answer(
+            _required_string(arguments, "run_id"),
+            _required_string(arguments, "answer_text"),
+            _required_string(arguments, "operation_id"),
+        )
+    if name == "purge_research_storage":
+        _reject_unexpected_keys(arguments, {"scope", "run_id", "confirm"})
+        scope = _required_string(arguments, "scope")
+        run_value = arguments.get("run_id")
+        if run_value is not None and not isinstance(run_value, str):
+            raise ValueError("run_id must be a string")
+        result = PurgeService(service.store).purge(
+            scope,
+            run_id=run_value,
+            confirmed=arguments.get("confirm") is True,
+        )
+        return result.model_dump(mode="json")
+    raise ValueError(f"Unknown v0.6 tool: {name}")
 
 
 def _summarize_tool_input(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -757,6 +1008,14 @@ def _required_string(arguments: dict[str, Any], name: str) -> str:
     if not value:
         raise ValueError(f"{name} is required")
     return value
+
+
+@overload
+def _optional_string(arguments: dict[str, Any], name: str, *, default: str) -> str: ...
+
+
+@overload
+def _optional_string(arguments: dict[str, Any], name: str, *, default: None) -> str | None: ...
 
 
 def _optional_string(arguments: dict[str, Any], name: str, *, default: str | None) -> str | None:

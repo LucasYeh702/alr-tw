@@ -1,5 +1,38 @@
 # ALR-TW Error Codes
 
+## v0.6 provider and research codes
+
+| Code | Meaning |
+|---|---|
+| `CONFIG_MODE_REQUIRED` | Live command 未明確選擇 `official_only`／`hybrid_verified` |
+| `INVALID_IDENTIFIER` | JID、正式裁判字號或憲法字號無法正規化 |
+| `AMBIGUOUS_FORMAL_CITATION` | 正式裁判字號對應多個官方 JID，需補民／刑事等類別 |
+| `OFFICIAL_SESSION_REQUIRED` | 某個可選官方來源需要 operator session；普通裁判網站主路徑不使用此碼 |
+| `OFFICIAL_SOURCE_UNAVAILABLE` | 官方網路或服務不可用；不是 not found |
+| `OFFICIAL_SOURCE_NOT_FOUND` | 官方完成精確查詢後不存在或已移除 |
+| `OFFICIAL_SCHEMA_CHANGED` | 官方結構與受支援 schema 不符 |
+| `OFFICIAL_PARSE_ERROR` | 回應存在但無法安全解析 |
+| `OFFICIAL_CONTENT_CONFLICT` | 官方結構化資料與官方頁面內容衝突 |
+| `TLR_UNAVAILABLE` | TLR timeout、HTTP 或 schema failure |
+| `SEMANTIC_RECALL_DEGRADED` | 外部召回失敗，effective mode 已降為 official-only |
+| `PRIVACY_EXTERNAL_QUERY_BLOCKED` | 查詢為 sensitive／uncertain，禁止送外部 |
+| `CALLER_ATTESTED_SOURCE` | Caller metadata 不能自我證明 final eligibility |
+| `RESEARCH_RUN_EXPIRED` | Run TTL 已到期 |
+| `RESEARCH_OBLIGATION_PENDING` | 尚未完成研究義務即要求 final validation |
+| `RESEARCH_RUN_NOT_FOUND` | Run 不存在、已過期清除或已 purge |
+| `HISTORICAL_LAW_VERSION_UNSUPPORTED` | 無法以本版資料可靠回答指定歷史時點 |
+| `ANSWER_CONTAINS_SENSITIVE_DATA` | Draft 含隱私規則判定的敏感資料 |
+| `SOURCE_STALE` | Source snapshot 已過期，不可作 final evidence |
+| `SOURCE_REVALIDATION_FAILED` | 過期來源的官方重新驗證失敗 |
+| `SOURCE_NOT_EVIDENCE_ELIGIBLE` | 查得來源仍只具候選或不可引用身分 |
+| `JUDGMENT_RECALL_INCOMPLETE` | 普通法院召回不完整 |
+| `PURGE_CONFIRMATION_REQUIRED` | 清除操作未收到明確確認 |
+| `PURGE_PARTIAL_FAILURE` | DB sidecar 或 temp artifact 未完整清除 |
+| `ANSWER_QUALIFIED` | 只能連同不可省略的限制文字展示 |
+| `ANSWER_BLOCKED` | 草稿不得展示，answer body 已移除 |
+
+Provider `ERROR`、`NOT_FOUND` 與 degraded／partial 必須分開。外部 outage 不得改寫成不存在；candidate-only 不得改寫成 evidence。
+
 | Code | Meaning | Recommended action |
 |---|---|---|
 | `NO_FINAL_CITATION` | No source qualified as final citation | refuse |

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Literal, cast
 
 from tw_legal_rag_mcp.legal_nlp.privacy import mask_sensitive_text
 from tw_legal_rag_mcp.legal_nlp.query_normalizer import normalize_query
@@ -20,7 +20,7 @@ from alr_tw.verification.claim_support import (
 )
 
 from .constants import FinalAction, ToolExecutionMode, TrustFailureReason
-from .execution_graph import StepKind, graph_as_dict
+from .execution_graph import TRANSITIONS, StepKind
 from .trace_schema import AgenticRunTrace, EvidenceRecord, ToolCallTrace, TrustGateTrace
 
 SCENARIOS = {
@@ -405,7 +405,10 @@ def _trust_gate_trace(
             "human_review_required": action == FinalAction.HUMAN_REVIEW_REQUIRED.value,
             "claim_support": semantic_summary.model_dump(),
         },
-        recommended_action=action,
+        recommended_action=cast(
+            Literal["answer", "refuse", "human_review_required"],
+            action,
+        ),
     )
 
 
@@ -459,8 +462,8 @@ def run_agentic_demo(
         query=public_query,
         normalized_query=normalized_query,
         steps=[
-            {"from": source, "to": target}
-            for source, target in graph_as_dict()["transitions"]
+            {"from": source.value, "to": target.value}
+            for source, target in TRANSITIONS
         ],
         tool_calls=[
             ToolCallTrace(

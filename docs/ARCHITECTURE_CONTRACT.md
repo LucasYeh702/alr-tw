@@ -1,5 +1,19 @@
 # Architecture Contract
 
+## v0.6 server-owned contract
+
+新整合應以 `alr_tw.contracts` 的 provider-neutral models、`ResearchService`、`ProviderObligationExecutor` 與 `SqliteStore` 為主。外部 agent 只能建立／推進 run 與提交 draft；不得提交 evidence span 讓 final validation 採信。
+
+```text
+ResearchRun -> ordered obligations -> ProviderResult
+            -> SourceRecord -> EvidenceSpan
+            -> server-owned final validation
+```
+
+`ProviderCandidate` 永遠不是 `EvidenceSpan`。官方即時內容只有在 provider 完成 origin、schema、content 與 freshness 檢查並由 server 儲存後，才能成為 `evidence_eligible`。Source identifier、hash、role 與 timestamp 不可由 MCP caller 自我認證。
+
+v0.5 以前的 `tw_legal_rag_mcp.contracts` 仍為 legacy synthetic contract，相容期間不得與 v0.6 server-owned records 混作同一 authority store。
+
 本文件說明使用者接入自己的法規、裁判、憲法法庭資料或其他合規資料源時，建議保留的資料流介面、來源驗證邊界與 trust gate 規則。本 repo 只示範可替換介面，不提供部署環境專屬的資料、索引、快取、切片策略、調校後的 production ranking 權重或私有評測集。
 
 ## Purpose

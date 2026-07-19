@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, TypedDict, cast
 
 from alr_tw.harness.trace_schema import (
     AgenticRunTrace,
@@ -12,7 +12,7 @@ from alr_tw.harness.constants import FinalAction, ToolExecutionMode
 
 from ..contracts import SyntheticOfficialAdapter, SyntheticRetriever, SourcePolicyCitationVerifier
 from ..legal_nlp.privacy import mask_sensitive_text
-from ..legal_nlp.query_understanding import understand_query
+from ..legal_nlp.query_understanding import QueryUnderstanding, understand_query
 from ..verification.answer_validation import answer_with_validation
 from ..verification.trust_gates import evaluate_trust_gate
 
@@ -21,8 +21,22 @@ def _trace_step(tool: str, decision: str, details: dict[str, Any]) -> dict[str, 
     return {"tool": tool, "decision": decision, "details": details}
 
 
-def _public_understanding(understanding: dict[str, object]) -> dict[str, object]:
-    return {key: value for key, value in understanding.items() if key != "raw_query"}
+class PublicQueryUnderstanding(TypedDict):
+    masked_query: str
+    normalized_query: str
+    citations: list[dict[str, str]]
+    issue_tags: list[str]
+    intent: str
+
+
+def _public_understanding(understanding: QueryUnderstanding) -> PublicQueryUnderstanding:
+    return {
+        "masked_query": understanding["masked_query"],
+        "normalized_query": understanding["normalized_query"],
+        "citations": understanding["citations"],
+        "issue_tags": understanding["issue_tags"],
+        "intent": understanding["intent"],
+    }
 
 
 def _tool_call(tool_trace: dict[str, Any]) -> ToolCallTrace:
@@ -100,7 +114,7 @@ def run_agentic_legal_research(query: str) -> dict[str, Any]:
     )
 
     answer = "Synthetic answer guarded by official-grounded citation validation."
-    coverage = {
+    coverage: dict[str, str | dict[str, object]] = {
         "has_laws": "present" if candidates else "absent",
         "has_judgments": "not_checked",
     }
@@ -141,7 +155,11 @@ def run_agentic_legal_research(query: str) -> dict[str, Any]:
         )
         for candidate, verification in zip(candidates, verifications, strict=True)
     ]
-    final_action = str(trust_gate["recommended_action"])
+    final_action = cast(
+        Literal["answer", "refuse", "human_review_required"],
+        trust_gate["recommended_action"],
+    )
+    failure_reasons = cast(list[str], trust_gate["failure_reasons"])
     decision_trace = [
         {
             "step": "citation_validation",
@@ -151,7 +169,7 @@ def run_agentic_legal_research(query: str) -> dict[str, Any]:
         {
             "step": "trust_gate",
             "safe_to_present": bool(trust_gate["safe_to_present"]),
-            "failure_reasons": list(trust_gate["failure_reasons"]),
+            "failure_reasons": failure_reasons,
             "final_action": final_action,
             "answer_present": final_action == FinalAction.ANSWER.value,
         },
@@ -171,11 +189,11 @@ def run_agentic_legal_research(query: str) -> dict[str, Any]:
         coverage=coverage,
         trust_gate=TrustGateTrace(
             safe_to_present=bool(trust_gate["safe_to_present"]),
-            failure_reasons=list(trust_gate["failure_reasons"]),
+            failure_reasons=failure_reasons,
             validation_summary=dict(wrapped_answer["validation_summary"]),
-            recommended_action=final_action,  # type: ignore[arg-type]
+            recommended_action=final_action,
         ),
-        final_action=final_action,  # type: ignore[arg-type]
+        final_action=final_action,
         answer=answer if final_action == "answer" else None,
     )
     return trace.model_dump()

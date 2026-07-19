@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TypedDict
+
 from .citation_parser import (
     CONSTITUTIONAL_RE,
     INTERPRETATION_RE,
@@ -16,6 +18,15 @@ ISSUE_KEYWORDS = {
     "tort": ("侵權", "損害賠償", "184"),
     "labor": ("資遣", "勞基法", "工資"),
 }
+
+
+class QueryUnderstanding(TypedDict):
+    raw_query: str
+    masked_query: str
+    normalized_query: str
+    citations: list[dict[str, str]]
+    issue_tags: list[str]
+    intent: str
 
 
 def _find_citations(text: str) -> list[dict[str, str]]:
@@ -53,7 +64,7 @@ def _intent(text: str, citations: list[dict[str, str]], tags: list[str]) -> str:
     return "general_legal_research"
 
 
-def understand_query(query: str) -> dict[str, object]:
+def understand_query(query: str) -> QueryUnderstanding:
     # Names are retained in this synthetic demo because legal issue extraction may need party roles.
     # Production external-recall calls should choose a stricter masking profile.
     masked = mask_sensitive_text(query, mask_names=False)

@@ -5,7 +5,7 @@ from enum import Enum
 import re
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ClaimSupportLevel(str, Enum):
@@ -73,8 +73,12 @@ class SupportType(str, Enum):
     INDIRECT_SUPPORT = "indirect_support"
 
 
-class LegalSegment(BaseModel):
-    schema: str = "alr-tw.legal-segment/v1"
+class ClaimContractModel(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, serialize_by_alias=True)
+
+
+class LegalSegment(ClaimContractModel):
+    schema_version: str = Field(default="alr-tw.legal-segment/v1", alias="schema")
     segment_id: str
     source_id: str
     citation_id: str
@@ -89,8 +93,8 @@ class LegalSegment(BaseModel):
     verified_at: str | None = None
 
 
-class AnswerClaim(BaseModel):
-    schema: str = "alr-tw.answer-claim/v1"
+class AnswerClaim(ClaimContractModel):
+    schema_version: str = Field(default="alr-tw.answer-claim/v1", alias="schema")
     claim_id: str
     claim_text: str
     claim_type: ClaimType | str
@@ -98,7 +102,7 @@ class AnswerClaim(BaseModel):
     importance: Importance | str = Importance.CORE
 
 
-class ClaimSupportingSegment(BaseModel):
+class ClaimSupportingSegment(ClaimContractModel):
     segment_id: str
     support_type: SupportType
     section_role: SectionRole | str
@@ -106,8 +110,8 @@ class ClaimSupportingSegment(BaseModel):
     span_end: int
 
 
-class ClaimSupport(BaseModel):
-    schema: str = "alr-tw.claim-support/v1"
+class ClaimSupport(ClaimContractModel):
+    schema_version: str = Field(default="alr-tw.claim-support/v1", alias="schema")
     claim_id: str
     support_status: SupportStatus
     supporting_segments: list[ClaimSupportingSegment] = Field(default_factory=list)
@@ -116,8 +120,11 @@ class ClaimSupport(BaseModel):
     support_strength_note: str | None = None
 
 
-class SemanticGroundingSummary(BaseModel):
-    schema: str = "alr-tw.semantic-grounding-summary/v1"
+class SemanticGroundingSummary(ClaimContractModel):
+    schema_version: str = Field(
+        default="alr-tw.semantic-grounding-summary/v1",
+        alias="schema",
+    )
     claim_count: int = 0
     supported_count: int = 0
     partially_supported_count: int = 0
@@ -284,10 +291,24 @@ def _check_single_claim_support(
         if claim.claim_type == ClaimType.COURT_VIEW and segment.section_role in {
             SectionRole.PARTY_ARGUMENT,
             SectionRole.FACTS,
+            SectionRole.CONCURRING_OPINION,
+            SectionRole.DISSENTING_OPINION,
         }:
             role_mismatch = True
             if "法院" in claim.claim_text and "認為" in claim.claim_text:
-                risk_flags.append("party_argument_as_court_view")
+                risk_flags.append(
+                    "separate_opinion_as_court_view"
+                    if segment.section_role
+                    in {SectionRole.CONCURRING_OPINION, SectionRole.DISSENTING_OPINION}
+                    else "party_argument_as_court_view"
+                )
+
+        if segment.section_role == SectionRole.CONCURRING_OPINION and "協同意見" not in claim.claim_text:
+            role_mismatch = True
+            risk_flags.append("unlabelled_separate_opinion")
+        if segment.section_role == SectionRole.DISSENTING_OPINION and "不同意見" not in claim.claim_text:
+            role_mismatch = True
+            risk_flags.append("unlabelled_separate_opinion")
 
         if segment.section_role in {SectionRole.UNKNOWN}:
             risk_flags.append("section_role_unknown")

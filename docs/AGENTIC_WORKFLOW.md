@@ -1,5 +1,20 @@
 # ALR-TW Agentic Workflow
 
+This repository does not ship an LLM or agent implementation. The external client supplies planning and drafting; the server owns research state and trust decisions.
+
+## v0.6 server-owned workflow
+
+1. `research_legal_question` 建立 run 與固定順序 obligations，不生成答案。
+2. Agent 重複呼叫 `continue_legal_research`；每次只執行一個 obligation，並使用唯一 `operation_id`。
+3. `get_legal_research_state` 唯讀觀察，不觸發 provider 或延長 TTL。
+4. `lookup_legal_source` 只做精確來源查詢；帶 `run_id` 時 server 才把官方 snapshot 連結到該 run。
+5. 非 final obligations 完成後，run 進入 `ready_for_draft`。
+6. Agent 起草並呼叫 `validate_legal_answer`；server 只使用 run-owned、fresh、eligible evidence。
+7. 只有 `validated`／`qualified` 可展示答案；`blocked` 必須丟棄草稿。
+8. `ephemeral` run 在 validation 回傳後同步 purge；其他 run 依 TTL 或明確 purge 清除。
+
+Agent 不能自行把 obligation 標完成、加入 evidence、改 source role、延長 TTL 或宣告 final decision。
+
 ALR-TW is an MCP harness that constrains an external MCP client and records and
 gates externally driven tool runs. This repository does not ship an LLM or agent implementation.
 Planning, tool selection, and natural-language reasoning are supplied by the

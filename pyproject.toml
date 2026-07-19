@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alr-tw"
-version = "0.5.0"
+version = "0.6.0"
 description = "Agentic Legal RAG / MCP trust harness for Taiwan law."
 requires-python = ">=3.11"
 dependencies = [
@@ -13,6 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
+alr-tw = "alr_tw.cli:main"
 alr-tw-demo = "alr_tw.harness.orchestrator:main"
 alr-tw-boundary-check = "alr_tw.scripts.check_public_boundary:main"
 alr-tw-mcp = "alr_tw.mcp.server:main"
@@ -26,6 +27,22 @@ dev = [
 ]
 mcp = [
   "mcp>=1.0",
+]
+live = [
+  "httpx>=0.27",
+  "beautifulsoup4>=4.12",
+  "lxml>=5",
+  "platformdirs>=4",
+]
+tlr = [
+  "httpx>=0.27",
+]
+all = [
+  "mcp>=1.0",
+  "httpx>=0.27",
+  "beautifulsoup4>=4.12",
+  "lxml>=5",
+  "platformdirs>=4",
 ]
 
 [tool.pytest.ini_options]

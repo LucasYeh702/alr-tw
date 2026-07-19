@@ -1,102 +1,57 @@
 # Data Policy
 
-本文件定義公開 reference repo 的資料邊界、來源信任分級與正式環境導入原則。
+本文件定義 ALR-TW v0.6.0 公開預覽的資料流、保存與來源信任邊界。
 
-## Scope
+## 資料模式與外部傳輸
 
-本 repo 公開的是台灣法律 RAG / MCP 系統的參考框架：工具介面、source trust policy、citation validation、trust gate、synthetic demo 與可替換的資料流介面。
+- `synthetic`：預設，完全離線；
+- `official_only`：只把精確查詢送到法務部、司法院或憲法法庭官方端點；
+- `hybrid_verified`：先做本地 privacy gate，再把 `safe`／`redacted_safe` 的抽象查詢送到 TLR。
 
-本 repo 不內建 production legal datasets，也不替使用者下載或重散布官方全文資料。使用者應依自己的資料來源、硬體效能、部署成本、精度需求與合規政策，自行建置資料、索引、快取與參數設定。
+不得送往 TLR 或寫入公開 issue／fixture 的資料：個人秘密、身分資訊、未公開案件完整事實、私有契約、內部代稱、訴訟策略、證據弱點與談判底線。規則無法確定時視為 `uncertain`，降級 `official_only`。
+
+外部 provider 可能依其政策保存 access logs。ALR-TW 的本機 purge 無法刪除對方已接收的資料。啟用前應查閱外部服務當時有效的隱私與日誌政策。
 
 ## Source tiers
 
-| Tier | 說明 | 可作 final citation |
+| Tier | 說明 | Final citation |
 |---|---|---|
-| official | 官方來源，例如法務部、司法院、憲法法庭、主管機關網站或 API | Yes |
-| verified_cache | 已回官方來源核對，具 official URL / hash / verified_at 的本地快取 | Conditional |
-| staging | HF 或其他外部資料集，尚未經官方核對 | No |
-| external_semantic_recall | TLR 或外部語意召回層 | No |
-| synthetic | demo / test fixture | No，僅 demo |
-| unknown | 無法確認來源或來源欄位不足 | No |
+| `official` | 由 ALR-TW 官方 provider 取得並固定的內容 | Yes, fresh and eligible |
+| `verified_cache` | 有官方 lineage、hash、verified time，或 resolver-backed JID hash match | Conditional |
+| `staging` | 尚未正式驗證的匯入資料 | No |
+| `external_semantic_recall` | TLR 等外部召回候選 | No |
+| `synthetic` | demo／test fixture | No |
+| `unknown` | 來源不明或 metadata 不足 | No |
 
-## Data-flow contract, not deployment parameters
+呼叫端提交的 `official_url`、`official_hash`、`verified_at` 或 `source_tier` 不是證明。只有 server-owned provider／resolver 可以完成 evidence promotion。
 
-公開版 repo 會展示使用者導入資料時建議保留的資料流介面，例如：
+## Managed storage
 
-```text
-source_manifest
--> adapter_result
--> retrieval_candidate
--> citation_verification
--> final_citations
--> trust_gate
--> answer_validation
-```
+短期 SQLite 可保存 research run、obligation、idempotent operation result、source snapshot、evidence span、candidate 與 TTL cache metadata。預設 retention `24h`、上限 `7d`；`ephemeral` run 在 final validation 後同步清除。
 
-但公開版不固定下列 deployment-specific tuning details：
+不得持久化 TLR API key 或帳號密碼。普通裁判網站路徑不需要 API token。Trace 與 doctor 只回傳非敏感設定狀態，不回秘密值。
 
-- chunk size
-- overlap
-- embedding model
-- vector dimension
-- HNSW or vector index parameters
-- SQLite FTS settings
-- tuned production ranking weights
-- private evaluation holdouts
-- production cache layout
+## Official change and removal
 
-這不是缺漏，而是為了保留使用者依資料類型、硬體效能、更新頻率、精度需求、儲存成本與合規政策自行調整的彈性。repo 內含 demo ranking formula 與通用預設（例如 RRF、source-tier 分數），僅供展示資料流與測試契約，不代表任何 production ranking 配置。完整資料流說明請見 `docs/ARCHITECTURE_CONTRACT.md`。
+- 法規結構化內容與官方頁面衝突：標記 verification failure，不作 final evidence；
+- source 到期：重新驗證前不可作 claim support；
+- 司法院回覆裁判已移除／不公開：回傳 `removal_required`，managed copy 應同步移除；
+- 網路失敗、官方拒絕、schema 改變與 not found 必須分開；
+- 本版不保證完整歷史條文，不能把現行法冒充過去時點的法律。
 
-## Promotion rule
+## Repository boundary
 
-任何 staging row 要進 production，必須滿足：
+不得 commit：
 
-- official source 可查
-- official id 可對應
-- official text 可比對
-- official hash 一致
-- metadata 差異可解釋
-- promotion manifest 記錄
-- rollback 可用
+- 官方全文下載、裁判 SQLite／vector shards、TLR response cache；
+- 真實使用者 query、answer、trace、log 或私有 eval；
+- credentials、tokens、private endpoints、local sensitive paths；
+- 未匿名化案件事實或受保密義務保護的內容。
 
-## Rejection rule
+Repo 只保留 source/provider contracts、public-safe code、synthetic fixtures、tests 與文件。部署者應自行確認官方授權、個資法、律師保密義務、資料保存與移除規則。
 
-以下資料不得進 current production index：
+Repo 內的示範 ranking 公式與預設僅用於契約測試，不代表 production ranking 權重、embedding 或 index 設定。
 
-- abandon_note 非空
-- category = 廢止法規
-- official_hash mismatch
-- official_url 無法核對
-- official_not_found
-- TLR-only source
-- HF-only source
-- source tier unknown
-- candidate-only source 被要求作 final citation
+## 不保證事項
 
-## Repository rule
-
-本 repo 不散布 production legal datasets。所有 demo 使用 synthetic data。
-
-不得 commit 下列內容：
-
-- government open-data downloads
-- judgment SQLite shards
-- law Chroma databases
-- vector indexes
-- official full-text caches
-- TLR response caches
-- HF verified full datasets
-- real user query logs
-- complete proprietary thesauri
-- private gold evaluation holdouts
-- credentials, tokens, private endpoints, or local sensitive paths
-
-## User configuration rule
-
-正式導入時，使用者可以自行選擇本地索引、外部語意召回、混合檢索或企業內部資料接入方式；但無論檢索層如何配置，都應保留本 repo 的核心邊界：
-
-- retrieval candidate 不是 final citation
-- external semantic recall 只能作 candidate recall
-- official 或 verified_cache 才能成為 final citation 候選
-- 沒有 final citation 時，trust gate 應 fail closed
-- 已刪除、撤回、異動或不可公開資料應有降級、移除或停止散布機制
+ALR-TW 不保證任何來源完整、正確、即時、持續可用或適合特定個案。TLR candidate、官方即時頁面與 provider snapshot 都不能取代專業法律判斷、完整卷證及人工核對。

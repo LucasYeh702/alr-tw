@@ -50,7 +50,7 @@ def test_external_agent_boundary_is_explicit_in_public_docs():
     acceptance = (REPO_ROOT / "docs/AGENTIC_HARNESS_ACCEPTANCE.md").read_text(
         encoding="utf-8"
     )
-    assert "an LLM or agent implementation shipped in this repo" in acceptance
+    assert "本版不宣稱提供 LLM" in acceptance
 
 
 def test_ranking_docs_and_modules_mark_demo_parameters_as_illustrative():
@@ -245,7 +245,10 @@ def test_current_public_tree_has_no_domain_guard_false_positives():
     assert find_public_boundary_violations(REPO_ROOT) == []
 
 
-def test_public_docs_keep_readme_mirrors_in_sync():
-    assert (REPO_ROOT / "README.md").read_text(encoding="utf-8") == (
-        REPO_ROOT / "README.zh-TW.md"
-    ).read_text(encoding="utf-8")
+def test_public_readmes_share_v060_safety_claims():
+    for relative in ("README.md", "README.zh-TW.md"):
+        text = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        assert "v0.6.0" in text
+        assert "本 repo 不包含 LLM，也不包含 agent 實作。" in text
+        assert "TLR" in text and "candidate" in text
+        assert "blocked" in text and "answer body" in text

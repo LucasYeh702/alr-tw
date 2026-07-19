@@ -1,98 +1,79 @@
-# 公開版發布審核規程（Release Audit Procedure）
+# v0.6 公開版發布審核規程
 
-本規程定義 ALR-TW 公開 repo 在發布、變更可見性或合併資料相關變更前，必須執行的完整審核步驟。它擴充 `SECURITY.md` 的 Release Checks 與 `docs/AGENTIC_HARNESS_ACCEPTANCE.md` 的 release evidence，把散落的檢查整合成一份可重複執行、可留紀錄的規程。
+原則：fail closed。程式 regression、公開邊界、build artifact 或 live dependency 狀態必須分開記錄；外部服務暫時不可用不應被掩飾，也不應直接誤判為程式 regression。
 
-原則：**fail closed**。任何一步無法確認，就延後發布；寧可不發布，不可帶疑慮發布。
-
-## 適用時機
-
-必須完整執行：
-
-- 建立 release tag 前
-- 變更 repository visibility 前（例如 private 轉 public）
-- 匯入大量變更或歷史（squash、subtree、大型 rebase）後
-- 接受任何涉及 fixture、demo data、examples 的外部 PR 前
-
-建議執行（可只跑 A、C、D）：
-
-- 每次合併回 main 後
-
-## A. 工作樹審核
+## A. 工作樹與公開邊界
 
 ```bash
 git status --short --branch
+git diff --check
 git ls-files | sort
 python3 scripts/check_no_forbidden_files.py
 python3 scripts/check_public_boundary.py
-uv run --extra dev ruff check .
-uv run --extra dev pytest
-uv run --extra dev alr-tw-demo
-uv run --extra dev python examples/agentic_mcp_client_demo.py
 ```
 
-檢核點：
+逐筆檢查未追蹤與修改檔。Repo 不得包含 real query／answer／trace、官方全文、SQLite／vector shards、TLR response cache、credential、private endpoint、local sensitive path 或未匿名化案件事實。Official endpoint constants 與合成 fixture 中必要的 URL 例外必須可由程式用途解釋。
 
-- `git status` 乾淨：無未預期的 modified 或 untracked 檔案。`ASK_YOUR_AI_AGENT_FULL_RAG.zh-TW.md` 依規格維持 untracked 且 excluded，除非另行明確核准。
-- `git ls-files` 逐行掃過一遍：不應出現資料庫、壓縮包、log、cache、非預期的大檔或非 UTF-8 檔。
-- 兩支守門腳本與全部測試通過。
-
-## B. Git 歷史審核
-
-工作樹乾淨不代表歷史安全。以下每項都要看：
+## B. 靜態檢查與完整回歸
 
 ```bash
-# 曾被刪除的檔案（刪掉不等於離開歷史）
-git log --all --diff-filter=D --name-only --pretty=format: | sort -u
-
-# 作者身分：不得出現個人機器主機名、內網網域或非預期信箱
-git log --all --format='%an %ae' | sort -u
-
-# 歷史內容掃描（首次公開或 visibility change 時必跑全歷史）
-gitleaks detect --source . --log-opts="--all"
+uv run ruff check .
+uv run mypy src
+uv run pytest -q
 ```
 
-檢核點：
+至少覆蓋：20+ v0.6 scenarios、legacy tool regression、caller-attested source rejection、candidate-only blocking、role mismatch、historical-law block、source expiry、privacy downgrade、idempotency、TTL、WAL/SHM/temp purge。
 
-- 曾刪除檔案清單中不得有任何真實資料、私有模組或憑證類檔名；若有，該歷史**不得發布**，需以全新乾淨歷史重建（本 repo 即以獨立首發 commit 建立，與任何私有開發歷史無共同祖先——維持這個做法）。
-- 作者信箱只允許 GitHub noreply 或已核准的公開信箱。
-- gitleaks（或等效工具）無真實命中；對守門腳本自身 pattern 定義的誤報要逐筆確認為誤報。
+## C. Packaging 與 base-install smoke
 
-## C. Fixture 合成性審核
+```bash
+uv build
+python -m zipfile -l dist/alr_tw-0.6.0-py3-none-any.whl
+```
 
-「synthetic only」是本 repo 的核心保證，逐檔檢視 `demo_data/`、`examples/agentic_runs/`、`examples/reports/`、測試 fixture：
+在新的 virtual environment 安裝 wheel：
 
-- 裁判 id 必須落在合成命名空間：`DEMO` 前綴、`TSTV` 法院碼、字別「測」，或其他明確文件化的合成 fixture 命名；真實形狀且不在合成命名空間內者不得出現。
-- 所有 URL 必須是 `example.test` 或其他保留網域；不得出現任何真實官方網域的完整可解析連結（文件中描述官方資料來源時使用文字名稱，不放深層連結）。
-- 不得出現：真實形狀的裁判字號（六段逗號格式而不在合成命名空間內）、身分證樣式、真實當事人姓名、真實案件事實。
-- 新增 fixture 的 PR 必須在描述中聲明資料為合成，reviewer 逐筆抽查。
+- base install 不應強迫安裝 browser 或 live provider dependencies；
+- `python -c 'import alr_tw, tw_legal_rag_mcp'` 成功且版本為 `0.6.0`；
+- `alr-tw doctor` 在 synthetic default 成功；
+- synthetic MCP initialize／tools/list 成功；
+- live extra 可安裝，沒有把秘密包進 artifact。
 
-## D. 宣稱一致性審核
+## D. MCP smoke
 
-對照文件與程式，確認「說的沒有大於做的」：
+以 stdio 驗證：
 
-| 檢核點 | 依據 |
-|---|---|
-| README 與 AGENTIC_WORKFLOW 含「本 repo 不含 LLM / agent，agent 角色由外部呼叫端供給」聲明 | README / AGENTIC_WORKFLOW |
-| 不出現「no ranking weights」式絕對句；demo 公式標示為 illustrative | DATA_POLICY / ARCHITECTURE_CONTRACT |
-| THREAT_MODEL 與 TRUST_MODEL 可分辨「repo 已強制」與「部署者責任」 | THREAT_MODEL / TRUST_MODEL |
-| `docs/AGENTIC_HARNESS_ACCEPTANCE.md` 的 Not Claimed 清單沒有被新文件或 README 措辭違反 | ACCEPTANCE |
-| 新增 MCP tool 或 schema 都已文件化且有測試 | v0.2.1 F5 / F7 |
+- current protocol `2025-11-25`；
+- legacy supported protocol `2024-11-05`；
+- unsupported protocol fail closed；
+- tools/list 包含六個 v0.6 高階 tools；
+- synthetic run 可推進到 ready-for-draft，沒有 evidence 時 final validation blocked 且 answer body 為 null；
+- MCP purge 與 CLI purge parity。
 
-## E. 閘門預設審核
+可用 MCP Inspector 作額外驗證，但它不是 unit/integration tests 的替代品。
 
-任何觸及 `verification/`（source policy、citation validator、trust gates）的變更：
+## E. Optional live smoke
 
-- **預設行為只能變嚴，不能變鬆。** 任何鬆綁（新的可過閘路徑、新的替代欄位）必須是顯式 opt-in、預設 OFF，並有 fail-closed 測試證明預設路徑行為不變。
-- 自我宣告的 metadata（呼叫端傳入的字串）不得單獨成為 allow_final 的充分條件；必須有 resolver 或等效驗證步驟。
-- 對每個新增的過閘路徑，補一條「捏造輸入必須被拒」的負向測試。
+只用公開、非個案、無個資的測試詞，分開記錄：
 
-## F. 發布操作
+- 一條中央法規；
+- 一件憲法裁判；
+- 一次普通裁判關鍵字搜尋、正式字號解析 JID 與官方全文下載；
+- 一次 TLR health 與安全 query；
+- 一次官方 unavailable／WAF-blocked／not-found 分類。
 
-- 發布用的 clone 只掛公開 repository 的 remote 與 refs；不得在同一個 clone 內混掛任何含未公開歷史的 remote。禁止使用 `git push --all` 與 `git push --mirror`，一律顯式推 `main` 與 tag。
-- tag 前重跑 A 節全部指令。
-- release notes 記錄本規程的執行結果（執行日期、執行人、B 節工具版本、發現與處置）。
+普通裁判 live smoke 直接連線 `judgment.judicial.gov.tw`，不需要 API token；報告不得保存真實敏感搜尋詞或判決全文。
 
-## 例外處理
+## F. 文件與宣稱
 
-- 發現疑似真實資料、密鑰或私有路徑：**不開公開 issue**，依 `SECURITY.md` 的私下回報路徑處理；已推送者視同外洩，撤下並重建歷史，不以「後續 commit 刪除」了事。
-- 對任何一步的判斷有疑慮：延後發布，先解決疑慮。
+- README 三語、Architecture、Data Policy、Security、TLR、Official Providers、Storage/Purge、Tool Contract、Error Codes、Threat Model 與 Changelog 與程式一致；
+- 清楚揭露 `hybrid_verified` 將 privacy-screened query 送到 TLR；
+- TLR 明確是 candidate-only，不是 final citation；
+- 公開預覽限制、司法院網站依賴、WAF failure 與 purge 限制有揭露；
+- 不宣稱完整歷史法規、全域裁判召回、完整審級關係、法律意見或 production readiness。
+
+## G. Git 歷史與發布操作
+
+首次公開、visibility change 或大量 history import 時，另跑全歷史 secret scan（例如 gitleaks）並檢查刪除檔與作者資訊。發布 clone 不得混掛 private history remote；不要使用 `git push --all` 或 `--mirror`。
+
+Tag 前重新執行 A–F，並在 release report 記錄日期、commit、工具版本、tests count、live dependency 狀態、已知限制與任何未執行項目。未經使用者明確要求，不由自動化自行 commit、push、tag 或發布。

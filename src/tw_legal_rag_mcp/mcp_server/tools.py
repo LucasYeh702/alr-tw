@@ -62,7 +62,12 @@ def validate_citation_tool(
             official_hash,
             SyntheticIdentifierResolver(),
         ).value
-    return validate_citation(citation, require_final=True, config=config)
+    return validate_citation(
+        citation,
+        require_final=True,
+        config=config,
+        caller_controlled=True,
+    )
 
 
 def exact_law_lookup_tool(title: str, article_no: str) -> dict:

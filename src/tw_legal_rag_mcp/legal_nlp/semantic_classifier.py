@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 
 LABEL_RULES = {
     "lease_deposit": ("出租人", "房東", "押金", "擔保金"),
@@ -26,7 +28,7 @@ def shadow_annotate(text: str) -> dict[str, object]:
 
 
 def overlay_predictions(
-    *, base_result: dict[str, object], predictions: list[dict[str, object]]
+    *, base_result: Mapping[str, object], predictions: list[dict[str, object]]
 ) -> dict[str, object]:
     result = dict(base_result)
     result["classifier_overlay"] = predictions

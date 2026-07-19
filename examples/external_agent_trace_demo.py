@@ -7,11 +7,22 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from tw_legal_rag_mcp.verification.identifier_resolver import (
+    SYNTHETIC_OFFICIAL_RECORDS,
+    compute_content_hash,
+)
+from tw_legal_rag_mcp.verification.source_policy import (
+    IDENTIFIER_BACKED_VERIFIED_CACHE_ENV,
+)
+
 ROOT = Path(__file__).resolve().parents[1]
+DEMO_JID = "DEMO,113,測,1,20990101,1"
+DEMO_HASH = compute_content_hash(SYNTHETIC_OFFICIAL_RECORDS[DEMO_JID])
 
 
 def _server_env() -> dict[str, str]:
     env = dict(os.environ)
+    env[IDENTIFIER_BACKED_VERIFIED_CACHE_ENV] = "1"
     src_path = str(ROOT / "src")
     env["PYTHONPATH"] = (
         src_path if not env.get("PYTHONPATH") else src_path + os.pathsep + env["PYTHONPATH"]
@@ -99,15 +110,17 @@ def _passing_run(proc: subprocess.Popen[str]) -> dict[str, Any]:
         4,
         "validate_citation",
         {
-            "citation_id": "official-demo-law-184",
-            "source_tier": "official",
-            "official_url": "https://example.test/synthetic-official/civil-law-demo#article-184",
-            "source_label": "Synthetic Civil Code Article 184",
-            "legal_material_type": "law",
+            "citation_id": "verified-demo-judgment",
+            "source_tier": "verified_cache",
+            "official_identifier": DEMO_JID,
+            "official_hash": DEMO_HASH,
+            "verified_at": "2099-01-01T00:00:00Z",
+            "source_label": "Synthetic identifier-backed judgment",
+            "legal_material_type": "judgment",
         },
     )
     claims = _call_tool(proc, 5, "extract_answer_claims", {"answer": answer})["claims"]
-    claims[0]["referenced_citation_ids"] = ["official-demo-law-184"]
+    claims[0]["referenced_citation_ids"] = ["verified-demo-judgment"]
     _call_tool(
         proc,
         6,
@@ -117,19 +130,17 @@ def _passing_run(proc: subprocess.Popen[str]) -> dict[str, Any]:
             "claims": claims,
             "segments": [
                 {
-                    "segment_id": "official-demo-law-184-seg-01",
-                    "source_id": "official-demo-law-184",
-                    "citation_id": "official-demo-law-184",
-                    "source_tier": "official",
-                    "legal_material_type": "law",
-                    "section_role": "statute_text",
+                    "segment_id": "verified-demo-judgment-seg-01",
+                    "source_id": "verified-demo-judgment",
+                    "citation_id": "verified-demo-judgment",
+                    "source_tier": "verified_cache",
+                    "legal_material_type": "judgment",
+                    "section_role": "court_reasoning",
                     "span_start": 0,
                     "span_end": 36,
                     "text": answer,
-                    "official_url": (
-                        "https://example.test/synthetic-official/civil-law-demo#article-184"
-                    ),
-                    "content_hash": "sha256:synthetic-official-law-184",
+                    "official_identifier": DEMO_JID,
+                    "content_hash": DEMO_HASH,
                     "verified_at": "2099-01-01T00:00:00Z",
                 }
             ],

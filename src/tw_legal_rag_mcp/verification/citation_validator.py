@@ -6,6 +6,7 @@ from typing import Any
 from .source_policy import (
     DEFAULT_SOURCE_POLICY_CONFIG,
     CitationUse,
+    IdentifierResolution,
     SourcePolicyConfig,
     SourceRecord,
     coerce_identifier_resolution,
@@ -54,11 +55,23 @@ def validate_citation(
     citation: dict[str, Any],
     require_final: bool = False,
     config: SourcePolicyConfig = DEFAULT_SOURCE_POLICY_CONFIG,
+    *,
+    caller_controlled: bool = False,
 ) -> dict[str, Any]:
     citation_id = str(citation.get("citation_id") or citation.get("source_id") or "")
     source = _source_from_mapping(citation)
     decision = evaluate_citation_use(source, config)
     citation_use = decision.citation_use
+    decision_reason: str = decision.reason
+    decision_code: str | None = decision.reason_code
+    if (
+        caller_controlled
+        and citation_use == CitationUse.ALLOW_FINAL
+        and source.identifier_resolution != IdentifierResolution.HASH_MATCH
+    ):
+        citation_use = CitationUse.REJECT
+        decision_reason = "caller-supplied provenance cannot establish final citation eligibility"
+        decision_code = "CALLER_ATTESTED_SOURCE"
 
     if not citation_id:
         status = CitationStatus.NOT_FOUND
@@ -88,8 +101,8 @@ def validate_citation(
         status = CitationStatus.UNVERIFIABLE
         support = CitationSupport.NOT_CHECKED
         eligibility = CitationEligibility.REJECTED
-        reason = decision.reason or "source tier is rejected or unknown"
-        error_code = decision.reason_code or "SOURCE_REJECTED_OR_UNKNOWN"
+        reason = decision_reason or "source tier is rejected or unknown"
+        error_code = decision_code or "SOURCE_REJECTED_OR_UNKNOWN"
 
     return {
         "citation_id": citation_id,

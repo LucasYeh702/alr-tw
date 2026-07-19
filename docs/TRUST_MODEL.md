@@ -1,5 +1,13 @@
 # ALR-TW Trust Model
 
+## v0.6 evidence promotion
+
+Final validation 只讀取該 run 在 server-side SQLite 中已連結、未到期且 `trust_status=evidence_eligible` 的 evidence。MCP caller 即使提交看似完整的 official URL、hash 或 verified time，也只能視為 caller-attested metadata，不能升格為正式證據。
+
+官方 provider 取得的內容必須先形成 immutable snapshot，保存 official identifier、official URL、content hash、fetched/verified/expires timestamps 與 section role。TLR candidate、keyword-search hit、party argument、case fact、concurring opinion 與 dissenting opinion 都有獨立限制，不得因文字相似直接支持不同角色的 claim。
+
+Final decisions 是 `validated`、`qualified`、`blocked`。`qualified` 只代表已驗證 evidence 支持 draft、但有明示召回限制；它不是降低來源門檻。`blocked` 不得包含 answer body。
+
 ALR-TW separates source discovery from final citation authority.
 
 ## Source Tiers
@@ -13,10 +21,9 @@ ALR-TW separates source discovery from final citation authority.
 | `synthetic` | Demo and test fixture | No |
 | `unknown` | Missing or unsupported source tier | No |
 
-The public repo checks that `verified_cache` metadata fields are present.
-Byte-level re-verification of cached content against the official source is the
-deployer's promotion pipeline responsibility (see
-`docs/ARCHITECTURE_CONTRACT.md` extension points).
+Legacy Python contracts may expose metadata validation helpers, but the v0.6
+MCP boundary does not trust caller-supplied metadata. Byte-level verification
+must happen in a server-owned provider or governed resolver.
 
 ## Identifier-Backed Verified Cache (Opt-In)
 

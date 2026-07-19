@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from alr_tw.harness.constants import FinalAction, TrustFailureReason
@@ -14,7 +15,7 @@ def evaluate_trust_gate(
     *,
     answer: str,
     citations: list[dict[str, Any]],
-    coverage: dict[str, str | dict[str, object]],
+    coverage: Mapping[str, str | dict[str, object]],
 ) -> dict[str, object]:
     wrapped = answer_with_validation(answer, citations)
     summary = wrapped["validation_summary"]

@@ -78,7 +78,7 @@ def demo_search(query: str) -> dict[str, Any]:
         administrative=(CoverageState.LOW_CONFIDENCE, "not included in synthetic demo index", 0),
         opposing_view=(CoverageState.ABSENT, "no synthetic opposing view fixture", 0),
     )
-    issue_id = list(understanding["issue_tags"])[0] if understanding["issue_tags"] else "general"
+    issue_id = understanding["issue_tags"][0] if understanding["issue_tags"] else "general"
     trust_gate = evaluate_trust_gate(
         answer="synthetic demo answer",
         citations=ranked_results,
@@ -94,7 +94,9 @@ def demo_search(query: str) -> dict[str, Any]:
         "knowledge_brief": build_demo_issue_brief(str(issue_id)),
         "ranking_eval": evaluate_ranking(
             ranked_results,
-            relevant_source_ids={ranked_results[0]["source_id"]} if ranked_results else set(),
+            relevant_source_ids={str(ranked_results[0]["source_id"])}
+            if ranked_results
+            else set(),
             note="synthetic demo metric: top-ranked fixture is treated as relevant",
         ),
         "trust_gate": trust_gate,

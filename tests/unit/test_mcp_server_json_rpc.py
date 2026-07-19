@@ -1,6 +1,9 @@
 import json
 from io import StringIO
+from pathlib import Path
 
+from alr_tw.research.service import ResearchService
+from alr_tw.storage.sqlite_store import SqliteStore
 from tw_legal_rag_mcp.mcp_server.server import McpSession, handle_message, run_stdio_server, tool_definitions
 from tw_legal_rag_mcp.verification.identifier_resolver import (
     SYNTHETIC_OFFICIAL_RECORDS,
@@ -23,6 +26,7 @@ def _call_tool_json(session: McpSession, request_id: int, name: str, arguments: 
             "params": {"name": name, "arguments": arguments},
         }
     )
+    assert response is not None
     assert response["result"]["isError"] is False
     payload = json.loads(response["result"]["content"][0]["text"])
     assert payload["ok"] is True
@@ -44,9 +48,72 @@ def test_mcp_initialize_returns_server_metadata():
     assert response["result"]["protocolVersion"] == "2024-11-05"
     assert response["result"]["serverInfo"] == {
         "name": "alr-tw",
-        "version": "0.5.0",
+        "version": "0.6.0",
     }
     assert response["result"]["capabilities"] == {"tools": {}}
+
+
+def test_v060_server_owned_tools_run_to_blocked_without_server_evidence(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.delenv("ALR_TW_DATA_MODE", raising=False)
+    session = McpSession(
+        ready=True,
+        research_service=ResearchService(SqliteStore(tmp_path / "cache")),
+    )
+    names = {tool["name"] for tool in tool_definitions()}
+    assert {
+        "research_legal_question",
+        "continue_legal_research",
+        "get_legal_research_state",
+        "lookup_legal_source",
+        "validate_legal_answer",
+        "purge_research_storage",
+    } <= names
+
+    created = _call_tool_json(
+        session,
+        100,
+        "research_legal_question",
+        {"query": "民法第184條", "constraints": {"research_depth": "quick"}},
+    )
+    run_id = created["run"]["run_id"]
+    for index in range(6):
+        state = _call_tool_json(
+            session,
+            101 + index,
+            "get_legal_research_state",
+            {"run_id": run_id},
+        )
+        if state["ready_for_draft"]:
+            break
+        _call_tool_json(
+            session,
+            110 + index,
+            "continue_legal_research",
+            {"run_id": run_id, "operation_id": f"operation_{index}"},
+        )
+    validation = _call_tool_json(
+        session,
+        120,
+        "validate_legal_answer",
+        {
+            "run_id": run_id,
+            "answer_text": "本案依法一定勝訴",
+            "operation_id": "validate_1",
+        },
+    )
+    assert validation["decision"] == "blocked"
+    assert validation["answer_text"] is None
+
+    purged = _call_tool_json(
+        session,
+        121,
+        "purge_research_storage",
+        {"scope": "run", "run_id": run_id, "confirm": True},
+    )
+    assert purged["success"] is True
 
 
 def test_mcp_initialize_rejects_unsupported_protocol_version():
@@ -61,6 +128,19 @@ def test_mcp_initialize_rejects_unsupported_protocol_version():
 
     assert response["error"]["code"] == -32602
     assert "Unsupported protocol version" in response["error"]["message"]
+
+
+def test_mcp_initialize_supports_current_protocol_version():
+    response = handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2025-11-25"},
+        }
+    )
+
+    assert response["result"]["protocolVersion"] == "2025-11-25"
 
 
 def test_mcp_tool_list_exposes_agentic_legal_research():
@@ -348,7 +428,8 @@ def test_mcp_tools_call_rejects_invalid_enum_argument():
     assert "source_tier must be one of" in response["error"]["message"]
 
 
-def test_mcp_actual_tool_run_answers_when_official_evidence_passes():
+def test_mcp_actual_tool_run_answers_when_server_resolved_evidence_passes(monkeypatch):
+    monkeypatch.setenv(IDENTIFIER_BACKED_VERIFIED_CACHE_ENV, "1")
     session = McpSession(ready=True)
     begin = _call_tool_json(
         session,
@@ -364,16 +445,17 @@ def test_mcp_actual_tool_run_answers_when_official_evidence_passes():
         4,
         "validate_citation",
         {
-            "citation_id": "official-demo-law-184",
-            "source_tier": "official",
-            "official_url": "https://example.test/synthetic-official/civil-law-demo#article-184",
-            "source_label": "Synthetic Civil Code Article 184",
-            "legal_material_type": "law",
+            "citation_id": "cache-jid-demo",
+            "source_tier": "verified_cache",
+            "official_identifier": DEMO_RESOLVER_JID,
+            "official_hash": DEMO_RESOLVER_HASH,
+            "verified_at": "2026-01-01T00:00:00Z",
+            "legal_material_type": "judgment",
         },
     )
     answer = "法院認為押金可否返還需依契約約定與事實情節判斷。"
     claims = _call_tool_json(session, 5, "extract_answer_claims", {"answer": answer})["claims"]
-    claims[0]["referenced_citation_ids"] = ["official-demo-law-184"]
+    claims[0]["referenced_citation_ids"] = ["cache-jid-demo"]
     _call_tool_json(
         session,
         6,
@@ -384,18 +466,16 @@ def test_mcp_actual_tool_run_answers_when_official_evidence_passes():
             "segments": [
                 {
                     "segment_id": "official-demo-law-184-seg-01",
-                    "source_id": "official-demo-law-184",
-                    "citation_id": "official-demo-law-184",
-                    "source_tier": "official",
-                    "legal_material_type": "law",
-                    "section_role": "statute_text",
+                    "source_id": "cache-jid-demo",
+                    "citation_id": "cache-jid-demo",
+                    "source_tier": "verified_cache",
+                    "legal_material_type": "judgment",
+                    "section_role": "court_reasoning",
                     "span_start": 0,
                     "span_end": 36,
                     "text": "法院認為押金可否返還需依契約約定與事實情節判斷。",
-                    "official_url": (
-                        "https://example.test/synthetic-official/civil-law-demo#article-184"
-                    ),
-                    "content_hash": "sha256:synthetic-official-law-184",
+                    "official_identifier": DEMO_RESOLVER_JID,
+                    "content_hash": DEMO_RESOLVER_HASH,
                     "verified_at": "2099-01-01T00:00:00Z",
                 }
             ],
@@ -419,7 +499,8 @@ def test_mcp_actual_tool_run_answers_when_official_evidence_passes():
     )
 
 
-def test_mcp_actual_tool_run_requires_claim_support_before_answering():
+def test_mcp_actual_tool_run_requires_claim_support_before_answering(monkeypatch):
+    monkeypatch.setenv(IDENTIFIER_BACKED_VERIFIED_CACHE_ENV, "1")
     session = McpSession(ready=True)
     run_id = _call_tool_json(
         session,
@@ -433,11 +514,12 @@ def test_mcp_actual_tool_run_requires_claim_support_before_answering():
         3,
         "validate_citation",
         {
-            "citation_id": "official-demo-law-184",
-            "source_tier": "official",
-            "official_url": "https://example.test/synthetic-official/civil-law-demo#article-184",
-            "source_label": "Synthetic Civil Code Article 184",
-            "legal_material_type": "law",
+            "citation_id": "cache-jid-demo",
+            "source_tier": "verified_cache",
+            "official_identifier": DEMO_RESOLVER_JID,
+            "official_hash": DEMO_RESOLVER_HASH,
+            "verified_at": "2026-01-01T00:00:00Z",
+            "legal_material_type": "judgment",
         },
     )
     trace = _call_tool_json(
@@ -592,7 +674,7 @@ def test_mcp_actual_tool_run_unknown_run_id_returns_json_rpc_error():
     assert "unknown run_id" in response["error"]["message"]
 
 
-def test_mcp_validate_citation_uses_eligibility_without_claim_support_overclaim():
+def test_mcp_validate_citation_rejects_caller_attested_official_tier():
     response = McpSession(ready=True).handle_message(
         {
             "jsonrpc": "2.0",
@@ -606,11 +688,13 @@ def test_mcp_validate_citation_uses_eligibility_without_claim_support_overclaim(
     )
 
     payload = json.loads(response["result"]["content"][0]["text"])
-    assert payload["data"]["citation_eligibility"] == "final_eligible"
+    assert payload["data"]["citation_eligibility"] == "rejected"
+    assert payload["data"]["citation_use"] == "reject"
+    assert payload["data"]["error_code"] == "CALLER_ATTESTED_SOURCE"
     assert payload["data"]["support"] == "not_checked"
 
 
-def test_mcp_validate_citation_allows_complete_verified_cache_metadata():
+def test_mcp_validate_citation_rejects_caller_attested_verified_cache_metadata():
     response = McpSession(ready=True).handle_message(
         {
             "jsonrpc": "2.0",
@@ -630,8 +714,9 @@ def test_mcp_validate_citation_allows_complete_verified_cache_metadata():
     )
 
     payload = json.loads(response["result"]["content"][0]["text"])
-    assert payload["data"]["citation_use"] == "allow_final"
-    assert payload["data"]["citation_eligibility"] == "final_eligible"
+    assert payload["data"]["citation_use"] == "reject"
+    assert payload["data"]["citation_eligibility"] == "rejected"
+    assert payload["data"]["error_code"] == "CALLER_ATTESTED_SOURCE"
 
 
 def _validate_identifier_backed_citation(
@@ -657,6 +742,7 @@ def _validate_identifier_backed_citation(
             },
         }
     )
+    assert response is not None
     return json.loads(response["result"]["content"][0]["text"])["data"]
 
 

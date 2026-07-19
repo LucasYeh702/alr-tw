@@ -1,87 +1,57 @@
 # Security Policy
 
-## Scope
+## Supported versions
 
-This repository is a public reference framework that uses synthetic demo data only.
+Security review focuses on the default branch and latest public-preview release. `0.x` versions are not stable interfaces.
 
-Please report security issues involving:
+## Report privately
 
-- accidental inclusion of credentials, tokens, private endpoints, logs, local paths, or production manifests
-- bypasses in the forbidden file checker or CI release checks
-- unsafe defaults in privacy masking, source trust policy, citation validation, or trust gates
-- vulnerabilities in the demo MCP tools, examples, or validation scripts
-- documentation that could cause users to expose production legal data, caches, or sensitive queries
+Do not publish vulnerabilities, secrets, private paths, real case facts, or personal data in an issue. Use GitHub private vulnerability reporting or a Security Advisory when available. Otherwise open a minimal issue asking for a private contact, without exploit details.
 
-## Supported Versions
+## v0.6 trust boundary
 
-Security review is focused on the current default branch and the latest tagged release, if any.
-Older commits and experimental branches are not supported as stable release artifacts.
+- MCP caller input is untrusted, including `source_tier`, URLs, hashes, timestamps, answer text, and identifiers.
+- Caller-attested `official` or `verified_cache` metadata cannot establish final eligibility.
+- Only server-fetched official snapshots or resolver-backed matching hashes may enter final evidence.
+- TLR and other external recall results are candidate-only.
+- Official HTTP uses HTTPS host allowlists, redirect validation, timeouts, response-size limits, and schema guards.
+- Secrets are read from process configuration, redacted from diagnostics, and excluded from managed storage.
+- Expired evidence, official content conflicts, ambiguous citations, role errors, and unsupported claims fail closed.
+- A blocked validation response must not include the answer body.
 
-## Reporting a Vulnerability
+## Sensitive data
 
-Do not open a public issue for vulnerabilities, leaked secrets, private data, or sensitive legal facts.
+Do not place production legal data, official full-text caches, user queries, TLR responses, SQLite or vector shards, private eval sets, API keys, screenshots containing case facts, or local sensitive paths in the repository.
 
-Preferred reporting path:
+`hybrid_verified` may transmit a privacy-screened query to TLR. The rule-based gate reduces risk but is not a confidentiality guarantee. Never send privileged, confidential, personal, or unpublished case material to an external provider.
 
-1. Use GitHub's private vulnerability reporting or Security Advisories for this repository, if available.
-2. If private reporting is not available, open a minimal public issue asking for a security contact, without including exploit details, secrets, private paths, or real case facts.
+## Operational requirements
 
-When reporting, include only the minimum safe details needed to reproduce the issue. Use synthetic examples whenever possible.
+- Keep `synthetic` as the implicit default; live modes require explicit selection.
+- Use short-lived Judicial Yuan credentials and avoid shell history or committed env files.
+- Limit retention, use `ephemeral` for sensitive-but-permitted local workflows, and purge after use.
+- Treat official removal responses as deletion obligations.
+- Review third-party dependency and service policy changes before release.
+- Do not add browser automation that bypasses CAPTCHA or official access controls.
 
-## Sensitive Data
+## Release checks
 
-Do not include any of the following in issues, pull requests, examples, screenshots, or reproduction files:
-
-- production SQLite shards
-- official full-text caches
-- user query logs
-- TLR or external service response caches
-- Hugging Face verified full datasets
-- Chroma or other vector database files
-- private evaluation holdouts
-- credentials, API keys, tokens, private endpoints, or local sensitive paths
-- real personal data, real case facts, or confidential legal materials
-
-## Release Checks
-
-The full, repeatable audit procedure is defined in
-[docs/RELEASE_AUDIT_PROCEDURE.md](docs/RELEASE_AUDIT_PROCEDURE.md). Before
-publishing releases, changing visibility, or accepting data-related pull
-requests, run at least:
+Run at least:
 
 ```bash
 git status --short --branch
-git ls-files | sort
-python scripts/check_no_forbidden_files.py
+python3 scripts/check_no_forbidden_files.py
+python3 scripts/check_public_boundary.py
+uv run ruff check .
+uv run mypy src
+uv run pytest -q
+uv build
 ```
 
-Recommended additional checks:
+Also review tracked files and Git history for secrets, databases, archives, logs, real-shaped identifiers, personal data, and generated caches. A clean worktree alone does not prove history is safe.
 
-- GitHub secret scanning
-- GitHub secret scanning and push protection are also enabled at the repository settings level.
-- the CI history secret-scan job, currently backed by gitleaks
-- trufflehog
-- a tracked-file scan for database files, logs, archives, local paths, and generated caches
-- a git-history review when changing repository visibility or importing large changes
+## Out of scope
 
-The repository guard scripts also check common Taiwan legal-data leak shapes,
-including real-shaped judgment identifiers outside the synthetic namespace and
-Taiwan national ID number patterns.
+Legal correctness questions, third-party service availability, and risks introduced by an operator's own private adapters or deployment are not vulnerabilities in this reference repository. Security defects that let those inputs cross the documented trust boundary are in scope.
 
-The gitleaks CI action is pinned to a reviewed full commit SHA while first-party
-GitHub setup actions remain on maintained major tags.
-
-A clean current working tree does not prove that older commits are safe to publish.
-
-## Out Of Scope
-
-The following are not handled as security vulnerabilities in this reference repository:
-
-- requests for legal advice or legal correctness review
-- availability or accuracy of third-party services such as TLR, Legal Detective, Dr.Lawbot, or government APIs
-- risks introduced by a user's own production adapters, private datasets, model providers, or deployment environment
-- disclosure of data that was never present in this repository
-
-## No Bug Bounty
-
-This project does not currently operate a paid bug bounty program.
+This project has no paid bug bounty program.

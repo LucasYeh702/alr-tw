@@ -1,72 +1,94 @@
 # ALR-TW：台灣法律 Agentic RAG / MCP Harness
 
-語言版本：繁體中文 | [English](README.en.md)
+[繁體中文](README.zh-TW.md) | [English](README.en.md)
 
-ALR-TW 是 **Agentic Legal RAG / MCP Harness for Taiwan Law** 的簡稱。它是一個約束外部 MCP client 的 harness：外部 client 可以呼叫工具並取得 trace；ALR-TW records and gates externally driven tool runs，並要求流程通過 deterministic graph、citation validation 與 trust gate。
+ALR-TW v0.6.0 是一個 public-preview（公開預覽）的台灣法律研究安全 harness。它讓外部 agent／LLM 透過 MCP 建立研究 run，但把資料來源、研究步驟、證據升格、答案驗證與清除權限留在 server 端。設計採台灣大陸法系視角：法規時點優先，普通裁判依審級與案件角色處理，憲法法庭多數意見與個別意見分離。
 
-本 repo 不包含 LLM，也不包含 agent 實作。規劃、選工具與自然語言推理的 agent 角色由呼叫端（外部 MCP client 或 LLM runtime）提供；ALR-TW 提供工具介面、確定性閘門圖與 trace / 報告契約，用來約束該外部 client。Trust-gate decision 由 deterministic harness 做出，不由 client 自行宣告。
+本專案已整合並在 `hybrid_verified` 模式使用 [TLR（Taiwan Legal RAG）](https://github.com/aa0101181514/tw-legal-rag)進行普通裁判候選召回，再由 ALR-TW 回到司法院官方來源驗證。TLR 不會被直接當成正式引用來源。
 
-本 repo 是 public-safe 的參考實作，用來示範法律 AI 工具流程在回答前如何規劃檢索、召回候選資料、判斷來源層級、驗證引用、檢查覆蓋率，最後在證據不足時 fail closed。
+本專案不是法律意見服務，也不是完整法律資料庫。它提供可安裝的工程框架、官方 provider、TLR 候選召回、SQLite 短期研究狀態、MCP tools、deterministic trust gates 與 synthetic tests。
 
-這個 repo 的重點不是「內建台灣法律資料庫」，而是「讓法律 RAG 工具流程不跳過查證流程」。它提供 deterministic execution graph、MCP tools、trust gate、trace schema、validation report 與 synthetic scenarios，讓開發者可以用公開安全的方式檢查外部 client 與 harness 的工程邊界。
+本 repo 不包含 LLM，也不包含 agent 實作。規劃、工具選擇與自然語言推理由外部呼叫端提供；ALR-TW 只負責可稽核工具與確定性閘門。Repo 內的示範 ranking 參數僅供測試，不是 production ranking 設定。
 
-> [!IMPORTANT]
-> 本專案只包含 synthetic demo data、framework code、tests、CI 與 docs。本專案不提供真實法律全文、production corpus、官方全文快取、向量資料庫、使用者紀錄、私有 eval set 或法律意見。
+> v0.6.0 仍是 `0.x` 公開預覽。介面可能調整；答案必須由具資格的人員依官方原文、時點與個案事實複核。
 
-## Agentic RAG 能力
-
-ALR-TW 把法律 RAG 拆成可審計的 agent loop：
+## 核心安全邊界
 
 ```text
-User Query
--> Query Understanding
--> Source Plan
--> Retrieval
--> Source Classification
--> Citation Validation
--> Coverage Gate
--> Trust Gate
--> Final Decision
+外部 agent 提問／起草
+  -> ALR-TW server-owned research obligations
+  -> official providers + optional TLR candidate recall
+  -> server-owned source/evidence snapshot
+  -> claim, role, time, privacy and citation validation
+  -> validated | qualified | blocked
 ```
 
-這個 loop 是用來約束外部 MCP client 的 tool workflow。外部 client 可以使用工具並讀取 trace；final action 與 trust-gate decision 仍由 deterministic harness 根據 citation validation、coverage 與 claim support 狀態產生。
+- 呼叫端不能用 `source_tier=official` 自我證明來源。
+- TLR 永遠只產生 `external_semantic_recall` 候選，不能直接作正式引用。
+- 正式證據必須由 ALR-TW 自官方來源取得並固定內容，或由受治理 resolver 驗證 hash。
+- 當事人主張、案件事實、協同意見、不同意見不得冒充法院多數理由。
+- 歷史法規時點無法完整確認、證據過期、角色錯置或支持不足時 fail closed。
+- `blocked` 結果不回傳 answer body。
 
-ALR-TW 目前示範的能力：
+## 資料模式
 
-- query understanding：用 demo heuristic 遮罩敏感資訊、正規化查詢、解析法律引用與 issue tags
-- source planning：把官方來源、verified cache、staging、external semantic recall、synthetic fixture 分層
-- candidate retrieval：召回 synthetic 法規、裁判、憲法法庭資料與外部候選線索
-- exact lookup：用法律名稱與條號、裁判 `jid`、憲法法庭 synthetic id 做精確查找
-- citation validation：判斷 citation 是否存在、是否可驗證、是否可作 final citation
-- coverage gate：回報 laws、judgments、constitutional materials 等覆蓋狀態
-- trust gate：沒有 final citation、來源不可驗證、coverage 低信心或 claim support 未檢查時拒絕輸出
-- claim grounding：answer claim 切分與語意對齊檢核，讓主張與證據可追溯
-- identifier-backed verified cache：opt-in 的 JID / official identifier 驗證路徑，必須由 resolver 回到本地官方原始檔並重算 hash 才能通過
-- externally driven trace recording：`begin_agentic_run` / `finalize_agentic_run`，可記錄並 gates 外部驅動的工具 run
-- trace schema：輸出 `alr-tw.agentic_trace/v1`，保留 steps、tool calls、decision trace、evidence、coverage、trust gate 與 final action
-- validation report：把 run trace 轉成可 review 的 Markdown report
-- MCP server：用 stdio 暴露 harness tools，讓本機 MCP client 啟動
-
-## MCP Tools
-
-| Tool | 能力 | 輸出重點 |
+| 模式 | 外部網路 | 用途 |
 |---|---|---|
-| `agentic_legal_research` | 執行 synthetic agentic RAG loop | canonical trace、candidate、final citation、trust gate |
-| `run_agentic_demo` | 執行 deterministic ALR-TW scenario | `answer`、`refuse` 或 `human_review_required` |
-| `begin_agentic_run` | 開始記錄 externally driven tool run | `run_id` |
-| `finalize_agentic_run` | 組裝並 gate 已記錄的 externally driven tool run | canonical trace、final action |
-| `build_validation_report` | 產生 validation report | Markdown review artifact |
-| `get_trust_model` | 回傳 source tier 與 fail-closed policy | trust model |
-| `get_claim_grounding_policy` | 取得 claim grounding 合約與支援狀態定義 | claim policy |
-| `extract_answer_claims` | 將 answer 拆成可追溯的 claim 單位 | answer claims |
-| `check_claim_support` | 用 evidence segments 檢查 claim，輸出 claim_support 與 semantic failure summary | claim support status |
-| `legal_search` | synthetic legal search demo | candidate retrieval |
-| `validate_citation` | 驗證 citation tier、metadata 與 opt-in identifier-backed cache 使用資格 | final eligibility |
-| `exact_law_lookup` | synthetic 法規精確查找 | demo-only result |
-| `exact_judgment_lookup` | synthetic 裁判精確查找 | demo-only result |
-| `exact_constitutional_lookup` | synthetic 憲法法庭資料精確查找 | demo-only result |
+| `synthetic` | 無 | 預設；離線 demo、CI、契約測試 |
+| `official_only` | 僅官方來源 | 法規、憲法裁判、司法院裁判關鍵字搜尋與精確全文回查 |
+| `hybrid_verified` | 官方來源 + TLR | privacy gate 通過後，以 TLR 提高普通裁判候選召回，再回官方驗證 |
 
-所有 MCP tool result 都包在同一個 envelope：
+啟用 `hybrid_verified` 時，通過隱私檢查的查詢文字會傳送至 TLR。不要輸入個人秘密、未公開案件事實、私有契約、訴訟策略、證據弱點或談判底線。詳見 [TLR Provider](docs/TLR_PROVIDER.md) 與 [Data Policy](DATA_POLICY.md)。
+
+## 官方來源
+
+- 法規：法務部全國法規資料庫的官方結構化資料與網頁一致性檢查；
+- 普通裁判：直接解析司法院裁判書搜尋頁，取得 JID 後由官方 `data.aspx` 下載並解析全文；
+- 憲法：憲法法庭判決、實體裁定與舊制解釋，分離主文、理由及個別意見。
+
+第一版不承諾指定歷史日期的完整法規版本、普通裁判全域召回率、所有程序裁定正文、完整審級關係、附件／OCR 全覆蓋。詳見 [Official Providers](docs/OFFICIAL_PROVIDERS.md)。
+
+## 安裝
+
+需要 Python 3.11 以上。
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e '.[all]'
+```
+
+離線預設檢查：
+
+```bash
+alr-tw doctor
+alr-tw-mcp
+```
+
+Live mode（真實來源模式）必須明確選擇：
+
+```bash
+export ALR_TW_DATA_MODE=official_only
+export ALR_TW_RETENTION=24h
+alr-tw doctor --live
+```
+
+普通裁判不需要司法院 API token。啟用 live mode 後，關鍵字、案號及篩選條件會直接送到 `judgment.judicial.gov.tw`；不要把未公開個案事實或保密資料當成搜尋詞。
+
+秘密不會顯示在 `doctor` 輸出，也不應寫入 `.env.example`、trace 或 SQLite。
+
+## v0.6 MCP tools
+
+| Tool | 用途 |
+|---|---|
+| `research_legal_question` | 建立 server-owned research run，不生成答案 |
+| `continue_legal_research` | 以 `operation_id` 執行一個下一步 obligation |
+| `get_legal_research_state` | 唯讀取得狀態，不做網路請求、不延長 TTL |
+| `lookup_legal_source` | 精確查詢法規條文、憲法字號、JID 或正式裁判字號 |
+| `validate_legal_answer` | 只用該 run 的 server-owned evidence 驗證草稿 |
+| `purge_research_storage` | 同步刪除單一 run 或全部 managed storage |
+
+舊版 synthetic／trace tools 暫時保留相容性，但新整合應優先使用上述研究服務。MCP tool output 仍使用：
 
 ```json
 {
@@ -77,190 +99,59 @@ ALR-TW 目前示範的能力：
 }
 ```
 
-範例 trace 中的 `tool_calls` 會標示 `execution_mode: "harness_recorded"`，代表這是 deterministic harness record。由 `begin_agentic_run` / `finalize_agentic_run` 產生的 trace 會標示 `trace_kind: "externally_driven"`，且 recorded tool calls 會使用 `execution_mode: "actual_tool"`。
+支援的 MCP protocol versions：`2025-11-25`、`2025-06-18`、`2025-03-26`、`2024-11-05`。不支援的版本會在 initialize 階段拒絕。
 
-## Claim Grounding
+## 研究流程
 
-在不改變來源安全門檻的前提下，新增語意層防線：
+標準 run 依序處理 query understanding、privacy screen（只限 hybrid）、law research、judgment recall、official verification、counter-authority limitation、time context、evidence sufficiency 與 final validation。每次 `continue_legal_research` 只執行一個 obligation，方便 agent 觀察、重試與稽核。
 
-- `extract_answer_claims`：把答案切成可追蹤的 claim 單位（`alr-tw.answer-claim/v1`）
-- `check_claim_support`：檢查每個 claim 是否有對應 evidence span 支持（`alr-tw.claim-support/v1`）
-- `get_claim_grounding_policy`：回傳 claim 狀態定義、風險旗標與合約邊界（`alr-tw.claim-grounding-policy/v1`）
+Final decision：
 
-此版本仍是 public-safe 的示範：僅公開 schema、synthetic fixture、MCP contract 與測試，不公開完整的 production 語意推理引擎。
+- `validated`：來源、時點、角色與 claim support 通過；
+- `qualified`：已驗證來源足以支持草稿，但普通裁判召回等覆蓋有明示限制；
+- `blocked`：不可展示草稿，回傳 blockers 而不回 answer body。
 
-## Identifier-Backed Verified Cache
+`lookup_legal_source` 只證明來源查得，不代表任何答案 claim 已被驗證。
 
-新增 opt-in 的 `verified_cache` 路徑：對 judgment record，穩定官方識別碼（例如 JID）可以在特定條件下替代官方 URL。這不是放寬引用門檻；它把門檻改成 resolver-backed verification：
+## Retention 與清除
 
-- 預設關閉，必須設定 `ALR_TW_IDENTIFIER_BACKED_VERIFIED_CACHE=1` 才啟用。
-- 僅限 `legal_material_type: "judgment"`；法規與憲法資料仍要求官方 URL。
-- resolver 必須將 identifier 對回本地下載的官方原始檔。
-- 系統必須重新計算原始紀錄的 content hash，且與 citation 宣告的 `official_hash` 相符。
-- unresolved identifier、hash mismatch、未啟用 opt-in、非 judgment material 都會 fail closed。
-
-公開 repo 只提供 synthetic demo resolver，用來測試 allow / reject 路徑；正式部署需要 operator 自行接上合法取得的司法院原始資料快取。
-
-## Trust Gate
-
-ALR-TW 的核心規則是：retrieval candidate 不等於 final citation。
-
-| Source tier | 角色 | 可作 final citation |
-|---|---|---|
-| `official` | 官方或官方根據來源 | Yes |
-| `verified_cache` | 有官方 URL，或 opt-in identifier resolver + content hash + verified time 的快取 | Conditional |
-| `staging` | 匯入或 audit 候選資料 | No |
-| `external_semantic_recall` | 外部語意召回候選 | No |
-| `synthetic` | demo / test fixture | No |
-| `unknown` | 未知來源 | No |
-
-Trust gate 會在下列情況 fail closed：
-
-- 沒有 final citation
-- citation 被拒絕或不可驗證
-- 只找到 candidate-only source
-- 只找到 synthetic demo source
-- verified cache 缺少官方 URL、hash 或驗證時間
-- identifier-backed verified cache 未啟用、未解析、hash mismatch，或不是 judgment record
-- coverage 為 absent 或 low confidence
-- claim support 狀態非安全展示形態（如 `partially_supported`、`overstated`、`unsupported`、`contradicted`、`role_error`、`unchecked`、`needs_review`）
-- claim support 尚未檢查時只能進入 human review，不會輸出可直接呈現的 answer body
-
-## Demo Scenarios
-
-`examples/agentic_runs/*.json` 保留 deterministic traces；`examples/reports/*.md` 保留對應 validation reports。
-
-| Scenario | 預期結果 |
-|---|---|
-| `pass_official_source` | 有 final citation，且 claim 被支持，允許回答 |
-| `pass_claim_supported` | 有 final citation 且 claim support 狀態為 supported，允許回答 |
-| `fail_candidate_only` | 外部召回只能當候選，拒絕回答 |
-| `fail_synthetic_only` | synthetic fixture 不能當現行法律，拒絕回答 |
-| `fail_verified_cache_incomplete` | verified cache metadata 不完整，拒絕回答 |
-| `fail_no_final_citation` | 沒有 final citation，拒絕回答 |
-| `fail_low_coverage` | 覆蓋率低信心，拒絕回答 |
-| `fail_party_argument_as_court_view` | party_argument 被誤述為法院見解，拒絕/需人工複核 |
-| `fail_overstated_case_specific_rule` | 案件事實外推為普遍規則，需人工複核或拒絕 |
-| `fail_unsupported_paraphrase` | 對應證據找不到支撐，拒絕回答 |
-| `human_review_required_claim_support` | 來源存在，但 claim support 未檢查，需要人工審查 |
-| `human_review_claim_unchecked` | 同上，但以情境名稱 `human_review_claim_unchecked` 驗證 alias 行為 |
-
-當 `final_action != "answer"` 時，trace 的 `answer` 必須是 `null`。Client 只有在 `trust_gate.safe_to_present == true` 且 `final_action == "answer"` 時才能渲染 answer content。
-
-## 快速開始
+預設短期 SQLite 儲存位置為 `~/.cache/alr-tw`，預設保留 `24h`，上限 `7d`。單次 run 可用 `retention: "ephemeral"`，在 final validation 後同步清除。
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .[dev]
-
-uv run --extra dev alr-tw-demo
-uv run --extra dev python examples/agentic_mcp_client_demo.py
+alr-tw purge --run RUN_ID --confirm
+alr-tw purge --all --confirm
 ```
 
-MCP stdio smoke：
+CLI 與 MCP 共用同一 purge 實作。清除本機資料無法撤回已傳送給外部服務的查詢或其日誌。詳見 [Storage and Purge](docs/STORAGE_AND_PURGE.md)。
+
+## 開發驗證
 
 ```bash
-printf '%s\n' \
-  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"stdio-smoke","version":"0.5.0"}}}' \
-  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
-  '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
-  | uv run --extra dev alr-tw-mcp
-```
-
-驗證：
-
-```bash
+uv run ruff check .
+uv run mypy src
+uv run pytest -q
 python3 scripts/check_no_forbidden_files.py
 python3 scripts/check_public_boundary.py
-uv run --extra dev ruff check .
-uv run --extra dev pytest
+uv build
 ```
 
-## Public / Private Boundary
+## 公開／私有邊界
 
-本 repo 是公開 reference harness，只保留可公開的工程面：
+Repo 不含 production corpus、官方全文永久快取、真實使用者紀錄、私有 eval、向量 shard、憑證或內部 endpoint。Synthetic data 只能用於 demo／測試，不能被描述為現行法。正式部署者必須自行確認官方資料授權、個資、保存、移除與服務條款。
 
-- source policy
-- citation validator
-- trust gate
-- deterministic execution graph
-- trace schema
-- synthetic fixtures
-- tests、CI、docs
+## 文件
 
-本 repo 不包含：
-
-- production legal datasets
-- official full-text caches
-- SQLite shards
-- Chroma / vector DB
-- real verified cache
-- real user query records
-- private workflow data
-- production ranking、chunking、index 參數
-- credentials、private endpoints、local sensitive paths
-
-Public repo 只示範「邊界與契約」。正式系統可以把 synthetic adapters 換成符合法規、授權與隱私要求的資料來源，但仍應保留同一套 source tier、citation validation、coverage gate 與 trust gate。
-
-## 如何接入真實資料
-
-ALR-TW 刻意不公開調校後的 production ranking 參數，也不提供固定 chunk size、embedding model、vector dimension 或 HNSW 設定。repo 內仍包含 demo ranking 公式與通用預設（例如 RRF、source-tier 分數），只用來展示資料流與測試契約，不代表任何閉源 runtime 的實際配置；實作者應依資料規模、硬體、更新頻率、授權條件與 precision / latency 需求自行量測決定。
-
-建議接入順序：
-
-```text
-Official data source or compliant internal source
--> Source adapter
--> Staging index
--> Official verification
--> Source trust policy
--> Citation validation
--> Retriever / MCP tools
--> Trust gate
-```
-
-外部語意召回可以提高 recall，但在 ALR-TW 中永遠先視為 `external_semantic_recall`，只能當 candidate。Final citation 必須回到 `official` 或符合條件的 `verified_cache`。
-
-實務上可搭配 [TLR 專案](https://github.com/aa0101181514/tw-legal-rag)（TLR）或其他語意索引作為高召回資料源，用來找候選裁判與相關線索。但 final citation 不應直接引用 TLR 召回結果；建議仍自司法院或其他官方來源下載原始檔，建立本地 `verified_cache`。
-
-本地 `verified_cache` 至少應保留官方 URL 或穩定官方識別碼、content hash、下載時間與 verified time。只有 `official` 或 metadata 完整的 `verified_cache` 才能通過 final-citation eligibility。
-
-最小資料建議：
-
-- search / semantic recall：可先接 [TLR 專案](https://github.com/aa0101181514/tw-legal-rag)（TLR）或其他語意索引，作為高召回 candidate source。
-- official access prerequisite：本專案不提供司法院 API credential、不代為申請，也不重散布司法院資料；使用者須自行取得必要官方 access，或以合法方式下載官方原始檔。
-- local verification cache：使用者自行下載司法院裁判原始月檔後，轉成本地 `verified_cache`，用來核對 jid、官方來源、hash 與 verified time。
-- why local data is still needed：即使已接上 [TLR 專案](https://github.com/aa0101181514/tw-legal-rag)（TLR），TLR 仍只是 candidate recall；final citation eligibility、content hash、可重現資料快照與敏感後續驗證仍必須回到本地官方資料快取。
-- law corpus：法規資料不屬於司法院裁判月檔，應另接法務部或其他官方法規來源。以官方法規 JSON 的實測量級估算，原始法規資料約數百 MB 以內；若另建法規 vector index，通常是 1-2GB 級別。明確條號查詢應優先走 exact article lookup，再補語意召回。
-- constitutional materials：司法院公開資料也可另外接釋字與憲法法庭資料，作為 constitutional materials 的本地驗證來源。以實測量級估算，raw zip 約 260MB、raw JSON 約 25MB，若保留附件與 OCR text，整體約 1GB 以內。
-- Judicial Yuan scope：這裡的司法院資料主要指司法院開放資料的裁判書月檔，以及可另行接入的釋字與憲法法庭公開資料。它不包含法規全文、行政函釋、法務部法規資料、未公開裁判或任何私有案件資料；實際可下載期間、欄位與遮蔽內容以司法院開放資料站為準。
-- capacity planning：以完整歷史裁判資料量級估算，官方壓縮月檔約 50GB，轉成本地 gzip 驗證快取約 30GB；若另外自建裁判全文、FTS 或 vector index，容量可能上升到數百 GB。最小部署可先預留約 100GB 給官方裁判原始檔與本地驗證快取；法規原始檔與憲法資料各預留 1GB 以內通常足夠，index 層視需求另外規劃。
-
-## 規格文件
-
-- [docs/AGENTIC_WORKFLOW.md](docs/AGENTIC_WORKFLOW.md)：agentic RAG execution graph
-- [docs/AGENTIC_HARNESS_ACCEPTANCE.md](docs/AGENTIC_HARNESS_ACCEPTANCE.md)：名稱與 release acceptance 條件
-- [docs/TRUST_MODEL.md](docs/TRUST_MODEL.md)：source tier、citation use 與 fail-closed rules
-- [TLR 專案](https://github.com/aa0101181514/tw-legal-rag)：語意檢索開源實作，可作為高召回候選來源
-- [docs/AGENT_CLIENT_GUIDE.md](docs/AGENT_CLIENT_GUIDE.md)：外部 MCP client 連線與 externally driven trace flow
-- [docs/TOOL_CONTRACT.md](docs/TOOL_CONTRACT.md)：MCP tool envelope 與工具契約
-- [docs/TRACE_SCHEMA.md](docs/TRACE_SCHEMA.md)：trace schema
-- [docs/VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md)：validation report 結構
-- [docs/RELEASE_AUDIT_PROCEDURE.md](docs/RELEASE_AUDIT_PROCEDURE.md)：公開 release audit 規程
-- [docs/DEPLOYMENT_STARTING_POINTS.md](docs/DEPLOYMENT_STARTING_POINTS.md)：illustrative deployment starting points
-- [docs/PUBLIC_PRIVATE_BOUNDARY.md](docs/PUBLIC_PRIVATE_BOUNDARY.md)：公開 repo 與 private runtime 邊界
-- [docs/PUBLIC_PRIVATE_TRACEABILITY.md](docs/PUBLIC_PRIVATE_TRACEABILITY.md)：local capability 與 public counterpart 對應
-- [docs/ERROR_CODES.md](docs/ERROR_CODES.md)：錯誤碼
-- [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)：公開 reference repo 威脅模型
-- [docs/ARCHITECTURE_CONTRACT.md](docs/ARCHITECTURE_CONTRACT.md)：替換 adapter / retriever 時必須保留的架構契約
+- [Architecture](ARCHITECTURE.md)
+- [Architecture Contract](docs/ARCHITECTURE_CONTRACT.md)
+- [Trust Model](docs/TRUST_MODEL.md)
+- [Tool Contract](docs/TOOL_CONTRACT.md)
+- [TLR Provider](docs/TLR_PROVIDER.md)
+- [Official Providers](docs/OFFICIAL_PROVIDERS.md)
+- [Storage and Purge](docs/STORAGE_AND_PURGE.md)
+- [v0.6.0 Release Audit](docs/V060_RELEASE_AUDIT.md)
+- [Security](SECURITY.md)
+- [Changelog](CHANGELOG.md)
 
 ## 法律聲明
 
-本專案只用於法律 AI 架構展示與工程測試，不提供法律意見，不構成法律服務，也不保證任何法律資訊的完整性、正確性、即時性或適用性。
-
-實際法律分析或引用應回到官方來源核對，並由合格法律專業人士審查。
-
-## English Summary
-
-ALR-TW is an Agentic Legal RAG / MCP Harness for Taiwan Law. It records and gates externally driven tool runs with source planning, retrieval, citation validation, coverage gates, trust gates, claim-grounding checks, opt-in identifier-backed verified-cache checks, trace schema, validation reports, and MCP tools using synthetic demo data only.
+本專案僅供軟體架構、研究與測試，不構成法律意見、律師服務或任何個案結論，也不保證資料完整、正確、即時或適用。

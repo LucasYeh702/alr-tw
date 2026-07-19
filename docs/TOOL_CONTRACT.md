@@ -1,5 +1,22 @@
 # ALR-TW Tool Contract
 
+## v0.6 high-level tools
+
+| Tool | Required input | Contract |
+|---|---|---|
+| `research_legal_question` | `query` | 建立 run；optional constraints: `as_of_date`, `research_depth`, `include_counter_authority`, `retention` |
+| `continue_legal_research` | `run_id`, `operation_id` | 原子執行一個 obligation；相同 operation id 回相同結果 |
+| `get_legal_research_state` | `run_id` | 唯讀；無 provider call、無 TTL extension |
+| `lookup_legal_source` | `text` | 精確來源 lookup；可選 run/operation linkage；`claim_verified=false` |
+| `validate_legal_answer` | `run_id`, `answer_text`, `operation_id` | 只用 server-owned evidence；回 `validated`, `qualified`, `blocked` |
+| `purge_research_storage` | `scope`, `confirm` | `scope=run` 需 `run_id`；同步清除 managed records |
+
+`constraints.retention` 接受 `1s..7d` 或 `ephemeral`。`request_id`／`client_id` 是 correlation metadata，不是 authority 或 idempotency key；只有 `operation_id` 控制會改變狀態的重播。
+
+`lookup_legal_source` 支援法規名稱＋條號、憲法裁判字號、完整 JID，以及含法院／年度／字別／號次的正式裁判字號。正式字號不唯一時回明確 ambiguity error，不猜測。
+
+所有 tool 使用 `alr-tw.mcp_tool_result/v1` envelope。輸入採 `additionalProperties=false`；未知欄位與不支援的 MCP protocol version 都必須拒絕。
+
 All MCP tool results are wrapped in:
 
 ```json

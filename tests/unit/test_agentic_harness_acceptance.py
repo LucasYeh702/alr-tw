@@ -75,14 +75,11 @@ def test_agentic_harness_name_is_backed_by_graph_tools_and_scenarios():
 def test_acceptance_doc_states_current_claim_boundary():
     text = Path("docs/AGENTIC_HARNESS_ACCEPTANCE.md").read_text(encoding="utf-8")
 
-    assert "v0.5" in text
-    assert "constrains" in text
-    assert "records and gates externally driven tool runs" in text
-    assert "externally_driven" in text
-    assert "actual_tool" in text
-    assert "identifier-backed `verified_cache`" in text
-    assert "an LLM or agent implementation shipped in this repo" in text
-    assert "Not Claimed" in text
-    assert "unrestricted autonomous legal agent" in text
-    assert "independently completes legal judgment" in text
-    assert "production legal research agent" in text
+    assert "v0.6.0" in text
+    assert "server-owned research state" in text
+    assert "TLR candidate-only recall" in text
+    assert "外部 agent 不能注入正式證據" in text
+    assert "blocked 不包含 answer body" in text
+    assert "不宣稱" in text
+    assert "完整台灣法律資料庫" in text
+    assert "production SLA" in text

@@ -1,3 +1,5 @@
 """ALR-TW: Agentic Legal RAG Harness for Taiwan Law."""
 
-__version__ = "0.5.0"
+from alr_tw._version import __version__
+
+__all__ = ["__version__"]

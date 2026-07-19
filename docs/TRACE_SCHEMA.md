@@ -1,5 +1,18 @@
 # ALR-TW Trace Schema
 
+## v0.6 research state records
+
+v0.6 高階流程以持久化 `ResearchRun` 與逐步 result 取代 caller 組裝 authority trace：
+
+- `alr-tw.research-run/v1`：狀態、mode、privacy、obligations、coverage、source/evidence ids、TTL；
+- `alr-tw.research-step-result/v1`：本次 obligation、provider calls、warnings、剩餘 obligations；
+- `alr-tw.legal-source-lookup/v1`：精確來源結果，固定 `claim_verified=false`；
+- `alr-tw.answer-validation/v2`：decision、claim support、citations、qualification 或 blockers。
+
+Trace 不得記錄 API secret。TLR privacy metadata 不得包含未遮罩的 sensitive input。Blocked validation 的 `answer_text` 必須是 `null`；ephemeral validation 另回 `storage_purged=true`。
+
+舊 `alr-tw.agentic_trace/v1` 保留 synthetic／externally-driven compatibility，但不得用它把 caller-attested source 注入 v0.6 evidence。
+
 The public trace schema version is `alr-tw.agentic_trace/v1`.
 
 This repository does not ship an LLM or agent implementation. Traces emitted by

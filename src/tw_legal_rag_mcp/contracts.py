@@ -3,9 +3,52 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol
 
+from alr_tw.contracts.providers import (
+    DataMode,
+    LegalSourceProvider,
+    ProviderCapabilities,
+    ProviderHealth,
+    ProviderHealthStatus,
+)
+from alr_tw.contracts.research import ResearchRun
+from alr_tw.contracts.sources import (
+    EvidenceSpan,
+    MaterialType,
+    SourceRecord as ProviderSourceRecord,
+    SourceTier,
+    TrustStatus,
+)
+from alr_tw.contracts.storage import StorageMode, StoragePolicy
+
 from .verification.answer_validation import answer_with_validation
 from .verification.citation_validator import validate_citation
 from .verification.trust_gates import evaluate_trust_gate
+
+__all__ = [
+    "AdapterResult",
+    "CitationVerifier",
+    "DataMode",
+    "EvidenceSpan",
+    "LegalSourceProvider",
+    "MaterialType",
+    "ProviderCapabilities",
+    "ProviderHealth",
+    "ProviderHealthStatus",
+    "ProviderSourceRecord",
+    "ResearchRun",
+    "RetrievalCandidate",
+    "Retriever",
+    "SourceAdapter",
+    "SourceManifest",
+    "SourceTier",
+    "StorageMode",
+    "StoragePolicy",
+    "SyntheticOfficialAdapter",
+    "SyntheticRetriever",
+    "SourcePolicyCitationVerifier",
+    "TrustStatus",
+    "run_synthetic_contract_pipeline",
+]
 
 
 @dataclass(frozen=True)
@@ -167,7 +210,10 @@ def run_synthetic_contract_pipeline(query: str) -> dict[str, Any]:
         if verification["citation_use"] == "allow_final"
     ]
     answer = "Synthetic answer guarded by official-grounded citation validation."
-    coverage = {"has_laws": "present", "has_judgments": "not_checked"}
+    coverage: dict[str, str | dict[str, object]] = {
+        "has_laws": "present",
+        "has_judgments": "not_checked",
+    }
     trust_gate = evaluate_trust_gate(answer=answer, citations=final_citations, coverage=coverage)
     answer_validation = answer_with_validation(answer, final_citations)
 

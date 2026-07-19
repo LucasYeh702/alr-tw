@@ -11,6 +11,18 @@ from typing import Iterable
 from .authority_ranker import authority_score
 
 
+def _string_set(value: object) -> set[str]:
+    if not isinstance(value, (list, tuple, set, frozenset)):
+        return set()
+    return {str(item) for item in value}
+
+
+def _number(value: object) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return 0.0
+
+
 def rank_judgment_candidates(
     query: str,
     candidates: list[dict[str, object]],
@@ -22,7 +34,7 @@ def rank_judgment_candidates(
     ranked: list[dict[str, object]] = []
 
     for candidate in candidates:
-        candidate_tags = set(candidate.get("issue_tags", []))
+        candidate_tags = _string_set(candidate.get("issue_tags"))
         text = str(candidate.get("text", ""))
         source_tier = str(candidate.get("source_tier", "unknown"))
         issue_score = 25 * len(candidate_tags.intersection(issue_tags))
@@ -30,7 +42,10 @@ def rank_judgment_candidates(
         score = authority_score(source_tier) + issue_score + lexical_score
         ranked.append({**candidate, "rank_score": score})
 
-    return sorted(ranked, key=lambda item: (-int(item["rank_score"]), str(item.get("source_id", ""))))
+    return sorted(
+        ranked,
+        key=lambda item: (-_number(item.get("rank_score")), str(item.get("source_id", ""))),
+    )
 
 
 def evaluate_ranking(
@@ -38,7 +53,7 @@ def evaluate_ranking(
     *,
     relevant_source_ids: Iterable[str],
     note: str | None = None,
-) -> dict[str, float | int]:
+) -> dict[str, float | int | str]:
     relevant = set(relevant_source_ids)
     reciprocal_rank = 0.0
     for index, candidate in enumerate(ranked, start=1):

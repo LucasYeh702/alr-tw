@@ -5,14 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 
-
-class SourceTier(str, Enum):
-    OFFICIAL = "official"
-    VERIFIED_CACHE = "verified_cache"
-    STAGING = "staging"
-    EXTERNAL_SEMANTIC_RECALL = "external_semantic_recall"
-    SYNTHETIC = "synthetic"
-    UNKNOWN = "unknown"
+from alr_tw.contracts.sources import SourceTier
 
 
 class CitationUse(str, Enum):
