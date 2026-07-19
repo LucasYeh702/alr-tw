@@ -12,6 +12,36 @@ ALR-TW v0.6.0 是一個 public-preview（公開預覽）的台灣法律研究安
 
 > v0.6.0 仍是 `0.x` 公開預覽。介面可能調整；答案必須由具資格的人員依官方原文、時點與個案事實複核。
 
+## Agentic RAG 能力
+
+ALR-TW 把法律研究拆成可觀察、可重試且可稽核的 server-owned 流程：
+
+```text
+User query
+  -> query understanding and privacy screen
+  -> law / judgment / constitutional source plan
+  -> retrieval and candidate classification
+  -> official-source resolution and evidence promotion
+  -> time, role, coverage and claim-support checks
+  -> citation validation
+  -> validated | qualified | blocked
+```
+
+v0.6.0 提供的主要能力包括：
+
+- query understanding：正規化問題、辨識法律引用及研究限制；
+- privacy screen：在查詢可能送往 TLR 前先檢查敏感資訊；
+- source planning：分開處理法規、普通裁判與憲法材料；
+- candidate recall：以官方搜尋或 TLR 找出候選來源，但不提前授予引用資格；
+- exact lookup：支援法規名稱＋條號、憲法裁判字號、完整 JID 與正式裁判字號；
+- official verification：回查官方識別碼、官方 URL 與內容，形成不可由 caller 偽造的 evidence snapshot；
+- legal-time checks：保存來源取得、驗證、到期與法規版本狀態；
+- role-aware analysis：區分法院理由、主文、當事人主張、案件事實及個別意見；
+- counter-authority coverage：要求 agent 顯示反方或限制性權威的檢索狀態；
+- claim grounding：把答案主張與證據片段逐一核對；
+- resumable run：研究義務、候選、證據及 tool events 可在短期 SQLite 中恢復；
+- deterministic finalization：最終是否可呈現由 server 規則決定，不由模型自行宣告。
+
 ## 核心安全邊界
 
 ```text
@@ -88,7 +118,11 @@ alr-tw doctor --live
 | `validate_legal_answer` | 只用該 run 的 server-owned evidence 驗證草稿 |
 | `purge_research_storage` | 同步刪除單一 run 或全部 managed storage |
 
-舊版 synthetic／trace tools 暫時保留相容性，但新整合應優先使用上述研究服務。MCP tool output 仍使用：
+舊版 synthetic／trace tools 暫時保留相容性，但新整合應優先使用上述研究服務。
+
+支援的 MCP protocol versions：`2025-11-25`、`2025-06-18`、`2025-03-26`、`2024-11-05`。不支援的版本會在 initialize 階段拒絕。
+
+每個 tool result 都使用固定 envelope：
 
 ```json
 {
@@ -99,7 +133,7 @@ alr-tw doctor --live
 }
 ```
 
-支援的 MCP protocol versions：`2025-11-25`、`2025-06-18`、`2025-03-26`、`2024-11-05`。不支援的版本會在 initialize 階段拒絕。
+`request_id`／`client_id` 只用於關聯紀錄，不是 authority 或冪等依據。會改變狀態的操作必須使用 `operation_id`；相同 operation 與相同輸入應取得相同結果。未知欄位、不支援的 protocol version、caller 自帶的 trust decision 或不合法的 purge 請求都會被拒絕。
 
 ## 研究流程
 
@@ -113,6 +147,31 @@ Final decision：
 
 `lookup_legal_source` 只證明來源查得，不代表任何答案 claim 已被驗證。
 
+## Claim Grounding 與 Trust Gate
+
+Retrieval candidate 不等於 final citation。ALR-TW 把「找到資料」「來源可信」「內容支持主張」分成三個不同判斷：
+
+| Source tier | 用途 | 可直接作 final citation |
+|---|---|---|
+| `official` | ALR-TW 自官方來源取得並固定的內容 | 是，但仍須通過時點、角色與 claim support |
+| `verified_cache` | 由受治理 resolver 重新核對 identifier 與 content hash 的快取 | 有條件 |
+| `staging` | 匯入、清洗或 audit 中的候選資料 | 否 |
+| `external_semantic_recall` | TLR 或其他外部語意召回結果 | 否 |
+| `synthetic` | demo／test fixture | 否 |
+| `unknown` | 身分或來源不明 | 否 |
+
+Trust gate 會在下列情況 fail closed：
+
+- 沒有可用的 final citation；
+- citation 不存在、已過期、識別不一致或無法回到官方來源；
+- 只有 TLR、staging、synthetic 或 unknown candidate；
+- 歷史法規時點或效力狀態無法確認；
+- 把當事人主張、案件事實、協同／不同意見誤作法院多數理由；
+- claim 缺少證據、超出證據範圍、與證據衝突或仍待人工判斷；
+- 普通裁判或反方權威覆蓋不足，卻嘗試作無保留結論。
+
+`validated` 只代表該 draft 在該 run 的 server-owned evidence 與公開規則下通過；它不是對法律意見正確性的保證，也不能取代專業複核。
+
 ## Retention 與清除
 
 預設短期 SQLite 儲存位置為 `~/.cache/alr-tw`，預設保留 `24h`，上限 `7d`。單次 run 可用 `retention: "ephemeral"`，在 final validation 後同步清除。
@@ -123,6 +182,35 @@ alr-tw purge --all --confirm
 ```
 
 CLI 與 MCP 共用同一 purge 實作。清除本機資料無法撤回已傳送給外部服務的查詢或其日誌。詳見 [Storage and Purge](docs/STORAGE_AND_PURGE.md)。
+
+## MCP Client 快速設定
+
+先用安全的 `synthetic` 模式確認 client 能啟動 MCP server：
+
+```json
+{
+  "mcpServers": {
+    "alr-tw": {
+      "command": "alr-tw-mcp",
+      "env": {
+        "ALR_TW_DATA_MODE": "synthetic"
+      }
+    }
+  }
+}
+```
+
+建議的 agent 呼叫順序：
+
+1. `research_legal_question` 建立 run；
+2. 按 `next_operation` 呼叫 `continue_legal_research`；
+3. 必要時用 `get_legal_research_state` 唯讀恢復狀態；
+4. 外部 agent 只依 run 中已升格的 evidence 起草；
+5. 將草稿送進 `validate_legal_answer`；
+6. 只有 `validated` 或規則允許的 `qualified` 結果才可呈現；
+7. 依 retention policy 清除 run。
+
+若只需要核對一個精確法源，可使用 `lookup_legal_source`，但不能跳過答案層級的 `validate_legal_answer`。
 
 ## 開發驗證
 
@@ -139,6 +227,47 @@ uv build
 
 Repo 不含 production corpus、官方全文永久快取、真實使用者紀錄、私有 eval、向量 shard、憑證或內部 endpoint。Synthetic data 只能用於 demo／測試，不能被描述為現行法。正式部署者必須自行確認官方資料授權、個資、保存、移除與服務條款。
 
+公開 repo 保留的是可重現的工程契約：
+
+- provider 與 resolver interfaces；
+- source tier、evidence promotion 與 citation policy；
+- server-owned research state、MCP schemas 與 error codes；
+- privacy、retention、purge 與 fail-closed 規則；
+- synthetic fixtures、tests、CI 與公開文件。
+
+不公開的 production 資產包括真實 corpus、永久 cache、向量資料庫、真實查詢與答案、credential、私有 endpoint、內部 ranking／chunking 參數及未匿名化案件資料。
+
+## 如何接入真實資料
+
+v0.6.0 已提供官方 live providers 與 TLR clean-room adapter。建議部署順序如下：
+
+```text
+Choose data mode
+  -> configure retention and secrets outside the repo
+  -> run alr-tw doctor --live
+  -> retrieve candidate sources
+  -> resolve official identifier and content
+  -> create server-owned evidence snapshot
+  -> validate draft claims and citations
+  -> present or fail closed
+```
+
+### 法規
+
+法規應以法務部官方資料為 authority layer。明確法規名稱與條號優先走 exact lookup；語意搜尋只能協助探索候選。涉及行為時法、修法或過渡規定時，若對應日期的版本無法確認，系統應 blocked 或要求人工審查。
+
+### 普通裁判
+
+普通裁判不從司法院 API 取得。ALR-TW 直接解析司法院裁判書搜尋頁取得候選與 JID，再由官方全文頁下載內容。搜尋失敗、網站阻擋、解析失敗與查無資料是不同狀態；系統不會把網路或 WAF 問題改寫成「裁判不存在」。
+
+### TLR
+
+[TLR](https://github.com/aa0101181514/tw-legal-rag)用於提高普通裁判 candidate recall。其 excerpt、citation URL、排序或 bundle metadata 都不能自行成為正式證據。只有回到司法院官方來源、識別一致且內容驗證成功後，ALR-TW 才會建立新的 official evidence。`mcp-taiwan-legal-db` 只是公開行為參考，不是 dependency；本專案的 provider、transport、parser 與 evidence pipeline 均為獨立實作。
+
+### 憲法材料
+
+憲法法庭資料應保留主文、理由與個別意見的角色差異。協同意見與不同意見可作研究材料，但不能在沒有標示的情況下作為多數意見或裁判拘束內容。
+
 ## 文件
 
 - [Architecture](ARCHITECTURE.md)
@@ -148,7 +277,10 @@ Repo 不含 production corpus、官方全文永久快取、真實使用者紀錄
 - [TLR Provider](docs/TLR_PROVIDER.md)
 - [Official Providers](docs/OFFICIAL_PROVIDERS.md)
 - [Storage and Purge](docs/STORAGE_AND_PURGE.md)
-- [v0.6.0 Release Audit](docs/V060_RELEASE_AUDIT.md)
+- [Agent Client Guide](docs/AGENT_CLIENT_GUIDE.md)
+- [Error Codes](docs/ERROR_CODES.md)
+- [Threat Model](docs/THREAT_MODEL.md)
+- [Release Notes](docs/RELEASE_NOTES.md)
 - [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 

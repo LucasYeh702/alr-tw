@@ -10,6 +10,27 @@ ALR-TW v0.6.0 是台灣法律研究安全 harness 的公開預覽版。外部 ag
 
 本 repo 不包含 LLM，也不包含 agent 實作。規劃、工具選擇與自然語言推理由外部呼叫端提供；ALR-TW 只負責可稽核工具與確定性閘門。Repo 內的示範 ranking 參數僅供測試，不是 production ranking 設定。
 
+> v0.6.0 仍是 `0.x` 公開預覽。介面可能調整；答案必須由具資格的人員依官方原文、時點與個案事實複核。
+
+## Agentic RAG 能力
+
+ALR-TW 把法律研究拆成可觀察、可重試且可稽核的 server-owned 流程：
+
+```text
+User query
+  -> query understanding and privacy screen
+  -> law / judgment / constitutional source plan
+  -> retrieval and candidate classification
+  -> official-source resolution and evidence promotion
+  -> time, role, coverage and claim-support checks
+  -> citation validation
+  -> validated | qualified | blocked
+```
+
+v0.6.0 提供 query understanding、privacy screen、法規／裁判／憲法來源規劃、候選召回、精確法源查詢、官方內容驗證、法律時點檢查、裁判角色分類、反方權威覆蓋、claim grounding、短期 resumable run 與 deterministic finalization。
+
+外部 agent 可以規劃研究與起草答案，但不能自行宣告來源為官方資料、把候選升格成證據，或繞過最終驗證。
+
 ## v0.6.0 的安全模型
 
 ```text
@@ -72,6 +93,19 @@ alr-tw doctor --live
 
 支援 MCP protocol `2025-11-25`、`2025-06-18`、`2025-03-26`、`2024-11-05`。
 
+所有 tool result 都使用固定 envelope：
+
+```json
+{
+  "ok": true,
+  "schema_version": "alr-tw.mcp_tool_result/v1",
+  "data": {},
+  "error": null
+}
+```
+
+`request_id`／`client_id` 只用於關聯紀錄；會改變狀態的操作以 `operation_id` 保持冪等。未知欄位、不支援的 protocol version、caller 自帶的 trust decision 或不合法 purge 請求都會被拒絕。
+
 ## 官方 providers
 
 - 法務部法規：官方結構化資料優先，官方網頁作一致性檢查；
@@ -88,6 +122,21 @@ alr-tw doctor --live
 
 精確查到來源不等於答案已驗證。Final answer 仍必須通過 `validate_legal_answer`。
 
+## Claim Grounding 與 Trust Gate
+
+ALR-TW 分開判斷「找到資料」「來源可信」與「內容支持主張」：
+
+| Source tier | 用途 | 可直接作 final citation |
+|---|---|---|
+| `official` | 自官方來源取得並固定的內容 | 是，但仍須通過時點、角色與 claim support |
+| `verified_cache` | 由受治理 resolver 核對 identifier 與 content hash 的快取 | 有條件 |
+| `staging` | 匯入、清洗或 audit 中的候選資料 | 否 |
+| `external_semantic_recall` | TLR 或其他外部語意召回結果 | 否 |
+| `synthetic` | demo／test fixture | 否 |
+| `unknown` | 身分或來源不明 | 否 |
+
+沒有 final citation、來源無法驗證、時點不明、角色錯置、claim 超出證據、只找到 candidate-only 來源，或裁判覆蓋不足卻作無保留結論時，trust gate 都應 fail closed。
+
 ## Retention 與 purge
 
 預設 managed SQLite 位於 `~/.cache/alr-tw`，保存 `24h`，上限 `7d`。單次 run 可設定 `retention: "ephemeral"`，在 final validation 後同步刪除。
@@ -98,6 +147,25 @@ alr-tw purge --all --confirm
 ```
 
 清除本機資料不能撤回已傳送給外部服務的查詢或伺服器日誌。詳見 [Storage and Purge](docs/STORAGE_AND_PURGE.md)。
+
+## MCP Client 快速設定
+
+先用安全的 `synthetic` 模式確認 MCP server：
+
+```json
+{
+  "mcpServers": {
+    "alr-tw": {
+      "command": "alr-tw-mcp",
+      "env": {
+        "ALR_TW_DATA_MODE": "synthetic"
+      }
+    }
+  }
+}
+```
+
+建議依序建立 run、按 `next_operation` 推進研究、依 server-owned evidence 起草，再呼叫 `validate_legal_answer`。只有 `validated` 或規則允許的 `qualified` 結果才可呈現；`lookup_legal_source` 不能取代答案層級的驗證。
 
 ## 驗證
 
@@ -110,6 +178,30 @@ python3 scripts/check_public_boundary.py
 uv build
 ```
 
+## 公開／私有邊界
+
+公開 repo 保留 provider／resolver interfaces、source tier、evidence promotion、citation policy、MCP schemas、privacy、retention、purge、fail-closed rules、synthetic fixtures、tests、CI 與文件。
+
+Repo 不包含 production corpus、永久官方全文 cache、真實使用者紀錄、私有 eval、向量 shard、credential、私有 endpoint、內部 ranking／chunking 參數或未匿名化案件資料。Synthetic data 只能用於 demo／測試，不能描述為現行法。
+
+## 如何接入真實資料
+
+```text
+Choose data mode
+  -> configure retention and secrets outside the repo
+  -> run alr-tw doctor --live
+  -> retrieve candidate sources
+  -> resolve official identifier and content
+  -> create server-owned evidence snapshot
+  -> validate draft claims and citations
+  -> present or fail closed
+```
+
+- 法規：以法務部官方資料作 authority layer，明確名稱與條號優先 exact lookup；歷史版本不明時 blocked 或轉人工審查。
+- 普通裁判：不使用司法院 API；直接解析裁判書搜尋頁取得 JID，再從官方全文頁下載內容。搜尋失敗、網站阻擋、解析失敗與查無資料不得混為同一狀態。
+- TLR：[TLR](https://github.com/aa0101181514/tw-legal-rag)只提高普通裁判 candidate recall；命中後仍須回司法院官方來源驗證。`mcp-taiwan-legal-db` 只是公開行為參考，不是 dependency，相關 provider、transport、parser 與 evidence pipeline 均為獨立實作。
+- 憲法材料：保留主文、理由、協同意見與不同意見的角色差異，個別意見不能冒充多數理由。
+
 ## 重要文件
 
 - [架構](ARCHITECTURE.md)
@@ -120,7 +212,10 @@ uv build
 - [TLR Provider](docs/TLR_PROVIDER.md)
 - [官方 Providers](docs/OFFICIAL_PROVIDERS.md)
 - [Storage and Purge](docs/STORAGE_AND_PURGE.md)
-- [v0.6.0 實際發行稽核](docs/V060_RELEASE_AUDIT.md)
+- [Agent Client Guide](docs/AGENT_CLIENT_GUIDE.md)
+- [Error Codes](docs/ERROR_CODES.md)
+- [Threat Model](docs/THREAT_MODEL.md)
+- [Release Notes](docs/RELEASE_NOTES.md)
 - [Changelog](CHANGELOG.md)
 
 ## 法律聲明

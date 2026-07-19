@@ -10,6 +10,27 @@ This project is neither legal advice nor a complete Taiwan legal database.
 
 This repository does not ship an LLM or agent implementation. Planning, tool selection, and natural-language reasoning come from the external caller; ALR-TW supplies auditable tools and deterministic gates. The demo ranking parameters are illustrative test settings, not production ranking configuration.
 
+> v0.6.0 remains a `0.x` public preview. Interfaces may change, and a qualified professional must verify every answer against official text, the applicable legal time, and the facts of the matter.
+
+## Agentic RAG capabilities
+
+ALR-TW decomposes legal research into an observable, retryable, and auditable server-owned flow:
+
+```text
+User query
+  -> query understanding and privacy screen
+  -> law / judgment / constitutional source plan
+  -> retrieval and candidate classification
+  -> official-source resolution and evidence promotion
+  -> time, role, coverage and claim-support checks
+  -> citation validation
+  -> validated | qualified | blocked
+```
+
+The v0.6.0 surface includes query understanding, privacy screening, material-specific source planning, candidate recall, exact legal-source lookup, official-content verification, legal-time checks, judgment-role classification, counter-authority coverage, claim grounding, resumable short-lived runs, and deterministic finalization.
+
+An external agent may plan research and draft an answer, but it cannot declare a source official, promote a candidate into evidence, or bypass final validation.
+
 ## Safety boundary
 
 ```text
@@ -77,6 +98,19 @@ Legacy synthetic and trace tools remain temporarily available for compatibility.
 
 Supported MCP protocol versions are `2025-11-25`, `2025-06-18`, `2025-03-26`, and `2024-11-05`. Unsupported versions are rejected during initialization.
 
+Every tool result uses a fixed envelope:
+
+```json
+{
+  "ok": true,
+  "schema_version": "alr-tw.mcp_tool_result/v1",
+  "data": {},
+  "error": null
+}
+```
+
+`request_id` and `client_id` are correlation metadata only. State-changing operations use `operation_id` for idempotency. Unknown fields, unsupported protocol versions, caller-supplied trust decisions, and invalid purge requests are rejected.
+
 ## Official providers
 
 - Statutes: official Ministry of Justice structured data, with official-page consistency checks.
@@ -93,6 +127,21 @@ The first release does not promise complete historical statute versions, exhaust
 
 Finding a source does not validate a claim. A draft must still pass `validate_legal_answer`.
 
+## Claim grounding and trust gate
+
+ALR-TW evaluates “a source was found,” “the source is authoritative,” and “the source supports this claim” as separate questions:
+
+| Source tier | Purpose | Direct final-citation eligibility |
+|---|---|---|
+| `official` | Content fetched and fixed from an official source | Yes, subject to time, role, and claim-support checks |
+| `verified_cache` | Cache whose identifier and content hash were checked by a governed resolver | Conditional |
+| `staging` | Imported, cleaned, or audited candidate material | No |
+| `external_semantic_recall` | TLR or another external semantic-recall result | No |
+| `synthetic` | Demo or test fixture | No |
+| `unknown` | Unresolved identity or provenance | No |
+
+The trust gate fails closed when there is no final citation, official resolution fails, legal time is unknown, a section role is misstated, a claim exceeds its evidence, only candidate sources are available, or the draft makes an unqualified conclusion despite incomplete authority coverage.
+
 ## Retention and purge
 
 Managed SQLite storage defaults to `~/.cache/alr-tw`, with a `24h` default and `7d` maximum retention. A run may request `retention: "ephemeral"`; it is purged synchronously after final validation.
@@ -103,6 +152,25 @@ alr-tw purge --all --confirm
 ```
 
 Local purge cannot retract a query already transmitted to an external provider or erase that provider's logs. See [Storage and Purge](docs/STORAGE_AND_PURGE.md).
+
+## MCP client quick configuration
+
+Start in the safe `synthetic` mode to verify that the client can launch the MCP server:
+
+```json
+{
+  "mcpServers": {
+    "alr-tw": {
+      "command": "alr-tw-mcp",
+      "env": {
+        "ALR_TW_DATA_MODE": "synthetic"
+      }
+    }
+  }
+}
+```
+
+The recommended client sequence is to create a run, follow `next_operation`, draft only from promoted server-owned evidence, and submit the draft to `validate_legal_answer`. Only a `validated` result, or a `qualified` result allowed by the disclosure rules, may be rendered. `lookup_legal_source` does not replace answer-level validation.
 
 ## Development verification
 
@@ -115,6 +183,30 @@ python3 scripts/check_public_boundary.py
 uv build
 ```
 
+## Public / private boundary
+
+The public repository contains provider and resolver interfaces, source tiers, evidence-promotion and citation policies, MCP schemas, privacy and retention controls, purge and fail-closed rules, synthetic fixtures, tests, CI, and documentation.
+
+It does not contain a production corpus, permanent official full-text cache, real user records, private evaluations, vector shards, credentials, private endpoints, internal ranking or chunking parameters, or unredacted case material. Synthetic data is for demos and tests and must not be presented as current law.
+
+## Connecting real data
+
+```text
+Choose data mode
+  -> configure retention and secrets outside the repo
+  -> run alr-tw doctor --live
+  -> retrieve candidate sources
+  -> resolve official identifier and content
+  -> create server-owned evidence snapshot
+  -> validate draft claims and citations
+  -> present or fail closed
+```
+
+- Statutes: the Ministry of Justice official source is the authority layer. Prefer exact lookup for an explicit law and article; block or require human review when a historical version cannot be established.
+- Ordinary judgments: ALR-TW does not use a Judicial Yuan API. It parses the public judgment search page to obtain a JID, then downloads the official detail page. Search failure, site blocking, parse failure, and confirmed absence remain distinct states.
+- TLR: [TLR](https://github.com/aa0101181514/tw-legal-rag) improves ordinary-judgment candidate recall only. A hit must be resolved against the Judicial Yuan official source. `mcp-taiwan-legal-db` is a public behavioral reference, not a dependency; the provider, transport, parser, and evidence pipeline are independent implementations.
+- Constitutional materials: holdings, majority reasons, concurrences, and dissents retain separate roles. An individual opinion cannot be presented as majority reasoning.
+
 ## Documentation
 
 - [Architecture](ARCHITECTURE.md)
@@ -125,7 +217,10 @@ uv build
 - [TLR Provider](docs/TLR_PROVIDER.md)
 - [Official Providers](docs/OFFICIAL_PROVIDERS.md)
 - [Storage and Purge](docs/STORAGE_AND_PURGE.md)
-- [v0.6.0 Release Audit](docs/V060_RELEASE_AUDIT.md)
+- [Agent Client Guide](docs/AGENT_CLIENT_GUIDE.md)
+- [Error Codes](docs/ERROR_CODES.md)
+- [Threat Model](docs/THREAT_MODEL.md)
+- [Release Notes](docs/RELEASE_NOTES.md)
 - [Changelog](CHANGELOG.md)
 
 ## Legal notice
