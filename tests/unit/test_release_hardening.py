@@ -90,6 +90,12 @@ def test_ci_runs_history_secret_scan():
     assert "gitleaks" in text or "trufflehog" in text
 
 
+def test_ci_installs_live_provider_dependencies_before_provider_tests():
+    text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert ".[dev,live]" in text
+
+
 def test_deployment_starting_points_are_documented_as_illustrative():
     text = (REPO_ROOT / "docs/DEPLOYMENT_STARTING_POINTS.md").read_text(encoding="utf-8")
 
