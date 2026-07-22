@@ -162,6 +162,48 @@ def test_legacy_pdf_export_marker_can_supply_canonical_jid() -> None:
     assert evidence
 
 
+def test_exportfile_pdf_marker_can_supply_canonical_jid() -> None:
+    document = _detail_page().replace(
+        f'<a id="hlPrint" href="/FJUD/printData.aspx?id={quote(JID, safe="")}">列印</a>',
+        (
+            '<a id="hlPrint" class="btn-print">列印</a>'
+            '<a id="hlExportPDF" href="/EXPORTFILE/ExportToPdf.aspx?type=JD&amp;'
+            f'id={quote(JID, safe="")}">PDF</a>'
+        ),
+    )
+    provider = OfficialJudgmentProvider(FixtureSiteTransport([_response(document)]))
+
+    result, source, evidence = asyncio.run(provider.exact_lookup(JID))
+
+    assert result.status is ProviderResultStatus.FOUND
+    assert source is not None and source.official_identifier == JID
+    assert evidence
+
+
+def test_five_part_jid_is_resolved_by_official_page_without_guessing_version() -> None:
+    partial_jid = JID.rsplit(",", 1)[0]
+    transport = FixtureSiteTransport([_response(_detail_page())])
+    provider = OfficialJudgmentProvider(transport)
+
+    result, source, evidence = asyncio.run(provider.exact_lookup(partial_jid))
+
+    assert result.status is ProviderResultStatus.FOUND
+    assert result.metadata["jid"] == JID
+    assert source is not None and source.official_identifier == JID
+    assert evidence
+    assert f"id={quote(partial_jid, safe='')}" in transport.calls[0][1]
+
+
+def test_five_part_jid_must_match_official_canonical_prefix() -> None:
+    wrong_partial = "TSTV,130,測,99,20990102"
+    provider = OfficialJudgmentProvider(FixtureSiteTransport([_response(_detail_page())]))
+
+    result, source, evidence = asyncio.run(provider.exact_lookup(wrong_partial))
+
+    assert result.error_code is ProviderErrorCode.OFFICIAL_IDENTIFIER_MISMATCH
+    assert source is None and evidence == []
+
+
 def test_empty_htmlcontent_falls_back_to_populated_text_pre() -> None:
     document = _detail_page().replace(
         '<div class="jud_content"><div class="htmlcontent">',
@@ -240,7 +282,18 @@ def test_official_judgment_identifier_mismatch_fails_closed() -> None:
 def test_jid_normalization_is_strict() -> None:
     assert OfficialJudgmentProvider.normalize_jid(f" {JID} ") == JID
     assert OfficialJudgmentProvider.normalize_jid("TSTV,130,測,42,20990102") is None
+    assert (
+        OfficialJudgmentProvider.normalize_partial_jid(JID.rsplit(",", 1)[0])
+        == JID.rsplit(",", 1)[0]
+    )
     assert OfficialJudgmentProvider.normalize_jid("https://attacker.invalid/value") is None
+    assert (
+        OfficialJudgmentProvider.jid_from_identifier(
+            "https://judgment.judicial.gov.tw/EXPORTFILE/ExportToPdf.aspx?"
+            f"type=OTHER&id={quote(JID, safe='')}"
+        )
+        is None
+    )
 
 
 def test_formal_citation_resolves_then_downloads_official_html() -> None:

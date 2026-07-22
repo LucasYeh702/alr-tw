@@ -50,13 +50,25 @@ def resolve_judgment_candidate(
         if canonical:
             return _resolved(candidate, canonical, "provider_document_id")
 
+        partial = _partial_jid_from_identifier(identity.provider_document_id)
+        if partial:
+            return _resolved_partial(candidate, partial, "provider_partial_jid")
+
         canonical = _jid_from_url(identity.official_url)
         if canonical:
             return _resolved(candidate, canonical, "typed_official_url")
 
+        partial = _partial_jid_from_identifier(identity.official_url)
+        if partial:
+            return _resolved_partial(candidate, partial, "typed_partial_official_url")
+
     canonical = _jid_from_url(candidate.official_url)
     if canonical:
         return _resolved(candidate, canonical, "legacy_official_url")
+
+    partial = _partial_jid_from_identifier(candidate.official_url)
+    if partial:
+        return _resolved_partial(candidate, partial, "legacy_partial_official_url")
 
     canonical = _jid_from_identifier(candidate.official_identifier)
     if canonical:
@@ -79,6 +91,9 @@ def resolve_judgment_candidate(
     canonical = _jid_from_identifier(str(legacy_doc_id or ""))
     if canonical:
         return _resolved(candidate, canonical, "legacy_metadata_doc_id")
+    partial = _partial_jid_from_identifier(str(legacy_doc_id or ""))
+    if partial:
+        return _resolved_partial(candidate, partial, "legacy_metadata_partial_jid")
     return None
 
 
@@ -132,10 +147,30 @@ def _resolved(
     )
 
 
+def _resolved_partial(
+    candidate: ProviderCandidate,
+    partial_jid: str,
+    method: str,
+) -> ResolvedJudgmentIdentity:
+    return ResolvedJudgmentIdentity(
+        lookup_identifier=partial_jid,
+        canonical_jid=None,
+        resolution_method=method,
+        candidate=candidate,
+        merged_candidate_ids=(candidate.candidate_id,),
+    )
+
+
 def _jid_from_identifier(value: str | None) -> str | None:
     if not value:
         return None
     return OfficialJudgmentProvider.normalize_jid(value) or _jid_from_url(value)
+
+
+def _partial_jid_from_identifier(value: str | None) -> str | None:
+    if not value:
+        return None
+    return OfficialJudgmentProvider.partial_jid_from_identifier(value)
 
 
 def _jid_from_url(value: str | None) -> str | None:

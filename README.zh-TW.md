@@ -27,7 +27,7 @@ User query
   -> validated | qualified | blocked
 ```
 
-v0.6.2 提供 query understanding、outbound/output privacy 分離、法規／裁判／憲法來源規劃、TLR 候選官方升格、partial source 保留、裁判角色分類、explicit claim bindings、deterministic grounding v2、短期 resumable run 與 deterministic finalization。另補強舊式司法院裁判頁、搜尋結果 fallback、今日現行法日期語意與 TLR 本地重排。公開版尚未實作系統性反方裁判搜尋。
+v0.6.2 提供 query understanding、outbound/output privacy 分離、法規／裁判／憲法來源規劃、TLR 候選官方升格、partial source 保留、裁判角色分類、explicit claim bindings、deterministic grounding v2、短期 resumable run 與 deterministic finalization。另補強舊式 `hlExportPDF`、`/EXPORTFILE/ExportToPdf.aspx` 裁判頁、TLR 五段 doc ID 的官方 canonical 補全、搜尋結果 fallback、今日現行法日期語意與 TLR 本地重排。公開版尚未實作系統性反方裁判搜尋。
 
 外部 agent 可以規劃研究與起草答案，但不能自行宣告來源為官方資料、把候選升格成證據，或繞過最終驗證。
 

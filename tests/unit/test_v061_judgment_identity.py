@@ -88,6 +88,22 @@ def test_resolver_supports_formal_citation_and_legacy_doc_id() -> None:
     assert legacy_result.resolution_method == "legacy_metadata_doc_id"
 
 
+def test_resolver_preserves_five_part_provider_id_for_official_resolution() -> None:
+    partial_jid = JID.rsplit(",", 1)[0]
+    candidate = _candidate(
+        "partial",
+        "tlr_semantic_recall",
+        identity=CandidateIdentity(provider_document_id=partial_jid),
+    )
+
+    resolved = resolve_judgment_candidate(candidate)
+
+    assert resolved is not None
+    assert resolved.lookup_identifier == partial_jid
+    assert resolved.canonical_jid is None
+    assert resolved.resolution_method == "provider_partial_jid"
+
+
 def test_rank_and_dedupe_keeps_official_target_and_merges_provenance() -> None:
     tlr = _candidate(
         "tlr-1",

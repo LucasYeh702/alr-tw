@@ -51,6 +51,18 @@ JUDGMENT_DATA_URL = f"{JUDGMENT_SEARCH_ORIGIN}/FJUD/data.aspx"
 MAX_RESPONSE_BYTES = 24 * 1024 * 1024
 MAX_SEARCH_RESULTS = 20
 _JID_FIELD = re.compile(r"^[^,\r\n]{1,80}$")
+_JID_URL_PATHS = {
+    "/fjud/data.aspx",
+    "/fjud/printdata.aspx",
+    "/fjud/hlexportpdf",
+    "/fjud/hlexportpdf.aspx",
+    "/exportfile/exporttopdf.aspx",
+}
+_EXPORT_JID_PATHS = {
+    "/fjud/hlexportpdf",
+    "/fjud/hlexportpdf.aspx",
+    "/exportfile/exporttopdf.aspx",
+}
 _BLOCKED_MARKERS = (
     "Request Rejected",
     "The requested URL was rejected",
@@ -181,21 +193,23 @@ class OfficialJudgmentProvider:
         *,
         now: datetime | None = None,
     ) -> tuple[ProviderResult, SourceRecord | None, list[EvidenceSpan]]:
-        jid = self.jid_from_identifier(identifier)
-        if jid is None:
+        lookup_jid = self.jid_from_identifier(identifier)
+        if lookup_jid is None:
+            lookup_jid = self.partial_jid_from_identifier(identifier)
+        if lookup_jid is None:
             citation = self.normalize_formal_citation(identifier)
             if citation is None:
                 return self._error(ProviderErrorCode.INVALID_IDENTIFIER, "INVALID_IDENTIFIER"), None, []
             resolved = await self._resolve_formal_citation(citation)
             if isinstance(resolved, ProviderResult):
                 return resolved, None, []
-            jid = resolved
+            lookup_jid = resolved
 
-        official_url = self.official_document_url(jid)
+        official_url = self.official_document_url(lookup_jid)
         response, transport_error = await self._get(official_url)
         if response is None:
             if transport_error == "HTTP_404":
-                return self._not_found(jid), None, []
+                return self._not_found(lookup_jid), None, []
             return (
                 self._error(self._error_code_for_transport(transport_error), transport_error),
                 None,
@@ -205,9 +219,13 @@ class OfficialJudgmentProvider:
         if document is None:
             return self._error(ProviderErrorCode.OFFICIAL_PARSE_ERROR, decode_error), None, []
         if self._looks_not_found(document):
-            return self._not_found(jid), None, []
+            return self._not_found(lookup_jid), None, []
         try:
-            parsed = self.parse_detail_page(document, expected_jid=jid, official_url=official_url)
+            parsed = self.parse_detail_page(
+                document,
+                expected_jid=lookup_jid,
+                official_url=official_url,
+            )
         except ValueError as exc:
             error_codes = {
                 "JID_MISMATCH": ProviderErrorCode.OFFICIAL_IDENTIFIER_MISMATCH,
@@ -227,7 +245,7 @@ class OfficialJudgmentProvider:
                 evidence_ids=[item.evidence_id for item in evidence],
                 coverage_complete=True,
                 metadata={
-                    "jid": jid,
+                    "jid": parsed["jid"],
                     "retrieval": "official_website_html",
                     "parse_status": source.metadata.get("parse_status"),
                     "parser_version": source.metadata.get("parser_version"),
@@ -689,7 +707,13 @@ class OfficialJudgmentProvider:
         canonical_jid = OfficialJudgmentProvider._canonical_jid_from_detail(soup)
         if canonical_jid is None:
             raise ValueError("JUDGMENT_CANONICAL_ID_MISSING")
-        if canonical_jid != expected_jid:
+        expected_canonical = OfficialJudgmentProvider.normalize_jid(expected_jid)
+        expected_partial = OfficialJudgmentProvider.normalize_partial_jid(expected_jid)
+        if expected_canonical is not None and canonical_jid != expected_canonical:
+            raise ValueError("JID_MISMATCH")
+        if expected_canonical is None and (
+            expected_partial is None or not canonical_jid.startswith(f"{expected_partial},")
+        ):
             raise ValueError("JID_MISMATCH")
 
         metadata: dict[str, str] = {}
@@ -719,13 +743,13 @@ class OfficialJudgmentProvider:
             blocks = extract_judgment_blocks(content)
             if blocks:
                 break
-        parsed_judgment = parse_judgment_blocks(blocks, canonical_jid=expected_jid)
+        parsed_judgment = parse_judgment_blocks(blocks, canonical_jid=canonical_jid)
 
-        parts = expected_jid.split(",")
+        parts = canonical_jid.split(",")
         title = metadata.get("裁判字號") or soup.title.get_text(" ", strip=True)
         title = OfficialJudgmentProvider._normalize_inline(title)
         return {
-            "jid": expected_jid,
+            "jid": canonical_jid,
             "year": parts[1],
             "case": parts[2],
             "number": parts[3],
@@ -909,6 +933,21 @@ class OfficialJudgmentProvider:
         return ",".join(parts)
 
     @staticmethod
+    def normalize_partial_jid(value: str) -> str | None:
+        compact = value.strip()
+        parts = [part.strip() for part in compact.split(",")]
+        if len(parts) != 5 or any(not _JID_FIELD.fullmatch(part) for part in parts):
+            return None
+        parts[0] = parts[0].upper()
+        if not re.fullmatch(r"[A-Z0-9]{3,12}", parts[0]):
+            return None
+        if not parts[1].isdigit() or not parts[3].isdigit():
+            return None
+        if not re.fullmatch(r"\d{8}", parts[4]):
+            return None
+        return ",".join(parts)
+
+    @staticmethod
     def jid_from_identifier(value: str) -> str | None:
         direct = OfficialJudgmentProvider.normalize_jid(value)
         if direct is not None:
@@ -918,25 +957,46 @@ class OfficialJudgmentProvider:
             candidate = urljoin(f"{JUDGMENT_SEARCH_ORIGIN}/FJUD/", candidate)
         parsed = urlsplit(candidate)
         path = parsed.path.lower()
-        allowed_paths = {
-            "/fjud/data.aspx",
-            "/fjud/printdata.aspx",
-            "/fjud/hlexportpdf",
-            "/fjud/hlexportpdf.aspx",
-        }
         if (
             parsed.scheme != "https"
             or parsed.hostname != "judgment.judicial.gov.tw"
-            or path not in allowed_paths
+            or path not in _JID_URL_PATHS
         ):
             return None
         query = {key.lower(): values for key, values in parse_qs(parsed.query).items()}
-        if path in {"/fjud/hlexportpdf", "/fjud/hlexportpdf.aspx"} and not any(
+        if path in _EXPORT_JID_PATHS and not any(
             value.upper() == "JD" for value in query.get("type", [])
         ):
             return None
         for encoded in query.get("id", []):
             normalized = OfficialJudgmentProvider.normalize_jid(unquote(encoded))
+            if normalized is not None:
+                return normalized
+        return None
+
+    @staticmethod
+    def partial_jid_from_identifier(value: str) -> str | None:
+        direct = OfficialJudgmentProvider.normalize_partial_jid(value)
+        if direct is not None:
+            return direct
+        candidate = html.unescape(value.strip())
+        if candidate.startswith("/") or not urlsplit(candidate).scheme:
+            candidate = urljoin(f"{JUDGMENT_SEARCH_ORIGIN}/FJUD/", candidate)
+        parsed = urlsplit(candidate)
+        path = parsed.path.lower()
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname != "judgment.judicial.gov.tw"
+            or path not in _JID_URL_PATHS
+        ):
+            return None
+        query = {key.lower(): values for key, values in parse_qs(parsed.query).items()}
+        if path in _EXPORT_JID_PATHS and not any(
+            value.upper() == "JD" for value in query.get("type", [])
+        ):
+            return None
+        for encoded in query.get("id", []):
+            normalized = OfficialJudgmentProvider.normalize_partial_jid(unquote(encoded))
             if normalized is not None:
                 return normalized
         return None
@@ -964,7 +1024,10 @@ class OfficialJudgmentProvider:
 
     @staticmethod
     def official_document_url(jid: str) -> str:
-        normalized = OfficialJudgmentProvider.normalize_jid(jid)
+        normalized = (
+            OfficialJudgmentProvider.normalize_jid(jid)
+            or OfficialJudgmentProvider.normalize_partial_jid(jid)
+        )
         if normalized is None:
             raise ValueError("INVALID_JID")
         return f"{JUDGMENT_DATA_URL}?{urlencode({'ty': 'JD', 'id': normalized})}"

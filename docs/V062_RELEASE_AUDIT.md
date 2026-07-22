@@ -12,7 +12,9 @@ state machine.
 
 The audited changes are:
 
-- legacy Judicial Yuan `hlExportPDF?type=JD&id=...` canonical JID extraction;
+- legacy Judicial Yuan `hlExportPDF?type=JD&id=...` and
+  `/EXPORTFILE/ExportToPdf.aspx?type=JD&id=...` canonical JID extraction;
+- official canonical completion for five-part TLR document IDs;
 - direct-result and link-only official search page fallbacks;
 - current-day `as_of_date` handling;
 - bounded local TLR relevance reranking before official verification;
@@ -21,6 +23,8 @@ The audited changes are:
 ## Safety invariants
 
 - The requested JID must still match the canonical JID recovered from the official page.
+- A five-part document ID is never completed by guessing a version suffix. The official
+  page must return a valid six-part canonical JID whose first five parts match exactly.
 - A TLR result remains an external candidate and cannot support a claim before successful
   Judicial Yuan exact lookup and evidence promotion.
 - Reranking only changes which candidates consume the five-target verification budget.
@@ -32,8 +36,8 @@ The audited changes are:
 
 | Gate | Result |
 |---|---:|
-| Targeted v0.6.2 and release-hardening tests | 91 passed |
-| Full pytest suite | 284 passed |
+| Targeted v0.6.2 and release-hardening tests | 96 passed |
+| Full pytest suite | 289 passed |
 | Ruff | passed |
 | mypy (`src`, 92 source files) | passed |
 | Forbidden-file scan | passed |
@@ -56,8 +60,8 @@ recall will remain stable.
 
 | Artifact | SHA-256 |
 |---|---|
-| `alr_tw-0.6.2-py3-none-any.whl` | `633a337247919a34c5b69d83efff2ef9bd67e527fbfa14925151dd4ef7162421` |
-| `alr_tw-0.6.2.tar.gz` | `3541beca05cb081bdf17f4c97b3b6b5a1d14ab0f68401134533053b077cea6a4` |
+| `alr_tw-0.6.2-py3-none-any.whl` | `0858fb20a7e9213a969de29bad86c73206b9f939cec7b18d9fb21fce8721663d` |
+| `alr_tw-0.6.2.tar.gz` | `caa442e699238a5c10bbf8b74fc084313d2bd869a542ea3982b7aebf2359a625` |
 
 ## Remaining disclosed limitations
 

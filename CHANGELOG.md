@@ -6,7 +6,8 @@
 
 ### Fixed
 
-- 支援舊式司法院裁判頁 `hlExportPDF?type=JD&id=...` canonical JID marker，仍要求頁面識別碼與請求 JID 完全一致；
+- 支援舊式 `hlExportPDF?type=JD&id=...` 與實際 `/EXPORTFILE/ExportToPdf.aspx?type=JD&id=...` canonical JID marker，仍要求頁面識別碼與請求 JID 完全一致；
+- TLR 五段 doc ID 不再直接淘汰；系統會以原值查詢官方頁面，再由頁面六段 canonical JID 唯一補全，絕不猜補版本序號；
 - 司法院搜尋可處理 POST 直接回傳結果清單，以及只有結果連結、沒有 iframe 的頁面變體；
 - `as_of_date` 等於查詢當日時視為現行法問題，不再誤標 `HISTORICAL_LAW_VERSION_UNSUPPORTED`；
 - TLR 候選在官方回查前加入有長度上限的本地文字相關性與民刑事衝突降權，降低明顯無關候選占用五筆驗證額度。

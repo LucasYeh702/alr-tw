@@ -484,6 +484,33 @@ def test_tlr_canonical_doc_id_is_promoted_through_official_exact_lookup(tmp_path
     assert [method for method, _ in judgments.calls] == ["GET", "POST", "GET"]
 
 
+def test_tlr_five_part_doc_id_is_completed_by_official_canonical_page(tmp_path: Path) -> None:
+    jid = TlrPromotionJudgmentTransport.jid
+    partial_jid = jid.rsplit(",", 1)[0]
+    service, judgments = _tlr_promotion_service(
+        tmp_path,
+        doc_id=partial_jid,
+        citation_url=OfficialJudgmentProvider.official_document_url(partial_jid),
+    )
+    run = service.create_run(
+        "合成侵權裁判舉證責任",
+        mode=DataMode.HYBRID_VERIFIED,
+        depth=ResearchDepth.STANDARD,
+    )
+
+    _advance(service, run.run_id)
+    official = [
+        source
+        for source in service.store.list_sources(run.run_id)
+        if source.provider_id == OfficialJudgmentProvider.provider_id
+    ]
+
+    assert len(official) == 1
+    assert official[0].official_identifier == jid
+    assert official[0].metadata["identity_resolution_method"] == "provider_partial_jid"
+    assert f"id={quote(partial_jid, safe='')}" in judgments.calls[-1][1]
+
+
 def test_tlr_citation_url_jid_is_promoted_when_doc_id_is_opaque(tmp_path: Path) -> None:
     jid = TlrPromotionJudgmentTransport.jid
     service, _ = _tlr_promotion_service(
