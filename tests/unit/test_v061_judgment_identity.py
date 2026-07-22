@@ -1,0 +1,110 @@
+from __future__ import annotations
+
+from alr_tw.contracts.providers import CandidateIdentity, ProviderCandidate
+from alr_tw.research.judgment_identity import (
+    rank_and_dedupe_judgment_identities,
+    resolve_judgment_candidate,
+)
+
+
+JID = "TPD,113,訴,42,20240102,1"
+
+
+def _candidate(
+    candidate_id: str,
+    provider_id: str,
+    *,
+    identity: CandidateIdentity | None = None,
+    official_identifier: str | None = None,
+    official_url: str | None = None,
+    rank: int | None = None,
+    score: float | None = None,
+) -> ProviderCandidate:
+    return ProviderCandidate(
+        candidate_id=candidate_id,
+        provider_id=provider_id,
+        identity=identity,
+        official_identifier=official_identifier,
+        official_url=official_url,
+        candidate_rank=rank,
+        score=score,
+    )
+
+
+def test_resolver_prefers_typed_identity_and_supports_url_fallback() -> None:
+    typed = _candidate(
+        "typed",
+        "tlr_semantic_recall",
+        identity=CandidateIdentity(canonical_jid=JID, provider_document_id="opaque"),
+    )
+    url_only = _candidate(
+        "url",
+        "tlr_semantic_recall",
+        identity=CandidateIdentity(
+            provider_document_id="opaque",
+            official_url=(
+                "https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&"
+                "id=TPD%2C113%2C%E8%A8%B4%2C42%2C20240102%2C1"
+            ),
+        ),
+    )
+
+    typed_result = resolve_judgment_candidate(typed)
+    url_result = resolve_judgment_candidate(url_only)
+
+    assert typed_result is not None
+    assert typed_result.lookup_identifier == JID
+    assert typed_result.resolution_method == "typed_canonical_jid"
+    assert url_result is not None
+    assert url_result.lookup_identifier == JID
+    assert url_result.resolution_method == "typed_official_url"
+
+
+def test_resolver_supports_formal_citation_and_legacy_doc_id() -> None:
+    formal = _candidate(
+        "formal",
+        "tlr_semantic_recall",
+        identity=CandidateIdentity(formal_citation="臺灣臺北地方法院113年度訴字第42號民事判決"),
+    )
+    legacy = ProviderCandidate(
+        candidate_id="legacy",
+        provider_id="legacy_provider",
+        metadata={"doc_id": JID},
+    )
+
+    formal_result = resolve_judgment_candidate(formal)
+    legacy_result = resolve_judgment_candidate(legacy)
+
+    assert formal_result is not None
+    assert formal_result.lookup_identifier.endswith("民事判決")
+    assert formal_result.resolution_method == "formal_citation"
+    assert legacy_result is not None
+    assert legacy_result.lookup_identifier == JID
+    assert legacy_result.resolution_method == "legacy_metadata_doc_id"
+
+
+def test_rank_and_dedupe_keeps_official_target_and_merges_provenance() -> None:
+    tlr = _candidate(
+        "tlr-1",
+        "tlr_semantic_recall",
+        identity=CandidateIdentity(canonical_jid=JID),
+        rank=1,
+        score=0.99,
+    )
+    official = _candidate(
+        "official-1",
+        "official_judicial_yuan_judgments",
+        identity=CandidateIdentity(canonical_jid=JID),
+        rank=3,
+        score=0.2,
+    )
+
+    identities = [resolve_judgment_candidate(tlr), resolve_judgment_candidate(official)]
+    ranked = rank_and_dedupe_judgment_identities(
+        [item for item in identities if item is not None]
+    )
+
+    assert len(ranked) == 1
+    assert ranked[0].candidate is not None
+    assert ranked[0].candidate.provider_id == "official_judicial_yuan_judgments"
+    assert ranked[0].merged_candidate_ids == ("official-1", "tlr-1")

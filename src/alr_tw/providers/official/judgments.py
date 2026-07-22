@@ -14,6 +14,7 @@ from typing import Any, Mapping
 from urllib.parse import parse_qs, unquote, urlencode, urljoin, urlsplit
 
 from alr_tw.contracts.providers import (
+    CandidateIdentity,
     ProviderCandidate,
     ProviderCapabilities,
     ProviderErrorCode,
@@ -337,7 +338,10 @@ class OfficialJudgmentProvider:
             return self._error(ProviderErrorCode.OFFICIAL_PARSE_ERROR, str(exc))
         if not hits:
             return self._search_not_found()
-        candidates = [self._candidate_from_hit(hit, query) for hit in hits]
+        candidates = [
+            self._candidate_from_hit(hit, query, rank=rank)
+            for rank, hit in enumerate(hits, start=1)
+        ]
         return ProviderResult(
             status=ProviderResultStatus.FOUND,
             provider_id=self.provider_id,
@@ -918,7 +922,13 @@ class OfficialJudgmentProvider:
                 return False
         return True
 
-    def _candidate_from_hit(self, hit: JudgmentSearchHit, query: str) -> ProviderCandidate:
+    def _candidate_from_hit(
+        self,
+        hit: JudgmentSearchHit,
+        query: str,
+        *,
+        rank: int = 1,
+    ) -> ProviderCandidate:
         digest = hashlib.sha256(f"{hit.jid}\n{query}".encode()).hexdigest()
         return ProviderCandidate(
             candidate_id=f"candidate_official_judgment_{digest[:24]}",
@@ -927,6 +937,13 @@ class OfficialJudgmentProvider:
             official_identifier=hit.jid,
             official_url=hit.official_url,
             excerpt=hit.excerpt or None,
+            identity=CandidateIdentity(
+                canonical_jid=hit.jid,
+                provider_document_id=hit.jid,
+                formal_citation=hit.title,
+                official_url=hit.official_url,
+            ),
+            candidate_rank=rank,
             metadata={"candidate_tier": "official_search_result"},
         )
 

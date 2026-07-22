@@ -81,6 +81,17 @@ class ProviderErrorCode(str, Enum):
     CANDIDATE_OFFICIAL_ID_MISMATCH = "CANDIDATE_OFFICIAL_ID_MISMATCH"
 
 
+class CandidateIdentity(BaseModel):
+    """Typed identity hints carried by an untrusted retrieval candidate."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    canonical_jid: str | None = None
+    provider_document_id: str | None = None
+    formal_citation: str | None = None
+    official_url: str | None = None
+
+
 class ProviderCandidate(BaseModel):
     """Untrusted retrieval candidate; never sufficient for final support."""
 
@@ -93,6 +104,8 @@ class ProviderCandidate(BaseModel):
     official_url: str | None = None
     excerpt: str | None = None
     score: float | None = None
+    identity: CandidateIdentity | None = None
+    candidate_rank: int | None = Field(default=None, ge=1)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

@@ -220,6 +220,22 @@ class JudgmentFlowTransport:
         return JudicialSiteResponse(200, body.encode(), {}, url)
 
 
+class TlrPromotionJudgmentTransport(JudgmentFlowTransport):
+    """Official recall returns none, while exact JID lookup remains available."""
+
+    async def post_form(
+        self,
+        url: str,
+        form: Mapping[str, str],
+        *,
+        timeout: float,
+        max_bytes: int,
+    ) -> JudicialSiteResponse:
+        del form, timeout, max_bytes
+        self.calls.append(("POST", url))
+        return JudicialSiteResponse(200, "查無符合條件".encode(), {}, url)
+
+
 class TlrFixtureTransport:
     def __init__(self, response: TlrHttpResponse):
         self.response = response
@@ -371,6 +387,117 @@ def test_official_website_search_candidate_is_downloaded_and_promoted(tmp_path: 
     assert state["evidence_count"] == 3
     assert stored is not None and stored.judgment_recall_incomplete is False
     assert [method for method, _ in judgments.calls] == ["GET", "POST", "GET", "GET"]
+
+
+def _tlr_promotion_service(
+    tmp_path: Path,
+    *,
+    doc_id: str,
+    citation_url: str,
+) -> tuple[ResearchService, TlrPromotionJudgmentTransport]:
+    store = SqliteStore(tmp_path / "cache")
+    judgment_transport = TlrPromotionJudgmentTransport()
+    tlr_transport = TlrFixtureTransport(
+        TlrHttpResponse(
+            200,
+            {
+                "results": [
+                    {
+                        "rank": 1,
+                        "doc_id": doc_id,
+                        "citation_text": "臺灣示範地方法院130年度測訴字第42號刑事判決",
+                        "snippet": "外部候選摘要，不是法院理由。",
+                        "citation_url": citation_url,
+                    }
+                ]
+            },
+        )
+    )
+    providers = ProviderSet(
+        laws=OfficialLawProvider(LawTransport(), verify_webpage=False),
+        constitutional=OfficialConstitutionalProvider(UnusedHttpTransport()),
+        judgments=OfficialJudgmentProvider(judgment_transport),
+        tlr=TlrSemanticRecallProvider(transport=tlr_transport),
+    )
+    return ResearchService(store, ProviderObligationExecutor(store, providers)), judgment_transport
+
+
+def test_tlr_canonical_doc_id_is_promoted_through_official_exact_lookup(tmp_path: Path) -> None:
+    jid = TlrPromotionJudgmentTransport.jid
+    service, judgments = _tlr_promotion_service(
+        tmp_path,
+        doc_id=jid,
+        citation_url=OfficialJudgmentProvider.official_document_url(jid),
+    )
+    run = service.create_run(
+        "合成侵權裁判舉證責任",
+        mode=DataMode.HYBRID_VERIFIED,
+        depth=ResearchDepth.STANDARD,
+    )
+
+    _advance(service, run.run_id)
+    official = [
+        source
+        for source in service.store.list_sources(run.run_id)
+        if source.provider_id == OfficialJudgmentProvider.provider_id
+    ]
+
+    assert len(official) == 1
+    assert official[0].official_identifier == jid
+    assert official[0].metadata["origin_provider_id"] == "tlr_semantic_recall"
+    assert official[0].metadata["identity_resolution_method"] == "typed_canonical_jid"
+    assert service.get_state(run.run_id)["evidence_count"] == 3
+    assert [method for method, _ in judgments.calls] == ["GET", "POST", "GET"]
+
+
+def test_tlr_citation_url_jid_is_promoted_when_doc_id_is_opaque(tmp_path: Path) -> None:
+    jid = TlrPromotionJudgmentTransport.jid
+    service, _ = _tlr_promotion_service(
+        tmp_path,
+        doc_id="opaque-provider-document",
+        citation_url=OfficialJudgmentProvider.official_document_url(jid),
+    )
+    run = service.create_run(
+        "合成侵權裁判舉證責任",
+        mode=DataMode.HYBRID_VERIFIED,
+        depth=ResearchDepth.STANDARD,
+    )
+
+    _advance(service, run.run_id)
+    official = [
+        source
+        for source in service.store.list_sources(run.run_id)
+        if source.provider_id == OfficialJudgmentProvider.provider_id
+    ]
+
+    assert len(official) == 1
+    assert official[0].metadata["identity_resolution_method"] == "typed_canonical_jid"
+    assert official[0].metadata["provider_document_id"] == "opaque-provider-document"
+
+
+def test_tlr_identity_mismatch_is_not_promoted(tmp_path: Path) -> None:
+    wrong_jid = "DEMO,130,測,99,20990102,1"
+    service, _ = _tlr_promotion_service(
+        tmp_path,
+        doc_id=wrong_jid,
+        citation_url=OfficialJudgmentProvider.official_document_url(wrong_jid),
+    )
+    run = service.create_run(
+        "合成侵權裁判舉證責任",
+        mode=DataMode.HYBRID_VERIFIED,
+        depth=ResearchDepth.STANDARD,
+    )
+
+    _advance(service, run.run_id)
+    verification = service.continue_run(run.run_id, "step-4")
+    official = [
+        source
+        for source in service.store.list_sources(run.run_id)
+        if source.provider_id == OfficialJudgmentProvider.provider_id
+    ]
+
+    assert official == []
+    assert "CANDIDATE_OFFICIAL_ID_MISMATCH" in verification["outcome"]["warnings"]
 
 
 def test_unavailable_historical_law_version_blocks_final_answer(tmp_path: Path) -> None:
