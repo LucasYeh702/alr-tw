@@ -44,6 +44,18 @@ def test_recursive_extraction_preserves_nested_blocks_and_ignores_controls() -> 
     assert parsed.sections[0].role is JudgmentRole.DISPOSITION
 
 
+def test_text_pre_preserves_newline_boundaries() -> None:
+    soup = OfficialJudgmentProvider._soup(
+        '<div class="text-pre">主 文\n合成結果。\n理 由\n本院認為合成請求有理由。</div>'
+    )
+
+    blocks = extract_judgment_blocks(soup.select_one(".text-pre"))
+    parsed = parse_judgment_blocks(blocks, canonical_jid=JID)
+
+    assert blocks == ["主 文", "合成結果。", "理 由", "本院認為合成請求有理由。"]
+    assert parsed.parse_status is JudgmentParseStatus.COMPLETE
+
+
 def test_combined_heading_is_partial_until_safe_court_heading_appears() -> None:
     parsed = parse_judgment_blocks(
         [

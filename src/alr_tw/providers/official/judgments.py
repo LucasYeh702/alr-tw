@@ -661,12 +661,7 @@ class OfficialJudgmentProvider:
         official_url: str,
     ) -> dict[str, Any]:
         soup = OfficialJudgmentProvider._soup(document)
-        canonical = soup.select_one('#hlPrint[href*="printData.aspx"][href*="id="]')
-        canonical_jid = (
-            OfficialJudgmentProvider.jid_from_identifier(str(canonical.get("href")))
-            if canonical is not None
-            else None
-        )
+        canonical_jid = OfficialJudgmentProvider._canonical_jid_from_detail(soup)
         if canonical_jid is None:
             raise ValueError("JUDGMENT_CANONICAL_ID_MISSING")
         if canonical_jid != expected_jid:
@@ -686,12 +681,19 @@ class OfficialJudgmentProvider:
                     value.get_text(" ", strip=True)
                 )
 
-        content = soup.select_one("#jud .jud_content .htmlcontent")
-        if content is None:
-            content = soup.select_one("#jud .jud_content .text-pre")
-        if content is None:
+        content_candidates = [
+            soup.select_one("#jud .jud_content .htmlcontent"),
+            soup.select_one("#jud .jud_content .text-pre"),
+        ]
+        if not any(item is not None for item in content_candidates):
             raise ValueError("JUDGMENT_CONTENT_MISSING")
-        blocks = extract_judgment_blocks(content)
+        blocks: list[str] = []
+        for content in content_candidates:
+            if content is None:
+                continue
+            blocks = extract_judgment_blocks(content)
+            if blocks:
+                break
         parsed_judgment = parse_judgment_blocks(blocks, canonical_jid=expected_jid)
 
         parts = expected_jid.split(",")
@@ -719,6 +721,26 @@ class OfficialJudgmentProvider:
             "parsed_judgment": parsed_judgment,
             "official_url": official_url,
         }
+
+    @staticmethod
+    def _canonical_jid_from_detail(soup: Any) -> str | None:
+        legacy = soup.select_one('#hlPrint[href*="printData.aspx"][href*="id="]')
+        if legacy is not None:
+            canonical = OfficialJudgmentProvider.jid_from_identifier(
+                str(legacy.get("href"))
+            )
+            if canonical is not None:
+                return canonical
+
+        pdf = soup.select_one('#hlExportPDF[href*="jrecno="][href*="tablename="]')
+        if pdf is None:
+            return None
+        query = parse_qs(urlsplit(str(pdf.get("href"))).query)
+        table_name = next(iter(query.get("tablename", [])), "").strip().upper()
+        record_number = next(iter(query.get("jrecno", [])), "").strip()
+        if not table_name or not record_number:
+            return None
+        return OfficialJudgmentProvider.normalize_jid(f"{table_name},{record_number}")
 
     @staticmethod
     def split_sections(text: str) -> tuple[str, str]:

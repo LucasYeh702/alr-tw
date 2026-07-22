@@ -126,6 +126,41 @@ def test_official_judgment_exact_lookup_creates_sectioned_website_snapshot() -> 
     assert evidence[1].exact_text == "一、本文件僅供軟體測試。"
 
 
+def test_current_pdf_export_marker_can_supply_canonical_jid() -> None:
+    document = _detail_page().replace(
+        f'<a id="hlPrint" href="/FJUD/printData.aspx?id={quote(JID, safe="")}">列印</a>',
+        (
+            '<a id="hlPrint" class="btn-print">列印</a>'
+            '<a id="hlExportPDF" href="/PdfWithLine/GetPDF.ashx?'
+            'jrecno=130%2C%E6%B8%AC%2C42%2C20990102%2C1&amp;tablename=TSTV">PDF</a>'
+        ),
+    )
+    provider = OfficialJudgmentProvider(FixtureSiteTransport([_response(document)]))
+
+    result, source, evidence = asyncio.run(provider.exact_lookup(JID))
+
+    assert result.status is ProviderResultStatus.FOUND
+    assert source is not None and source.official_identifier == JID
+    assert evidence
+
+
+def test_empty_htmlcontent_falls_back_to_populated_text_pre() -> None:
+    document = _detail_page().replace(
+        '<div class="jud_content"><div class="htmlcontent">',
+        (
+            '<div class="jud_content"><div class="htmlcontent"></div>'
+            '<div class="text-pre">'
+        ),
+    )
+    provider = OfficialJudgmentProvider(FixtureSiteTransport([_response(document)]))
+
+    result, source, evidence = asyncio.run(provider.exact_lookup(JID))
+
+    assert result.status is ProviderResultStatus.FOUND
+    assert source is not None
+    assert any(item.eligible_for_claim_support for item in evidence)
+
+
 def test_judgment_party_argument_is_not_labelled_as_court_reasoning() -> None:
     segments = OfficialJudgmentProvider.segment_reasoning_roles(
         "上訴人主張：原判決不當。\n本院審酌後認上訴無理由。"

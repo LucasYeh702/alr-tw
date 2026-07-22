@@ -148,6 +148,7 @@ def extract_judgment_blocks(content: Any) -> list[str]:
 
     blocks: list[str] = []
     current: list[str] = []
+    preformatted = _is_preformatted_container(content)
 
     def flush() -> None:
         text = _normalize_inline(" ".join(current))
@@ -173,6 +174,15 @@ def extract_judgment_blocks(content: Any) -> list[str]:
             return
 
         value = str(node)
+        if preformatted and re.search(r"[\r\n]", value):
+            for part in re.split(r"(\r\n|\r|\n)", value):
+                if part in {"\r\n", "\r", "\n"}:
+                    flush()
+                    continue
+                normalized = _normalize_inline(part)
+                if normalized:
+                    current.append(normalized)
+            return
         normalized = _normalize_inline(value)
         if normalized:
             current.append(normalized)
@@ -339,3 +349,12 @@ def _is_hidden(node: Any) -> bool:
         return True
     style = re.sub(r"\s+", "", str(attrs.get("style") or "")).lower()
     return "display:none" in style or "visibility:hidden" in style
+
+
+def _is_preformatted_container(node: Any) -> bool:
+    name = str(getattr(node, "name", "") or "").lower()
+    attrs = getattr(node, "attrs", {}) or {}
+    classes = attrs.get("class") or []
+    if isinstance(classes, str):
+        classes = classes.split()
+    return name == "pre" or "text-pre" in classes
