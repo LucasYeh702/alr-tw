@@ -582,6 +582,10 @@ def _v060_tool_definitions() -> list[dict[str, Any]]:
                     "request_id": {"type": "string"},
                     "claim_bindings": {
                         "type": "array",
+                        "description": (
+                            "Bind each answer claim to evidence IDs returned by the same "
+                            "research run; core legal claims require span-level bindings."
+                        ),
                         "items": {
                             "type": "object",
                             "properties": {

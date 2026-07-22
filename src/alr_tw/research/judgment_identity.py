@@ -91,6 +91,14 @@ def rank_and_dedupe_judgment_identities(
         merged_ids.setdefault(key, []).extend(item.merged_candidate_ids)
         if key not in deduplicated:
             deduplicated[key] = item
+        elif deduplicated[key].candidate is None and item.candidate is not None:
+            direct = deduplicated[key]
+            deduplicated[key] = ResolvedJudgmentIdentity(
+                lookup_identifier=direct.lookup_identifier,
+                canonical_jid=direct.canonical_jid,
+                resolution_method=item.resolution_method,
+                candidate=item.candidate,
+            )
 
     output: list[ResolvedJudgmentIdentity] = []
     for key, item in deduplicated.items():

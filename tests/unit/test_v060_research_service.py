@@ -75,6 +75,44 @@ def _advance_to_ready(service: ResearchService, run_id: str) -> None:
     raise AssertionError("run did not reach ready_for_draft")
 
 
+def _save_eligible_law_evidence(
+    store: SqliteStore,
+    run_id: str,
+    text: str,
+    now: datetime,
+) -> EvidenceSpan:
+    digest = EvidenceSpan.hash_text(text)
+    source = SourceRecord(
+        source_id="legacy-compatible-source",
+        source_key="law:legacy-compatible",
+        source_version_id="law:legacy-compatible:v1",
+        material_type=MaterialType.LAW,
+        provider_id="official-law",
+        source_tier=SourceTier.OFFICIAL,
+        trust_status=TrustStatus.EVIDENCE_ELIGIBLE,
+        official_identifier="DEMO:legacy-compatible",
+        official_url="https://example.test/law/legacy-compatible",
+        citation="示範法第1條",
+        fetched_at=now,
+        verified_at=now,
+        expires_at=now + timedelta(hours=24),
+        content_hash=digest,
+        normalized_content_hash=digest,
+        normalized_text=text,
+    )
+    evidence = EvidenceSpan.from_exact_text(
+        evidence_id="legacy-compatible-evidence",
+        source_id=source.source_id,
+        section_id="article-1",
+        section_type="law_text",
+        exact_text=text,
+        eligible_for_claim_support=True,
+    )
+    store.save_source(run_id, source)
+    store.save_evidence(run_id, evidence)
+    return evidence
+
+
 def test_validate_answer_blocks_and_removes_untrusted_answer_without_evidence(tmp_path: Path):
     service = ResearchService(SqliteStore(tmp_path / "cache"))
     run = service.create_run("民法第184條", mode=DataMode.SYNTHETIC, depth=ResearchDepth.QUICK)
@@ -86,6 +124,59 @@ def test_validate_answer_blocks_and_removes_untrusted_answer_without_evidence(tm
     assert result["safe_to_present"] is False
     assert result["answer_text"] is None
     assert result["binding_mode"] == "legacy_unbound"
+    assert "CLAIM_CITATION_BINDING_REQUIRED" in result["blockers"]
+
+
+def test_legacy_unbound_supporting_claim_is_qualified_not_validated(tmp_path: Path):
+    now = datetime.now(UTC)
+    store = SqliteStore(tmp_path / "cache")
+    service = ResearchService(store)
+    run = service.create_run(
+        "示範法第1條",
+        mode=DataMode.OFFICIAL_ONLY,
+        depth=ResearchDepth.QUICK,
+        now=now,
+    )
+    _advance_to_ready(service, run.run_id)
+    text = "此外，行為人應負損害賠償責任"
+    _save_eligible_law_evidence(store, run.run_id, text, now)
+
+    result = service.validate_answer(
+        run.run_id,
+        text,
+        "validate-legacy-compatible",
+        now=now,
+    )
+
+    assert result["decision"] == "qualified"
+    assert result["safe_to_present"] is True
+    assert result["binding_mode"] == "legacy_unbound"
+    assert "claim_bindings" in result["required_qualification"]
+
+
+def test_legacy_unbound_core_claim_stays_blocked_with_eligible_evidence(tmp_path: Path):
+    now = datetime.now(UTC)
+    store = SqliteStore(tmp_path / "cache")
+    service = ResearchService(store)
+    run = service.create_run(
+        "示範法第1條",
+        mode=DataMode.OFFICIAL_ONLY,
+        depth=ResearchDepth.QUICK,
+        now=now,
+    )
+    _advance_to_ready(service, run.run_id)
+    text = "行為人應負損害賠償責任"
+    _save_eligible_law_evidence(store, run.run_id, text, now)
+
+    result = service.validate_answer(
+        run.run_id,
+        text,
+        "validate-legacy-core",
+        now=now,
+    )
+
+    assert result["decision"] == "blocked"
+    assert result["safe_to_present"] is False
     assert "CLAIM_CITATION_BINDING_REQUIRED" in result["blockers"]
 
 

@@ -156,5 +156,6 @@ def test_validate_answer_schema_exposes_structured_claim_bindings() -> None:
     bindings = schema["properties"]["claim_bindings"]
 
     assert bindings["type"] == "array"
+    assert "evidence IDs" in bindings["description"]
     assert bindings["items"]["additionalProperties"] is False
     assert "evidence_ids" in bindings["items"]["required"]

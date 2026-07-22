@@ -68,6 +68,18 @@ def test_opposing_polarity_is_contradicted_even_with_high_overlap() -> None:
     assert "POLARITY_MISMATCH" in result.risk_flags
 
 
+def test_lexical_compound_does_not_create_false_polarity_conflict() -> None:
+    for claim, evidence in (
+        ("受讓人取得所有權", "受讓人取得所有權，出讓人不得任意撤銷"),
+        ("契約之供應服務內容明確", "契約之供應服務內容明確，條款不應任意變更"),
+        ("當事人請求分割共有物", "當事人請求分割共有物，對方無分割請求"),
+    ):
+        result = _check(claim, evidence)
+
+        assert result.support_status is SupportStatus.SUPPORTED
+        assert "POLARITY_MISMATCH" not in result.risk_flags
+
+
 def test_material_qualifier_omission_is_overstated() -> None:
     result = _check(
         "法院認為當事人一律得解除契約",
@@ -76,6 +88,16 @@ def test_material_qualifier_omission_is_overstated() -> None:
 
     assert result.support_status is SupportStatus.OVERSTATED
     assert "QUALIFIER_OMITTED" in result.risk_flags
+
+
+def test_generic_situation_word_is_not_a_material_qualifier() -> None:
+    result = _check(
+        "法院認為當事人應負責任",
+        "法院認為在此情形當事人應負責任",
+    )
+
+    assert result.support_status is SupportStatus.SUPPORTED
+    assert "QUALIFIER_OMITTED" not in result.risk_flags
 
 
 def test_party_argument_cannot_support_court_view() -> None:
@@ -106,6 +128,23 @@ def test_numeric_and_article_anchor_mismatches_are_unsupported() -> None:
     assert article.support_status is SupportStatus.UNSUPPORTED
     assert "ANCHOR_MISMATCH" in days.risk_flags
     assert "ANCHOR_MISMATCH" in article.risk_flags
+
+
+def test_claim_anchor_may_be_a_subset_of_bound_evidence_anchors() -> None:
+    for claim, evidence in (
+        (
+            "法院依民法第11條認為當事人應負責任",
+            "法院依民法第10條及第11條認為當事人應負責任",
+        ),
+        (
+            "法院依民法第184條第1項認為當事人應負責任",
+            "法院依民法第184條第1項第2款認為當事人應負責任",
+        ),
+    ):
+        result = _check(claim, evidence)
+
+        assert result.support_status is SupportStatus.SUPPORTED
+        assert "ANCHOR_MISMATCH" not in result.risk_flags
 
 
 def test_unbound_core_claim_requires_span_level_binding() -> None:

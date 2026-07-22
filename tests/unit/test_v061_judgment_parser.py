@@ -56,6 +56,30 @@ def test_text_pre_preserves_newline_boundaries() -> None:
     assert parsed.parse_status is JudgmentParseStatus.COMPLETE
 
 
+def test_nested_pre_and_raw_container_text_preserve_newline_boundaries() -> None:
+    for document in (
+        '<div class="htmlcontent"><pre>主文\n駁回。\n理由\n本院認為無理由。</pre></div>',
+        '<div class="htmlcontent">主文\n駁回。\n理由\n本院認為無理由。</div>',
+    ):
+        soup = OfficialJudgmentProvider._soup(document)
+
+        blocks = extract_judgment_blocks(soup.select_one(".htmlcontent"))
+        parsed = parse_judgment_blocks(blocks, canonical_jid=JID)
+
+        assert blocks == ["主文", "駁回。", "理由", "本院認為無理由。"]
+        assert parsed.parse_status is JudgmentParseStatus.COMPLETE
+
+
+def test_non_pre_source_wrapping_is_normalized_without_splitting_a_paragraph() -> None:
+    soup = OfficialJudgmentProvider._soup(
+        '<div class="htmlcontent">法院認為契約應\n    繼續履行。</div>'
+    )
+
+    blocks = extract_judgment_blocks(soup.select_one(".htmlcontent"))
+
+    assert blocks == ["法院認為契約應 繼續履行。"]
+
+
 def test_combined_heading_is_partial_until_safe_court_heading_appears() -> None:
     parsed = parse_judgment_blocks(
         [
@@ -80,6 +104,61 @@ def test_combined_heading_is_partial_until_safe_court_heading_appears() -> None:
     assert parsed.sections[1].eligible_for_claim_support is False
     assert parsed.sections[2].eligible_for_claim_support is False
     assert parsed.sections[3].eligible_for_claim_support is True
+
+
+def test_party_argument_prefixed_by_court_marker_is_never_promoted() -> None:
+    parsed = parse_judgment_blocks(
+        [
+            "主文",
+            "原告之訴駁回。",
+            "事實及理由",
+            "一、按原告起訴主張：被告違法解僱。",
+            "二、被告則以：解僱係屬合法。",
+            "三、本院之判斷",
+            "原告請求無理由。",
+        ],
+        canonical_jid=JID,
+    )
+
+    assert [item.role for item in parsed.sections] == [
+        JudgmentRole.DISPOSITION,
+        JudgmentRole.PARTY_ARGUMENT,
+        JudgmentRole.PARTY_ARGUMENT,
+        JudgmentRole.COURT_HOLDING,
+    ]
+    assert all(not item.eligible_for_claim_support for item in parsed.sections[1:3])
+    assert parsed.sections[3].eligible_for_claim_support is True
+
+
+def test_court_rebuttal_of_party_position_remains_court_reasoning() -> None:
+    parsed = parse_judgment_blocks(
+        [
+            "主文",
+            "原告之訴駁回。",
+            "事實及理由",
+            "查原告主張被告違法解僱云云，自無足採。",
+        ],
+        canonical_jid=JID,
+    )
+
+    rebuttal = parsed.sections[-1]
+    assert rebuttal.role is JudgmentRole.COURT_REASONING
+    assert rebuttal.confidence == "high"
+    assert rebuttal.eligible_for_claim_support is True
+
+
+def test_party_position_with_rebuttal_words_remains_party_argument() -> None:
+    parsed = parse_judgment_blocks(
+        [
+            "事實及理由",
+            "被告辯稱原告之請求為無理由。",
+            "被告抗辯原告主張之金額不足採。",
+        ],
+        canonical_jid=JID,
+    )
+
+    assert all(item.role is JudgmentRole.PARTY_ARGUMENT for item in parsed.sections)
+    assert all(not item.eligible_for_claim_support for item in parsed.sections)
 
 
 def test_unclassified_combined_heading_text_is_preserved_not_promoted() -> None:

@@ -192,6 +192,35 @@ def _extract_anchors(value: str) -> set[str]:
     return {unicodedata.normalize("NFKC", anchor).lower() for anchor in anchors}
 
 
+def _extract_comparison_anchors(value: str) -> set[str]:
+    """Return atomic anchors used to detect claim/evidence conflicts."""
+
+    compact = _normalize_grounding_text(value)
+    article_pattern = (
+        r"(?P<article>第\d+(?:之\d+)?條)"
+        r"(?P<paragraph>第\d+項)?"
+        r"(?P<subparagraph>第\d+款)?"
+        r"(?P<item>第\d+目)?"
+    )
+    anchors: set[str] = set()
+    for match in re.finditer(article_pattern, compact, flags=re.IGNORECASE):
+        hierarchy = ""
+        for part in match.groups():
+            if part is None:
+                continue
+            hierarchy += part
+            anchors.add(hierarchy)
+    patterns = (
+        r"\d+(?:\.\d+)?(?:日|天|月|年|元|萬元|%|％)",
+        r"[A-Z0-9]{3,12},\d+,[^,，]{1,20},\d+,\d{8},\d+",
+        r"民國\d+年\d+月\d+日",
+        r"(?:19|20)\d{2}年\d+月\d+日",
+    )
+    for pattern in patterns:
+        anchors.update(re.findall(pattern, compact, flags=re.IGNORECASE))
+    return {unicodedata.normalize("NFKC", anchor).lower() for anchor in anchors}
+
+
 _POLARITY_PAIRS = (
     ("得", "不得"),
     ("應", "不應"),
@@ -203,18 +232,134 @@ _POLARITY_PAIRS = (
     ("須", "無須"),
     ("可", "不可"),
 )
-_QUALIFIERS = ("但", "惟", "除非", "除有", "情形", "為限", "原則上", "仍應", "尚不得")
+_POLARITY_LEXICAL_COMPOUNDS = {
+    "得": ("取得", "獲得", "所得", "贏得", "值得", "難得", "博得", "顯得", "記得", "免得"),
+    "有": (
+        "所有",
+        "具有",
+        "享有",
+        "擁有",
+        "含有",
+        "持有",
+        "現有",
+        "占有",
+        "共有",
+        "私有",
+        "公有",
+        "國有",
+    ),
+    "應": (
+        "供應",
+        "對應",
+        "順應",
+        "回應",
+        "反應",
+        "響應",
+        "呼應",
+        "適應",
+        "相應",
+        "因應",
+        "效應",
+        "應用",
+    ),
+    "可": ("許可", "認可", "核可", "可靠"),
+}
+_QUALIFIERS = ("但", "惟", "除非", "除有", "為限", "原則上", "仍應", "尚不得")
+
+
+def _positive_polarity_positions(
+    value: str,
+    marker: str,
+    negative_spans: tuple[tuple[int, int], ...],
+) -> list[int]:
+    lexical_compounds = _POLARITY_LEXICAL_COMPOUNDS.get(marker, ())
+    positions: list[int] = []
+    start = 0
+    while (index := value.find(marker, start)) >= 0:
+        marker_end = index + len(marker)
+        inside_negative = any(
+            negative_start <= index and marker_end <= negative_end
+            for negative_start, negative_end in negative_spans
+        )
+        if not inside_negative and not _inside_lexical_compound(
+            value, index, marker, lexical_compounds
+        ):
+            positions.append(index)
+        start = index + len(marker)
+    return positions
+
+
+def _inside_lexical_compound(
+    value: str,
+    marker_index: int,
+    marker: str,
+    compounds: tuple[str, ...],
+) -> bool:
+    marker_end = marker_index + len(marker)
+    for compound in compounds:
+        first_start = max(0, marker_end - len(compound))
+        last_start = min(marker_index, len(value) - len(compound))
+        if any(value.startswith(compound, start) for start in range(first_start, last_start + 1)):
+            return True
+    return False
 
 
 def _polarity_mismatch(claim_text: str, segment_text: str) -> bool:
     claim = _normalize_grounding_text(claim_text)
     segment = _normalize_grounding_text(segment_text)
     for positive, negative in _POLARITY_PAIRS:
-        claim_state = -1 if negative in claim else 1 if positive in claim else 0
-        segment_state = -1 if negative in segment else 1 if positive in segment else 0
-        if claim_state and segment_state and claim_state != segment_state:
-            return True
+        claim_occurrences = _polarity_occurrences(claim, positive, negative)
+        segment_occurrences = _polarity_occurrences(segment, positive, negative)
+        for claim_state, claim_end in claim_occurrences:
+            for segment_state, segment_end in segment_occurrences:
+                if claim_state == segment_state:
+                    continue
+                if len(positive) > 1 or _same_single_character_predicate(
+                    claim,
+                    claim_end,
+                    segment,
+                    segment_end,
+                ):
+                    return True
     return False
+
+
+def _polarity_occurrences(
+    value: str,
+    positive: str,
+    negative: str,
+) -> list[tuple[int, int]]:
+    negative_spans: list[tuple[int, int]] = []
+    start = 0
+    while (index := value.find(negative, start)) >= 0:
+        negative_spans.append((index, index + len(negative)))
+        start = index + len(negative)
+    occurrences = [(-1, end) for _, end in negative_spans]
+    occurrences.extend(
+        (1, index + len(positive))
+        for index in _positive_polarity_positions(value, positive, tuple(negative_spans))
+    )
+    return occurrences
+
+
+def _same_single_character_predicate(
+    claim: str,
+    claim_marker_end: int,
+    segment: str,
+    segment_marker_end: int,
+) -> bool:
+    claim_predicate = _polarity_predicate_prefix(claim, claim_marker_end)
+    segment_predicate = _polarity_predicate_prefix(segment, segment_marker_end)
+    if not claim_predicate or not segment_predicate:
+        return not claim_predicate and not segment_predicate
+    return claim_predicate == segment_predicate
+
+
+def _polarity_predicate_prefix(value: str, marker_end: int) -> str:
+    suffix = value[marker_end:]
+    suffix = re.sub(r"^[，。；：、,.;:（）()「」『』]+", "", suffix)
+    match = re.match(r"[\u3400-\u9fffA-Za-z0-9]{1,2}", suffix)
+    return match.group(0).lower() if match is not None else ""
 
 
 def _qualifier_omitted(claim_text: str, segment_text: str) -> bool:
@@ -227,9 +372,11 @@ def _qualifier_omitted(claim_text: str, segment_text: str) -> bool:
 
 
 def _anchor_mismatch(claim_text: str, segment_text: str) -> bool:
-    claim_anchors = _extract_anchors(claim_text)
-    segment_anchors = _extract_anchors(segment_text)
-    return bool(claim_anchors and segment_anchors and claim_anchors != segment_anchors)
+    claim_anchors = _extract_comparison_anchors(claim_text)
+    segment_anchors = _extract_comparison_anchors(segment_text)
+    return bool(
+        claim_anchors and segment_anchors and not claim_anchors.issubset(segment_anchors)
+    )
 
 
 def _extract_importance(text: str) -> Importance:

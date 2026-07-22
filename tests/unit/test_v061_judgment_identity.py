@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from alr_tw.contracts.providers import CandidateIdentity, ProviderCandidate
 from alr_tw.research.judgment_identity import (
+    direct_judgment_identity,
     rank_and_dedupe_judgment_identities,
     resolve_judgment_candidate,
 )
@@ -108,3 +109,25 @@ def test_rank_and_dedupe_keeps_official_target_and_merges_provenance() -> None:
     assert ranked[0].candidate is not None
     assert ranked[0].candidate.provider_id == "official_judicial_yuan_judgments"
     assert ranked[0].merged_candidate_ids == ("official-1", "tlr-1")
+
+
+def test_direct_jid_dedupe_preserves_matching_candidate_provenance() -> None:
+    tlr = _candidate(
+        "tlr-1",
+        "tlr_semantic_recall",
+        identity=CandidateIdentity(canonical_jid=JID),
+        rank=1,
+    )
+    resolved = resolve_judgment_candidate(tlr)
+    assert resolved is not None
+
+    ranked = rank_and_dedupe_judgment_identities(
+        [direct_judgment_identity(JID), resolved]
+    )
+
+    assert len(ranked) == 1
+    assert ranked[0].lookup_identifier == JID
+    assert ranked[0].candidate is not None
+    assert ranked[0].candidate.candidate_id == "tlr-1"
+    assert ranked[0].resolution_method == "typed_canonical_jid"
+    assert ranked[0].merged_candidate_ids == ("tlr-1",)

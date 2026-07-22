@@ -433,7 +433,6 @@ class ResearchService:
             binding_mode = "structured" if bindings else "legacy_unbound"
             safe = (
                 bool(eligible)
-                and bool(bindings)
                 and summary.semantic_safe_to_present
                 and answer_privacy.allowed
                 and not reasons
@@ -443,9 +442,14 @@ class ResearchService:
                 or run.judgment_recall_incomplete
                 or run.coverage.limitations
             )
-            if safe and coverage_qualified:
+            if safe and (coverage_qualified or binding_mode == "legacy_unbound"):
                 decision = ResearchState.QUALIFIED
-                qualification = _coverage_qualification(run)
+                qualification = (
+                    "未提供 claim_bindings；本結果僅為舊版相容驗證，"
+                    "不得將其視為核心法律主張已完成 span-level 驗證。"
+                    if binding_mode == "legacy_unbound"
+                    else _coverage_qualification(run)
+                )
             elif safe:
                 decision = ResearchState.VALIDATED
                 qualification = None

@@ -121,12 +121,15 @@ _PARTY_MARKERS = (
     "上訴意旨",
     "抗告意旨",
     "聲請意旨",
+    "答辯意旨",
     "原告主張",
     "被告辯稱",
     "被告抗辯",
+    "被告則以",
     "上訴人主張",
     "被上訴人抗辯",
     "抗辯略以",
+    "主張略以",
     "原告起訴主張",
 )
 _COURT_MARKERS = (
@@ -141,6 +144,14 @@ _COURT_MARKERS = (
     "經查",
     "按",
 )
+_COURT_REBUTTAL_MARKERS = (
+    "無足採",
+    "不足採",
+    "無可採",
+    "難以採信",
+    "不足為據",
+    "為無理由",
+)
 
 
 def extract_judgment_blocks(content: Any) -> list[str]:
@@ -148,7 +159,6 @@ def extract_judgment_blocks(content: Any) -> list[str]:
 
     blocks: list[str] = []
     current: list[str] = []
-    preformatted = _is_preformatted_container(content)
 
     def flush() -> None:
         text = _normalize_inline(" ".join(current))
@@ -156,7 +166,7 @@ def extract_judgment_blocks(content: Any) -> list[str]:
         if text and (not blocks or blocks[-1] != text):
             blocks.append(text)
 
-    def walk(node: Any) -> None:
+    def walk(node: Any, *, preformatted: bool = False) -> None:
         name = str(getattr(node, "name", "") or "").lower()
         if name:
             if name in _SKIP_TAGS or _is_hidden(node):
@@ -167,14 +177,17 @@ def extract_judgment_blocks(content: Any) -> list[str]:
             is_block = name in _BLOCK_TAGS
             if is_block:
                 flush()
+            child_preformatted = preformatted or _is_preformatted_container(node)
             for child in getattr(node, "children", ()):
-                walk(child)
+                walk(child, preformatted=child_preformatted)
             if is_block:
                 flush()
             return
 
         value = str(node)
-        if preformatted and re.search(r"[\r\n]", value):
+        if re.search(r"[\r\n]", value) and (
+            preformatted or _has_structural_newlines(value)
+        ):
             for part in re.split(r"(\r\n|\r|\n)", value):
                 if part in {"\r\n", "\r", "\n"}:
                     flush()
@@ -328,7 +341,20 @@ def _paragraph_role(
 ) -> tuple[JudgmentRole, Literal["high", "medium", "low"]]:
     compact = re.sub(r"\s+", "", unicodedata.normalize("NFKC", text))
     compact = re.sub(r"^(?:[一二三四五六七八九十百零〇0-9]+)[、.．]", "", compact)
-    if any(compact.startswith(marker) for marker in _PARTY_MARKERS):
+    party_probe = re.sub(r"^(?:按|查)[，,：:]?", "", compact)
+    party_marked = any(
+        candidate.startswith(marker)
+        for candidate in (compact, party_probe)
+        for marker in _PARTY_MARKERS
+    )
+    court_prefixed = compact != party_probe
+    if (
+        court_prefixed
+        and party_marked
+        and any(marker in compact for marker in _COURT_REBUTTAL_MARKERS)
+    ):
+        return JudgmentRole.COURT_REASONING, "high"
+    if party_marked:
         return JudgmentRole.PARTY_ARGUMENT, "high"
     if any(compact.startswith(marker) for marker in _COURT_MARKERS):
         return JudgmentRole.COURT_REASONING, "high"
@@ -357,4 +383,10 @@ def _is_preformatted_container(node: Any) -> bool:
     classes = attrs.get("class") or []
     if isinstance(classes, str):
         classes = classes.split()
-    return name == "pre" or "text-pre" in classes
+    style = re.sub(r"\s+", "", str(attrs.get("style") or "")).lower()
+    return name == "pre" or "text-pre" in classes or "white-space:pre" in style
+
+
+def _has_structural_newlines(value: str) -> bool:
+    lines = [_normalize_inline(item) for item in re.split(r"\r\n|\r|\n", value)]
+    return any(_normalize_heading(line) in _HEADINGS for line in lines if line)
