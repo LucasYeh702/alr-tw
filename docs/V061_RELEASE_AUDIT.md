@@ -2,7 +2,7 @@
 
 Audit date: 2026-07-22 (Asia/Taipei)
 
-Source commit under test: `bf4320cd9f2fe56eacc05da419b92e0192056750`
+Source commit under test: `88222a4634e21cd586afd7a3448fea1585e374a7`
 
 Release decision: **BLOCKED — do not tag or publish yet**
 
@@ -26,7 +26,7 @@ This audit records commands actually executed. A passing synthetic or contract t
 |---|---:|---|
 | `uv run ruff check .` | 0 | PASS |
 | `uv run mypy src` | 0 | PASS, 92 source files |
-| `uv run pytest -q` | 0 | PASS, 265 tests |
+| `uv run pytest -q` | 0 | PASS, 268 tests |
 | `uv run python scripts/check_no_forbidden_files.py .` | 0 | PASS |
 | `uv run python scripts/check_public_boundary.py` | 0 | PASS |
 | `uv build` | 0 | PASS, wheel and sdist built |
@@ -35,8 +35,8 @@ Artifacts:
 
 | Artifact | SHA-256 |
 |---|---|
-| `alr_tw-0.6.1-py3-none-any.whl` | `a4f67d331b87e515e2aa94b1cac33e5a44736573ba399534767099a860072672` |
-| `alr_tw-0.6.1.tar.gz` | `82919735488b08371c960ee1664971203bcfe7dd58d5d2e98a4d371038ba082a` |
+| `alr_tw-0.6.1-py3-none-any.whl` | `44f1e1e240f5864df590056b2077f5d6f267d3d2a9cd7c1102f79b5ada1bd48a` |
+| `alr_tw-0.6.1.tar.gz` | `ecc59899910b24be1a9fc805d234bd38825f22a31e8a0bed85b10e04816441b7` |
 
 ## Fresh-wheel MCP and host canaries
 
@@ -46,6 +46,19 @@ The wheel was installed into a new venv with its `mcp` extra. Import checks retu
 - Fresh-wheel six high-level tool flow with SDK-supplied request metadata: **PASS**. The flow created a synthetic run, advanced it, read state, performed lookup, obtained a fail-closed answer validation, and purged the run.
 - Codex native one-off host canary: **PASS**. Codex loaded only the fresh-wheel server through invocation-local config and completed one `get_trust_model` tool call. No user MCP configuration was changed.
 - The first non-interactive Codex attempt was cancelled by host approval policy before the tool executed. A second read-only canary used the CLI's one-invocation approval bypass and succeeded. This was a host approval event, not a server or `_meta` failure.
+
+## Live provider canaries
+
+Live checks used generic public-law queries and did not persist identifiers or judgment text:
+
+| Canary | Result |
+|---|---|
+| Supreme Court search → official exact page | PASS, complete parse, eligible evidence present |
+| District-court labor search → official exact page | PASS, complete parse, eligible evidence present |
+| Page containing `事實及理由` | PASS, official source preserved with eligible evidence |
+| Live TLR candidate → typed JID → Judicial Yuan exact page | PASS, complete parse, eligible evidence present |
+
+The first live TLR promotion attempt exposed two current-page variants: canonical identity in PDF-export `tablename + jrecno`, and an empty `.htmlcontent` beside populated `.text-pre`. Commit `88222a4` added deterministic support for both and the repeated live canary passed.
 
 ## V0.6.1 matrix results
 
@@ -93,7 +106,6 @@ The manifest explicitly sets `satisfies_ordinary_court_release_gate=false`. It d
 ## Not executed or not satisfied
 
 - Real V0.6.1 ordinary-court fixed corpus: **not executed / blocking** because no approved public-safe fixture path was provided and the repository policy forbids committing real corpus identifiers/content.
-- Live canaries for a Supreme Court judgment, a district-court labor judgment, a real `事實及理由` page, and live TLR-to-official promotion: **not executed**. Synthetic integration tests do not replace these live checks.
 - V0.6.2 operation leases/failure recovery and stable source-version identity: **deferred by specification**.
 
-Until the real corpus governance conflict is resolved and the required live canaries are recorded, v0.6.1 must not be tagged, released, or described as public-preview ready.
+Until the real fixed-corpus governance conflict is resolved, v0.6.1 must not be tagged, released, or described as public-preview ready.
