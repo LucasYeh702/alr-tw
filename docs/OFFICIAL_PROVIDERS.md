@@ -1,6 +1,6 @@
 # Official Providers
 
-ALR-TW v0.6.0 以三個獨立 provider 取得台灣中央法規、普通法院裁判與憲法法庭資料。官方即時內容通過結構與一致性檢查後，會固定成短期 server-owned evidence snapshot（伺服器持有的證據快照）；呼叫端不能自行宣告某段文字為官方資料。
+ALR-TW v0.6.1 以三個獨立 provider 取得台灣中央法規、普通法院裁判與憲法法庭資料。官方即時內容通過結構與一致性檢查後，會固定成短期 server-owned evidence snapshot（伺服器持有的證據快照）；呼叫端不能自行宣告某段文字為官方資料。
 
 ## 法務部法規 Provider
 

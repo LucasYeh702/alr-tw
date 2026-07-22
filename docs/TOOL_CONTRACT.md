@@ -8,14 +8,14 @@
 | `continue_legal_research` | `run_id`, `operation_id` | 原子執行一個 obligation；相同 operation id 回相同結果 |
 | `get_legal_research_state` | `run_id` | 唯讀；無 provider call、無 TTL extension |
 | `lookup_legal_source` | `text` | 精確來源 lookup；可選 run/operation linkage；`claim_verified=false` |
-| `validate_legal_answer` | `run_id`, `answer_text`, `operation_id` | 只用 server-owned evidence；回 `validated`, `qualified`, `blocked` |
+| `validate_legal_answer` | `run_id`, `answer_text`, `operation_id` | 只用 server-owned evidence；核心主張應提供 optional `claim_bindings`；回 `validated`, `qualified`, `blocked` |
 | `purge_research_storage` | `scope`, `confirm` | `scope=run` 需 `run_id`；同步清除 managed records |
 
 `constraints.retention` 接受 `1s..7d` 或 `ephemeral`。`request_id`／`client_id` 是 correlation metadata，不是 authority 或 idempotency key；只有 `operation_id` 控制會改變狀態的重播。
 
 `lookup_legal_source` 支援法規名稱＋條號、憲法裁判字號、完整 JID，以及含法院／年度／字別／號次的正式裁判字號。正式字號不唯一時回明確 ambiguity error，不猜測。
 
-所有 tool 使用 `alr-tw.mcp_tool_result/v1` envelope。輸入採 `additionalProperties=false`；未知欄位與不支援的 MCP protocol version 都必須拒絕。
+所有 tool 使用 `alr-tw.mcp_tool_result/v1` envelope。輸入採 `additionalProperties=false`；未知欄位與不支援的 MCP protocol version 都必須拒絕。MCP 保留欄位只相容 `params._meta` 與 direct `arguments._meta`，正規化後不進入業務參數、persistence 或 telemetry。
 
 All MCP tool results are wrapped in:
 
@@ -27,6 +27,20 @@ All MCP tool results are wrapped in:
   "error": null
 }
 ```
+
+## v0.6.1 answer validation
+
+`claim_bindings` 是 optional array；每筆包含 `claim_id`、`claim_text`、`claim_type`、`importance` 與至少一個同 run 的 `evidence_ids`。允許的 `claim_type` 是 `law_rule`、`court_view`、`disposition`、`fact`、`procedure`、`limitation`。
+
+Server 會核對 evidence 存在、官方 trust status、expiry、claim-support eligibility 與 section role。核心法律 claim 沒有 span-level binding 時回 `CLAIM_CITATION_BINDING_REQUIRED`，不得以 run-wide 最高重疊通過。只傳 `answer_text` 的舊 caller 會取得 `binding_mode=legacy_unbound`。
+
+答案驗證輸出為 additive `alr-tw.answer-validation/v3`，並揭露：
+
+- `verification_method=deterministic_grounding_v2`；
+- `semantic_entailment_performed=false`；
+- `privacy`（local answer-output policy，不使用 outbound 180 字門檻）；
+- `coverage_summary`；
+- `binding_mode`。
 
 ## Tools
 

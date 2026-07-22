@@ -323,18 +323,20 @@ class ProviderObligationExecutor:
         resolved_count = len(resolved)
         unresolved_count = max(0, candidate_count - resolved_count)
         if not targets:
-            limitations = ["JUDGMENT_RECALL_INCOMPLETE"]
+            missing_limitations = ["JUDGMENT_RECALL_INCOMPLETE"]
             if unresolved_count:
-                limitations.append("JUDGMENT_CANDIDATE_RESOLUTION_INCOMPLETE")
+                missing_limitations.append("JUDGMENT_CANDIDATE_RESOLUTION_INCOMPLETE")
             coverage = run.coverage.model_copy(
                 update={
                     "judgment_checked": False,
-                    "limitations": sorted(set(run.coverage.limitations + limitations)),
+                    "limitations": sorted(
+                        set(run.coverage.limitations + missing_limitations)
+                    ),
                 }
             )
             return self._outcome(
                 obligation,
-                warnings=limitations,
+                warnings=missing_limitations,
                 metadata={
                     "candidate_count": candidate_count,
                     "resolved_count": resolved_count,
@@ -344,7 +346,7 @@ class ProviderObligationExecutor:
                     "partial_parse_count": 0,
                     "failed_count": unresolved_count,
                     "truncated": False,
-                    "limitations": limitations,
+                    "limitations": missing_limitations,
                 },
                 updates={"coverage": coverage, "judgment_recall_incomplete": True},
             )
