@@ -7,7 +7,7 @@ from alr_tw.research.judgment_identity import (
 )
 
 
-JID = "TPD,113,訴,42,20240102,1"
+JID = "DEMO,113,測,42,20990102,1"
 
 
 def _candidate(
@@ -44,7 +44,7 @@ def test_resolver_prefers_typed_identity_and_supports_url_fallback() -> None:
             provider_document_id="opaque",
             official_url=(
                 "https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&"
-                "id=TPD%2C113%2C%E8%A8%B4%2C42%2C20240102%2C1"
+                "id=DEMO%2C113%2C%E6%B8%AC%2C42%2C20990102%2C1"
             ),
         ),
     )

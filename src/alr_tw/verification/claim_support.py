@@ -3,7 +3,8 @@ from __future__ import annotations
 from collections import Counter
 from enum import Enum
 import re
-from typing import Any
+from typing import Any, Literal
+import unicodedata
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -102,6 +103,23 @@ class AnswerClaim(ClaimContractModel):
     importance: Importance | str = Importance.CORE
 
 
+class ClaimBinding(ClaimContractModel):
+    model_config = ConfigDict(extra="forbid")
+
+    claim_id: str = Field(min_length=1)
+    claim_text: str = Field(min_length=1)
+    claim_type: Literal[
+        "law_rule",
+        "court_view",
+        "disposition",
+        "fact",
+        "procedure",
+        "limitation",
+    ]
+    importance: Literal["core", "supporting"] = "core"
+    evidence_ids: list[str] = Field(min_length=1)
+
+
 class ClaimSupportingSegment(ClaimContractModel):
     segment_id: str
     support_type: SupportType
@@ -140,12 +158,78 @@ class SemanticGroundingSummary(ClaimContractModel):
         return self.model_dump()
 
 
+def _normalize_grounding_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value)
+    return re.sub(r"\s+", "", normalized).strip()
+
+
 def _tokenize(value: str) -> set[str]:
-    return {
-        token
-        for token in re.findall(r"[\u4e00-\u9fffA-Za-z0-9]+", value)
-        if len(token) > 1
+    normalized = unicodedata.normalize("NFKC", value)
+    tokens = {
+        token.lower()
+        for token in re.findall(r"[A-Za-z]+|\d+(?:\.\d+)?%?", normalized)
     }
+    for run in re.findall(r"[\u3400-\u9fff]+", normalized):
+        for width in (2, 3, 4):
+            tokens.update(run[index : index + width] for index in range(len(run) - width + 1))
+    tokens.update(_extract_anchors(normalized))
+    return tokens
+
+
+def _extract_anchors(value: str) -> set[str]:
+    compact = _normalize_grounding_text(value)
+    patterns = (
+        r"[^，。；;\s]{1,20}法第\d+(?:之\d+)?條(?:第\d+項)?(?:第\d+款)?",
+        r"第\d+(?:之\d+)?條(?:第\d+項)?(?:第\d+款)?(?:第\d+目)?",
+        r"\d+(?:\.\d+)?(?:日|天|月|年|元|萬元|%|％)",
+        r"[A-Z0-9]{3,12},\d+,[^,，]{1,20},\d+,\d{8},\d+",
+        r"民國\d+年\d+月\d+日",
+        r"(?:19|20)\d{2}年\d+月\d+日",
+    )
+    anchors: set[str] = set()
+    for pattern in patterns:
+        anchors.update(re.findall(pattern, compact, flags=re.IGNORECASE))
+    return {unicodedata.normalize("NFKC", anchor).lower() for anchor in anchors}
+
+
+_POLARITY_PAIRS = (
+    ("得", "不得"),
+    ("應", "不應"),
+    ("有", "無"),
+    ("成立", "不成立"),
+    ("准許", "駁回"),
+    ("合法", "違法"),
+    ("有效", "無效"),
+    ("須", "無須"),
+    ("可", "不可"),
+)
+_QUALIFIERS = ("但", "惟", "除非", "除有", "情形", "為限", "原則上", "仍應", "尚不得")
+
+
+def _polarity_mismatch(claim_text: str, segment_text: str) -> bool:
+    claim = _normalize_grounding_text(claim_text)
+    segment = _normalize_grounding_text(segment_text)
+    for positive, negative in _POLARITY_PAIRS:
+        claim_state = -1 if negative in claim else 1 if positive in claim else 0
+        segment_state = -1 if negative in segment else 1 if positive in segment else 0
+        if claim_state and segment_state and claim_state != segment_state:
+            return True
+    return False
+
+
+def _qualifier_omitted(claim_text: str, segment_text: str) -> bool:
+    segment_qualifiers = {item for item in _QUALIFIERS if item in segment_text}
+    if not segment_qualifiers:
+        return False
+    if any(item in claim_text for item in segment_qualifiers):
+        return False
+    return any(item in claim_text for item in ("一律", "均", "皆", "必然", "應", "得", "可以", "不得"))
+
+
+def _anchor_mismatch(claim_text: str, segment_text: str) -> bool:
+    claim_anchors = _extract_anchors(claim_text)
+    segment_anchors = _extract_anchors(segment_text)
+    return bool(claim_anchors and segment_anchors and claim_anchors != segment_anchors)
 
 
 def _extract_importance(text: str) -> Importance:
@@ -180,10 +264,8 @@ def _missing_qualifier(text: str) -> bool:
 def _support_strength(text_overlap: float, has_role_mismatch: bool) -> SupportStatus:
     if has_role_mismatch:
         return SupportStatus.ROLE_ERROR
-    if text_overlap >= 0.75:
+    if text_overlap >= 0.50:
         return SupportStatus.SUPPORTED
-    if text_overlap >= 0.55:
-        return SupportStatus.PARTIALLY_SUPPORTED
     if text_overlap >= 0.20:
         return SupportStatus.PARTIALLY_SUPPORTED
     return SupportStatus.UNSUPPORTED
@@ -218,6 +300,7 @@ def check_claim_support(
     answer: str,
     claims: list[dict[str, Any]] | list[AnswerClaim],
     segments: list[dict[str, Any]] | list[LegalSegment],
+    require_explicit_bindings: bool = False,
 ) -> tuple[list[ClaimSupport], SemanticGroundingSummary, list[str]]:
     normalized_claims = [
         claim if isinstance(claim, AnswerClaim) else AnswerClaim(**claim)
@@ -230,11 +313,22 @@ def check_claim_support(
 
     support_results: list[ClaimSupport] = []
     for claim in normalized_claims:
-        support_result = _check_single_claim_support(answer, claim, candidate_segments)
+        support_result = _check_single_claim_support(
+            answer,
+            claim,
+            candidate_segments,
+            require_explicit_binding=require_explicit_bindings,
+        )
         support_results.append(support_result)
 
     summary = summarize_claim_support(support_results)
-    return support_results, summary, claim_support_failure_reasons(summary)
+    reasons = claim_support_failure_reasons(summary)
+    if any(
+        "claim_citation_binding_required" in item.risk_flags
+        for item in support_results
+    ):
+        reasons.append("CLAIM_CITATION_BINDING_REQUIRED")
+    return support_results, summary, reasons
 
 
 def _find_candidate_segments(
@@ -261,12 +355,77 @@ def _segment_text_overlap_ratio(claim_text: str, segment_text: str) -> float:
     return len(claim_tokens & segment_tokens) / len(claim_tokens)
 
 
+def _role_compatible(claim: AnswerClaim, segment: LegalSegment) -> bool:
+    try:
+        claim_type = ClaimType(claim.claim_type)
+    except ValueError:
+        claim_type = ClaimType.UNKNOWN
+    try:
+        role = SectionRole(segment.section_role)
+    except ValueError:
+        role = SectionRole.UNKNOWN
+    if claim_type is ClaimType.STATUTORY_RULE:
+        return role is SectionRole.STATUTE_TEXT
+    if claim_type is ClaimType.COURT_VIEW:
+        return role in {
+            SectionRole.COURT_HOLDING,
+            SectionRole.COURT_REASONING,
+            SectionRole.DISPOSITION,
+            SectionRole.CONSTITUTIONAL_HOLDING,
+        }
+    if claim_type is ClaimType.PROCEDURAL_STATEMENT:
+        return role in {
+            SectionRole.PROCEDURE,
+            SectionRole.COURT_HOLDING,
+            SectionRole.COURT_REASONING,
+            SectionRole.DISPOSITION,
+        }
+    if claim_type is ClaimType.FACTUAL_SUMMARY:
+        return role is SectionRole.FACTS
+    if claim_type is ClaimType.CASE_SPECIFIC_APPLICATION:
+        return role in {
+            SectionRole.FACTS,
+            SectionRole.COURT_HOLDING,
+            SectionRole.COURT_REASONING,
+            SectionRole.DISPOSITION,
+        }
+    return role not in {
+        SectionRole.PARTY_ARGUMENT,
+        SectionRole.CONCURRING_OPINION,
+        SectionRole.DISSENTING_OPINION,
+        SectionRole.UNKNOWN,
+    }
+
+
+def _supporting_segment(segment: LegalSegment) -> ClaimSupportingSegment:
+    return ClaimSupportingSegment(
+        segment_id=segment.segment_id,
+        support_type=SupportType.DIRECT_SUPPORT,
+        section_role=segment.section_role,
+        span_start=segment.span_start,
+        span_end=segment.span_end,
+    )
+
+
 def _check_single_claim_support(
     answer: str,
     claim: AnswerClaim,
     all_segments: list[LegalSegment],
+    *,
+    require_explicit_binding: bool = False,
 ) -> ClaimSupport:
     del answer
+    if (
+        require_explicit_binding
+        and claim.importance in {Importance.CORE, Importance.CORE.value}
+        and not claim.referenced_citation_ids
+    ):
+        return ClaimSupport(
+            claim_id=claim.claim_id,
+            support_status=SupportStatus.UNCHECKED,
+            review_required=True,
+            risk_flags=["claim_citation_binding_required"],
+        )
     supported_segments = _find_candidate_segments(claim, all_segments)
 
     if not all_segments or not supported_segments:
@@ -277,7 +436,6 @@ def _check_single_claim_support(
             risk_flags=["section_role_unknown"] if not all_segments else ["role_not_linked"],
         )
 
-    role_mismatch = False
     risk_flags: list[str] = []
     best_segment = supported_segments[0]
     best_overlap = 0.0
@@ -288,32 +446,19 @@ def _check_single_claim_support(
             best_overlap = overlap
             best_segment = segment
 
-        if claim.claim_type == ClaimType.COURT_VIEW and segment.section_role in {
-            SectionRole.PARTY_ARGUMENT,
-            SectionRole.FACTS,
+    role_mismatch = not _role_compatible(claim, best_segment)
+    if role_mismatch:
+        if best_segment.section_role in {
             SectionRole.CONCURRING_OPINION,
             SectionRole.DISSENTING_OPINION,
         }:
-            role_mismatch = True
-            if "法院" in claim.claim_text and "認為" in claim.claim_text:
-                risk_flags.append(
-                    "separate_opinion_as_court_view"
-                    if segment.section_role
-                    in {SectionRole.CONCURRING_OPINION, SectionRole.DISSENTING_OPINION}
-                    else "party_argument_as_court_view"
-                )
-
-        if segment.section_role == SectionRole.CONCURRING_OPINION and "協同意見" not in claim.claim_text:
-            role_mismatch = True
-            risk_flags.append("unlabelled_separate_opinion")
-        if segment.section_role == SectionRole.DISSENTING_OPINION and "不同意見" not in claim.claim_text:
-            role_mismatch = True
-            risk_flags.append("unlabelled_separate_opinion")
-
-        if segment.section_role in {SectionRole.UNKNOWN}:
+            risk_flags.append("separate_opinion_as_court_view")
+        elif best_segment.section_role is SectionRole.PARTY_ARGUMENT:
+            risk_flags.append("party_argument_as_court_view")
+        elif best_segment.section_role is SectionRole.FACTS:
+            risk_flags.append("facts_as_legal_rule")
+        else:
             risk_flags.append("section_role_unknown")
-
-    if role_mismatch:
         return ClaimSupport(
             claim_id=claim.claim_id,
             support_status=SupportStatus.ROLE_ERROR,
@@ -329,6 +474,36 @@ def _check_single_claim_support(
             ],
             risk_flags=sorted(set(risk_flags)),
             support_strength_note="Matched text from non-authoritative role segment.",
+        )
+
+    if _polarity_mismatch(claim.claim_text, best_segment.text):
+        return ClaimSupport(
+            claim_id=claim.claim_id,
+            support_status=SupportStatus.CONTRADICTED,
+            review_required=True,
+            supporting_segments=[_supporting_segment(best_segment)],
+            risk_flags=["POLARITY_MISMATCH"],
+            support_strength_note="Claim and bound evidence use opposing legal polarity.",
+        )
+
+    if _anchor_mismatch(claim.claim_text, best_segment.text):
+        return ClaimSupport(
+            claim_id=claim.claim_id,
+            support_status=SupportStatus.UNSUPPORTED,
+            review_required=True,
+            supporting_segments=[_supporting_segment(best_segment)],
+            risk_flags=["ANCHOR_MISMATCH"],
+            support_strength_note="Legal or numeric anchors differ from bound evidence.",
+        )
+
+    if _qualifier_omitted(claim.claim_text, best_segment.text):
+        return ClaimSupport(
+            claim_id=claim.claim_id,
+            support_status=SupportStatus.OVERSTATED,
+            review_required=True,
+            supporting_segments=[_supporting_segment(best_segment)],
+            risk_flags=["QUALIFIER_OMITTED"],
+            support_strength_note="Claim omits a material qualifier in bound evidence.",
         )
 
     if claim.claim_type == ClaimType.CASE_SPECIFIC_APPLICATION and _contains_generality(claim.claim_text):

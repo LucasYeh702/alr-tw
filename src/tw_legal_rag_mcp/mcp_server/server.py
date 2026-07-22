@@ -580,6 +580,43 @@ def _v060_tool_definitions() -> list[dict[str, Any]]:
                     "answer_text": {"type": "string"},
                     "operation_id": {"type": "string"},
                     "request_id": {"type": "string"},
+                    "claim_bindings": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "claim_id": {"type": "string"},
+                                "claim_text": {"type": "string"},
+                                "claim_type": {
+                                    "type": "string",
+                                    "enum": [
+                                        "law_rule",
+                                        "court_view",
+                                        "disposition",
+                                        "fact",
+                                        "procedure",
+                                        "limitation",
+                                    ],
+                                },
+                                "importance": {
+                                    "type": "string",
+                                    "enum": ["core", "supporting"],
+                                },
+                                "evidence_ids": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "minItems": 1,
+                                },
+                            },
+                            "required": [
+                                "claim_id",
+                                "claim_text",
+                                "claim_type",
+                                "evidence_ids",
+                            ],
+                            "additionalProperties": False,
+                        },
+                    },
                 },
                 "required": ["run_id", "answer_text", "operation_id"],
                 "additionalProperties": False,
@@ -784,12 +821,22 @@ def _call_v060_tool(
     if name == "validate_legal_answer":
         _reject_unexpected_keys(
             arguments,
-            {"run_id", "answer_text", "operation_id", "request_id"},
+            {
+                "run_id",
+                "answer_text",
+                "operation_id",
+                "request_id",
+                "claim_bindings",
+            },
         )
+        claim_bindings = arguments.get("claim_bindings")
+        if claim_bindings is not None and not isinstance(claim_bindings, list):
+            raise ValueError("claim_bindings must be an array")
         return service.validate_answer(
             _required_string(arguments, "run_id"),
             _required_string(arguments, "answer_text"),
             _required_string(arguments, "operation_id"),
+            claim_bindings=claim_bindings,
         )
     if name == "purge_research_storage":
         _reject_unexpected_keys(arguments, {"scope", "run_id", "confirm"})

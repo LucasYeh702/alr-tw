@@ -8,7 +8,7 @@ from alr_tw.storage.sqlite_store import SqliteStore
 from tw_legal_rag_mcp.mcp_server.request_normalization import (
     normalize_call_tool_params,
 )
-from tw_legal_rag_mcp.mcp_server.server import McpSession
+from tw_legal_rag_mcp.mcp_server.server import McpSession, tool_definitions
 
 
 def _call(
@@ -145,3 +145,16 @@ def test_nested_business_meta_is_not_recursively_removed() -> None:
         }
     )
     assert normalized.arguments["constraints"]["_meta"] == {"not": "transport"}
+
+
+def test_validate_answer_schema_exposes_structured_claim_bindings() -> None:
+    schema = next(
+        tool["inputSchema"]
+        for tool in tool_definitions()
+        if tool["name"] == "validate_legal_answer"
+    )
+    bindings = schema["properties"]["claim_bindings"]
+
+    assert bindings["type"] == "array"
+    assert bindings["items"]["additionalProperties"] is False
+    assert "evidence_ids" in bindings["items"]["required"]

@@ -211,7 +211,17 @@ class ProviderObligationExecutor:
             result = _run(self.providers.laws.search(run.query, limit=10))
             calls.append(self._provider_call(result))
             warnings.append("LAW_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP")
-        coverage = run.coverage.model_copy(update={"law_checked": True})
+        limitations = list(run.coverage.limitations)
+        if not citations:
+            limitations.append("LAW_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP")
+        elif added_evidence == 0:
+            limitations.append("LAW_OFFICIAL_VERIFICATION_INCOMPLETE")
+        coverage = run.coverage.model_copy(
+            update={
+                "law_checked": added_evidence > 0,
+                "limitations": sorted(set(limitations)),
+            }
+        )
         return self._outcome(
             obligation,
             calls=calls,
@@ -499,7 +509,17 @@ class ProviderObligationExecutor:
             result = _run(self.providers.constitutional.search(run.query, limit=10))
             calls.append(self._provider_call(result))
             warnings.append("CONSTITUTIONAL_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP")
-        coverage = run.coverage.model_copy(update={"constitutional_checked": True})
+        limitations = list(run.coverage.limitations)
+        if not identifier:
+            limitations.append("CONSTITUTIONAL_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP")
+        elif evidence_count == 0:
+            limitations.append("CONSTITUTIONAL_OFFICIAL_VERIFICATION_INCOMPLETE")
+        coverage = run.coverage.model_copy(
+            update={
+                "constitutional_checked": evidence_count > 0,
+                "limitations": sorted(set(limitations)),
+            }
+        )
         return self._outcome(
             obligation,
             calls=calls,
@@ -514,10 +534,22 @@ class ProviderObligationExecutor:
         run: ResearchRun,
         obligation: ResearchObligation,
     ) -> dict[str, Any]:
-        coverage = run.coverage.model_copy(update={"counter_authority_checked": True})
+        limitation = "COUNTER_AUTHORITY_SEARCH_NOT_IMPLEMENTED"
+        coverage = run.coverage.model_copy(
+            update={
+                "counter_authority_checked": False,
+                "limitations": sorted(set(run.coverage.limitations + [limitation])),
+            }
+        )
         return self._outcome(
             obligation,
-            warnings=["COUNTER_AUTHORITY_REVIEW_REQUIRES_IDENTIFIED_CANDIDATES"],
+            warnings=[limitation],
+            metadata={
+                "provider_call_count": 0,
+                "candidate_count": 0,
+                "attempted_count": 0,
+                "verified_count": 0,
+            },
             updates={"coverage": coverage},
         )
 

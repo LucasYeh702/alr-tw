@@ -297,10 +297,19 @@ def test_official_law_run_promotes_evidence_and_validates(tmp_path: Path) -> Non
 
     _advance(service, run.run_id)
     state = service.get_state(run.run_id)
+    evidence_id = service.store.list_evidence(run.run_id)[0].evidence_id
     validation = service.validate_answer(
         run.run_id,
         "行為人違反示範義務時，應負合成測試責任。",
         "validate-1",
+        claim_bindings=[
+            {
+                "claim_id": "claim-law-7",
+                "claim_text": "行為人違反示範義務時，應負合成測試責任。",
+                "claim_type": "law_rule",
+                "evidence_ids": [evidence_id],
+            }
+        ],
     )
 
     assert state["source_count"] == 1
@@ -386,7 +395,32 @@ def test_official_website_search_candidate_is_downloaded_and_promoted(tmp_path: 
     assert state["source_count"] == 1
     assert state["evidence_count"] == 3
     assert stored is not None and stored.judgment_recall_incomplete is False
+    assert stored.coverage.counter_authority_checked is False
+    assert "COUNTER_AUTHORITY_SEARCH_NOT_IMPLEMENTED" in stored.coverage.limitations
     assert [method for method, _ in judgments.calls] == ["GET", "POST", "GET", "GET"]
+
+
+def test_keyword_only_law_and_constitutional_handlers_do_not_claim_verified_coverage(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    run = service.create_run(
+        "基本權保障的一般法律問題",
+        mode=DataMode.OFFICIAL_ONLY,
+        depth=ResearchDepth.QUICK,
+    )
+
+    _advance(service, run.run_id)
+    stored = service.get_run(run.run_id)
+
+    assert stored is not None
+    assert stored.coverage.law_checked is False
+    assert stored.coverage.constitutional_checked is False
+    assert "LAW_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP" in stored.coverage.limitations
+    assert (
+        "CONSTITUTIONAL_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP"
+        in stored.coverage.limitations
+    )
 
 
 def _tlr_promotion_service(
@@ -557,11 +591,20 @@ def test_tlr_degradation_with_sufficient_official_law_evidence_is_qualified(
         depth=ResearchDepth.STANDARD,
     )
     _advance(service, run.run_id)
+    evidence_id = service.store.list_evidence(run.run_id)[0].evidence_id
 
     validation = service.validate_answer(
         run.run_id,
         "行為人違反示範義務時，應負合成測試責任。",
         "validate-qualified",
+        claim_bindings=[
+            {
+                "claim_id": "claim-law-7",
+                "claim_text": "行為人違反示範義務時，應負合成測試責任。",
+                "claim_type": "law_rule",
+                "evidence_ids": [evidence_id],
+            }
+        ],
     )
 
     assert validation["decision"] == "qualified"
