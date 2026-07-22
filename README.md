@@ -107,7 +107,7 @@ alr-tw doctor --live
 
 秘密不會顯示在 `doctor` 輸出，也不應寫入 `.env.example`、trace 或 SQLite。
 
-## v0.6 MCP tools
+## v0.6.1 MCP tools
 
 | Tool | 用途 |
 |---|---|
@@ -289,9 +289,9 @@ Choose data mode
 
 憲法法庭資料應保留主文、理由與個別意見的角色差異。協同意見與不同意見可作研究材料，但不能在沒有標示的情況下作為多數意見或裁判拘束內容。
 
-## v0.6.0 升級提醒
+## v0.6.1 發布說明
 
-v0.6.0 的 Codex native MCP `_meta`、常見普通法院段落解析、TLR `doc_id` 官方升格、答案層 privacy 與中文 grounding 均有已知限制；公開版也未實作系統性反方裁判搜尋。v0.6.1 針對前述 release blockers 修正，但不宣稱支援所有法院格式、完整語義蘊含或完整反方見解搜尋。
+v0.6.1 已補強 Codex native MCP `_meta`、常見普通法院段落解析、TLR `doc_id` 官方升格、答案層 privacy 與中文 grounding；但不宣稱支援所有法院格式、完整語義蘊含、系統性反方裁判搜尋或完整反方見解搜尋。
 
 ## 文件
 

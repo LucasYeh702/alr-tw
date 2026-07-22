@@ -78,7 +78,7 @@ alr-tw doctor --live
 
 普通裁判不需要司法院 API token。啟用 live mode 後，搜尋詞與篩選條件會直接送到司法院裁判書查詢網站；不得以未公開案情、個人秘密或受保密義務保護的資料作為搜尋詞。也不要把 TLR API key 或真實查詢寫入 repo。
 
-## v0.6 MCP tools
+## v0.6.1 MCP tools
 
 | Tool | 用途 |
 |---|---|

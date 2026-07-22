@@ -83,7 +83,7 @@ Ordinary-judgment lookup does not require a Judicial Yuan API token. In a live m
 
 Secrets are redacted from `doctor` output and must not be committed, traced, or persisted in SQLite.
 
-## v0.6 MCP tools
+## v0.6.1 MCP tools
 
 | Tool | Purpose |
 |---|---|
