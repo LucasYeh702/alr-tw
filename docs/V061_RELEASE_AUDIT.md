@@ -2,9 +2,9 @@
 
 Audit date: 2026-07-22 (Asia/Taipei)
 
-Source commit under test: `88222a4634e21cd586afd7a3448fea1585e374a7`
+Source commit under test: `605b51ab1da86423649a7178702c36ce7d1e8e68`
 
-Release decision: **BLOCKED — do not tag or publish yet**
+Release decision: **TAG/RELEASE BLOCKED — branch publication permitted for clean-environment testing**
 
 This audit records commands actually executed. A passing synthetic or contract test is not presented as a passing real ordinary-court corpus or live-provider canary.
 
@@ -17,7 +17,7 @@ This audit records commands actually executed. A passing synthetic or contract t
 | pytest | 9.1.1 |
 | pydantic | 2.13.4 |
 | MCP Python SDK (fresh venv) | 1.28.1 |
-| Codex host | codex-cli 0.144.3 |
+| External reviewer | `gemini-3.6-flash-high`, effort `high`, via AGY |
 | package | alr-tw 0.6.1 |
 
 ## Reproducible quality gates
@@ -26,17 +26,29 @@ This audit records commands actually executed. A passing synthetic or contract t
 |---|---:|---|
 | `uv run ruff check .` | 0 | PASS |
 | `uv run mypy src` | 0 | PASS, 92 source files |
-| `uv run pytest -q` | 0 | PASS, 268 tests |
+| `uv run pytest -q` | 0 | PASS, 279 tests |
 | `uv run python scripts/check_no_forbidden_files.py .` | 0 | PASS |
 | `uv run python scripts/check_public_boundary.py` | 0 | PASS |
-| `uv build` | 0 | PASS, wheel and sdist built |
+| `SOURCE_DATE_EPOCH=<source commit time> uv build` | 0 | PASS, wheel and sdist built |
 
 Artifacts:
 
 | Artifact | SHA-256 |
 |---|---|
-| `alr_tw-0.6.1-py3-none-any.whl` | `44f1e1e240f5864df590056b2077f5d6f267d3d2a9cd7c1102f79b5ada1bd48a` |
-| `alr_tw-0.6.1.tar.gz` | `ecc59899910b24be1a9fc805d234bd38825f22a31e8a0bed85b10e04816441b7` |
+| `alr_tw-0.6.1-py3-none-any.whl` | `6ab797c9ed1a47159f6f496ee9d690dab1af8c31d2d55486478867d7f2a056f1` |
+| `alr_tw-0.6.1.tar.gz` | `a1d3051d3c8a3301f783a4cb9169da59b39e41144a8b1ff3362d3125e3be642e` |
+
+The fresh-wheel remediation smoke verified 20 packaged tools, the six high-level tool names,
+the `claim_bindings` evidence-ID guidance, role-safe party/court rebuttal parsing, hierarchical
+article anchors, and lexical-compound polarity guards.
+
+## External review
+
+AGY was used only as a read-only external reviewer. The exact model ID was confirmed through
+`agy models`, and review processes used `gemini-3.6-flash-high` with high effort in plan mode.
+Findings were reproduced locally before changes were accepted. The final
+full-diff review reported no P0, P1, or P2 defect, legal-evidence fail-open, state-transition
+error, or material test gap.
 
 ## Fresh-wheel MCP and host canaries
 
@@ -68,13 +80,13 @@ The first live TLR promotion attempt exposed two current-page variants: canonica
 | RG-MCP-02 | PASS | all six high-level tools, fresh-wheel MCP SDK metadata canary |
 | RG-MCP-03 | PASS | unknown business fields remain rejected |
 | RG-JUD-01 | **BLOCKED** | no policy-approved 8-case real ordinary-court snapshot corpus in the public repo |
-| RG-JUD-02 | PARTIAL | synthetic layout corpus false party-to-court promotions = 0; real corpus not run |
+| RG-JUD-02 | PARTIAL | synthetic layout and adversarial role regressions false party-to-court promotions = 0; real corpus not run |
 | RG-JUD-03 | PASS | partial parsing preserves an official non-eligible source |
 | RG-IDR-01 | PASS | canonical `doc_id` and official-URL fallback promotion tests |
 | RG-IDR-02 | PASS | canonical identifier mismatch blocks promotion |
 | RG-PRIV-01 | PASS | 1,000- and 3,000-plus-character Chinese answer cases pass output privacy |
 | RG-PRIV-02 | PASS | deterministic identifier/token redaction and confidential-content blocking |
-| RG-GRD-01 | PASS | one reordered Chinese lexical/structural positive golden case |
+| RG-GRD-01 | PASS | reordered Chinese, hierarchical-anchor, qualifier, and lexical-compound positive regressions |
 | RG-GRD-02 | PASS | seven negative cases: polarity, qualifier, role, numeric anchor, article anchor, unbound core claim, citation dumping |
 | RG-GRD-03 | PASS | unbound core claim returns `CLAIM_CITATION_BINDING_REQUIRED` |
 | RG-COV-01 | PASS | zero-call counter-authority handler keeps checked=false and records limitation |
@@ -100,7 +112,10 @@ The manifest explicitly sets `satisfies_ordinary_court_release_gate=false`. It d
 - Candidate ordering and canonical-JID deduplication occur before the five-target verification budget; verification metrics and provenance are returned.
 - Answer output privacy is local-only and independent of the conservative 180-character outbound-query policy.
 - Answer validation v3 discloses `deterministic_grounding_v2` and `semantic_entailment_performed=false`.
-- Core legal claims require evidence-ID bindings. Only bound evidence can affect stale, citation, role, and grounding decisions.
+- Structured core claims use only bound evidence for stale, citation, role, and grounding
+  decisions. Legacy unbound core claims remain blocked even when eligible evidence exists;
+  only non-core legacy claims may use run-owned eligible evidence, and they are capped at
+  `QUALIFIED` with an explicit limitation.
 - The public implementation does not perform systematic counter-authority search. The coverage state remains false and final answers require an explicit limitation.
 
 ## Not executed or not satisfied
@@ -108,4 +123,6 @@ The manifest explicitly sets `satisfies_ordinary_court_release_gate=false`. It d
 - Real V0.6.1 ordinary-court fixed corpus: **not executed / blocking** because no approved public-safe fixture path was provided and the repository policy forbids committing real corpus identifiers/content.
 - V0.6.2 operation leases/failure recovery and stable source-version identity: **deferred by specification**.
 
-Until the real fixed-corpus governance conflict is resolved, v0.6.1 must not be tagged, released, or described as public-preview ready.
+Until the real fixed-corpus governance conflict is resolved, v0.6.1 must not be tagged,
+released, or described as public-preview ready. A non-release branch may be published solely
+for clean-environment engineering validation.
