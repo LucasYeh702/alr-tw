@@ -340,7 +340,7 @@ class TlrSemanticRecallProvider:
         return candidates, sources
 
     def _headers(self) -> dict[str, str]:
-        headers = {"User-Agent": "ALR-TW/0.6.1", "Accept": "application/json"}
+        headers = {"User-Agent": "ALR-TW/0.6.2", "Accept": "application/json"}
         if self._api_key is not None:
             headers["Authorization"] = f"Bearer {self._api_key.get_secret_value()}"
         return headers

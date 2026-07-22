@@ -317,7 +317,7 @@ class ProviderObligationExecutor:
             if identity is not None:
                 resolved.append(identity)
 
-        targets = rank_and_dedupe_judgment_identities(resolved)
+        targets = rank_and_dedupe_judgment_identities(resolved, query=run.query)
         direct_count = int(bool(direct or self._formal_citation_from_text(run.query)))
         candidate_count = len(candidates) + direct_count
         resolved_count = len(resolved)

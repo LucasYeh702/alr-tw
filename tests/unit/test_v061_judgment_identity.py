@@ -20,6 +20,8 @@ def _candidate(
     official_url: str | None = None,
     rank: int | None = None,
     score: float | None = None,
+    title: str | None = None,
+    excerpt: str | None = None,
 ) -> ProviderCandidate:
     return ProviderCandidate(
         candidate_id=candidate_id,
@@ -29,6 +31,8 @@ def _candidate(
         official_url=official_url,
         candidate_rank=rank,
         score=score,
+        title=title,
+        excerpt=excerpt,
     )
 
 
@@ -131,3 +135,36 @@ def test_direct_jid_dedupe_preserves_matching_candidate_provenance() -> None:
     assert ranked[0].candidate.candidate_id == "tlr-1"
     assert ranked[0].resolution_method == "typed_canonical_jid"
     assert ranked[0].merged_candidate_ids == ("tlr-1",)
+
+
+def test_query_relevance_demotes_unrelated_criminal_tlr_candidate() -> None:
+    criminal_jid = "DEMO,113,刑,7,20990103,1"
+    criminal = _candidate(
+        "tlr-criminal",
+        "tlr_semantic_recall",
+        identity=CandidateIdentity(canonical_jid=criminal_jid),
+        rank=1,
+        score=0.99,
+        title="臺灣示範地方法院刑事判決",
+        excerpt="被告涉犯詐欺罪，量處有期徒刑。",
+    )
+    labor = _candidate(
+        "tlr-labor",
+        "tlr_semantic_recall",
+        identity=CandidateIdentity(canonical_jid=JID),
+        rank=2,
+        score=0.8,
+        title="臺灣示範地方法院民事判決",
+        excerpt="勞工於試用期間遭雇主終止勞動契約，請求給付資遣費。",
+    )
+    identities = [resolve_judgment_candidate(criminal), resolve_judgment_candidate(labor)]
+
+    ranked = rank_and_dedupe_judgment_identities(
+        [item for item in identities if item is not None],
+        query="試用期間解僱是否應支付資遣費",
+    )
+
+    assert [item.candidate.candidate_id for item in ranked if item.candidate] == [
+        "tlr-labor",
+        "tlr-criminal",
+    ]

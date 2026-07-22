@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from alr_tw.contracts.providers import DataMode
-from alr_tw.contracts.research import ResearchDepth, ResearchState
+from alr_tw.contracts.research import ResearchDepth, ResearchObligationKind, ResearchState
 from alr_tw.contracts.sources import EvidenceSpan, MaterialType, SourceRecord, SourceTier, TrustStatus
-from alr_tw.research.service import ResearchService
+from alr_tw.research.service import ResearchService, _plan_obligations
 from alr_tw.storage.sqlite_store import SqliteStore
 
 
@@ -63,6 +63,21 @@ def test_hybrid_run_starts_with_privacy_screen_and_never_silently_downgrades(tmp
     assert run.effective_mode is DataMode.HYBRID_VERIFIED
     assert run.privacy_status.value == "uncertain"
     assert "privacy_screen" in [item.kind.value for item in run.obligations]
+
+
+def test_today_as_of_date_uses_current_law_context() -> None:
+    obligations = _plan_obligations(
+        "民法第184條",
+        mode=DataMode.OFFICIAL_ONLY,
+        depth=ResearchDepth.QUICK,
+        as_of_date=date.today(),
+        include_counter_authority=False,
+        current_date=date.today(),
+    )
+
+    assert ResearchObligationKind.LEGAL_TIME_CONTEXT not in {
+        item.kind for item in obligations
+    }
 
 
 def _advance_to_ready(service: ResearchService, run_id: str) -> None:

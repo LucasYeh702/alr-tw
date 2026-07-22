@@ -144,6 +144,24 @@ def test_current_pdf_export_marker_can_supply_canonical_jid() -> None:
     assert evidence
 
 
+def test_legacy_pdf_export_marker_can_supply_canonical_jid() -> None:
+    document = _detail_page().replace(
+        f'<a id="hlPrint" href="/FJUD/printData.aspx?id={quote(JID, safe="")}">列印</a>',
+        (
+            '<a id="hlPrint" class="btn-print">列印</a>'
+            '<a id="hlExportPDF" href="hlExportPDF?type=JD&amp;'
+            f'id={quote(JID, safe="")}">PDF</a>'
+        ),
+    )
+    provider = OfficialJudgmentProvider(FixtureSiteTransport([_response(document)]))
+
+    result, source, evidence = asyncio.run(provider.exact_lookup(JID))
+
+    assert result.status is ProviderResultStatus.FOUND
+    assert source is not None and source.official_identifier == JID
+    assert evidence
+
+
 def test_empty_htmlcontent_falls_back_to_populated_text_pre() -> None:
     document = _detail_page().replace(
         '<div class="jud_content"><div class="htmlcontent">',
@@ -296,6 +314,27 @@ def test_keyword_search_posts_official_form_and_returns_unverified_candidates() 
     assert form["jud_sys"] == "V"
     assert form["dy1"] == "120" and form["dy2"] == "130"
     assert transport.open_count == transport.close_count == 1
+
+
+def test_keyword_search_accepts_result_list_returned_directly_from_post() -> None:
+    transport = FixtureSiteTransport([_response(_search_form()), _response(_result_list(JID))])
+    provider = OfficialJudgmentProvider(transport)
+
+    result = asyncio.run(provider.search("侵權行為 損害賠償"))
+
+    assert result.status is ProviderResultStatus.FOUND
+    assert [item.official_identifier for item in result.candidates] == [JID]
+    assert [method for method, _, _ in transport.calls] == ["GET", "POST"]
+
+
+def test_result_list_reference_accepts_anchor_when_iframe_is_absent() -> None:
+    href, total = OfficialJudgmentProvider.parse_result_list_reference(
+        '<a href="QryResultLst.aspx?ty=JUDBOOK&amp;q=fixture">結果'
+        '<span class="badge">1</span></a>'
+    )
+
+    assert href == "QryResultLst.aspx?ty=JUDBOOK&q=fixture"
+    assert total == 1
 
 
 def test_search_hit_parser_stops_at_requested_candidate_cap() -> None:

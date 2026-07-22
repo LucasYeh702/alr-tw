@@ -2,6 +2,21 @@
 
 本專案遵循語意化版本精神；`0.x` 仍屬公開預覽，介面可能調整。
 
+## 0.6.2 - 2026-07-22
+
+### Fixed
+
+- 支援舊式司法院裁判頁 `hlExportPDF?type=JD&id=...` canonical JID marker，仍要求頁面識別碼與請求 JID 完全一致；
+- 司法院搜尋可處理 POST 直接回傳結果清單，以及只有結果連結、沒有 iframe 的頁面變體；
+- `as_of_date` 等於查詢當日時視為現行法問題，不再誤標 `HISTORICAL_LAW_VERSION_UNSUPPORTED`；
+- TLR 候選在官方回查前加入有長度上限的本地文字相關性與民刑事衝突降權，降低明顯無關候選占用五筆驗證額度。
+
+### Safety
+
+- TLR 排序只影響候選驗證順序，不會讓外部摘要直接取得 evidence 資格；
+- 舊頁相容修正沒有移除 canonical JID mismatch 的 fail-closed 閘門；
+- 自然語言法規議題規劃、系統性反方裁判搜尋與研究充分性狀態重整仍保留至 v0.7.0。
+
 ## 0.6.1 - 2026-07-22
 
 ### Fixed

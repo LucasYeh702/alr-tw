@@ -540,7 +540,7 @@ def test_unavailable_historical_law_version_blocks_final_answer(tmp_path: Path) 
         "依示範責任法第7條應負何種責任？",
         mode=DataMode.OFFICIAL_ONLY,
         depth=ResearchDepth.QUICK,
-        as_of_date=date(2030, 1, 1),
+        as_of_date=date(2020, 1, 1),
     )
 
     _advance(service, run.run_id)

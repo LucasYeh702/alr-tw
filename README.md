@@ -2,7 +2,7 @@
 
 [繁體中文](README.zh-TW.md) | [English](README.en.md)
 
-ALR-TW v0.6.1 是台灣法律研究安全 harness 的 release-blocker repair 版本。它讓外部 agent／LLM 透過 MCP 建立研究 run，但把資料來源、研究步驟、證據升格、答案驗證與清除權限留在 server 端。設計採台灣大陸法系視角：法規時點優先，普通裁判依審級與案件角色處理，憲法法庭多數意見與個別意見分離。
+ALR-TW v0.6.2 是台灣法律研究安全 harness 的官方網頁相容性修正版。它讓外部 agent／LLM 透過 MCP 建立研究 run，但把資料來源、研究步驟、證據升格、答案驗證與清除權限留在 server 端。設計採台灣大陸法系視角：法規時點優先，普通裁判依審級與案件角色處理，憲法法庭多數意見與個別意見分離。
 
 本專案已整合並在 `hybrid_verified` 模式使用 [TLR（Taiwan Legal RAG）](https://github.com/aa0101181514/tw-legal-rag)進行普通裁判候選召回，再由 ALR-TW 回到司法院官方來源驗證。TLR 不會被直接當成正式引用來源。
 
@@ -10,7 +10,7 @@ ALR-TW v0.6.1 是台灣法律研究安全 harness 的 release-blocker repair 版
 
 本 repo 不包含 LLM，也不包含 agent 實作。規劃、工具選擇與自然語言推理由外部呼叫端提供；ALR-TW 只負責可稽核工具與確定性閘門。Repo 內的示範 ranking 參數僅供測試，不是 production ranking 設定。
 
-> v0.6.1 仍是 `0.x` 預覽版本。本版依 V0.6.1 release audit 以已揭露限制發布；任何答案仍須由具資格的人員依官方原文、時點與個案事實複核。
+> v0.6.2 仍是 `0.x` 預覽版本。任何答案仍須由具資格的人員依官方原文、時點與個案事實複核。
 
 ## Agentic RAG 能力
 
@@ -27,7 +27,7 @@ User query
   -> validated | qualified | blocked
 ```
 
-v0.6.1 提供的主要能力包括：
+v0.6.2 提供的主要能力包括：
 
 - query understanding：正規化問題、辨識法律引用及研究限制；
 - privacy screen：在查詢可能送往 TLR 前先檢查敏感資訊；
@@ -107,7 +107,7 @@ alr-tw doctor --live
 
 秘密不會顯示在 `doctor` 輸出，也不應寫入 `.env.example`、trace 或 SQLite。
 
-## v0.6.1 MCP tools
+## v0.6.2 MCP tools
 
 | Tool | 用途 |
 |---|---|
@@ -260,7 +260,7 @@ Repo 不含 production corpus、官方全文永久快取、真實使用者紀錄
 
 ## 如何接入真實資料
 
-v0.6.1 已提供官方 live providers 與 TLR clean-room adapter。建議部署順序如下：
+v0.6.2 已提供官方 live providers 與 TLR clean-room adapter。建議部署順序如下：
 
 ```text
 Choose data mode
@@ -289,9 +289,9 @@ Choose data mode
 
 憲法法庭資料應保留主文、理由與個別意見的角色差異。協同意見與不同意見可作研究材料，但不能在沒有標示的情況下作為多數意見或裁判拘束內容。
 
-## v0.6.1 發布說明
+## v0.6.2 發布說明
 
-v0.6.1 已補強 Codex native MCP `_meta`、常見普通法院段落解析、TLR `doc_id` 官方升格、答案層 privacy 與中文 grounding；但不宣稱支援所有法院格式、完整語義蘊含、系統性反方裁判搜尋或完整反方見解搜尋。
+v0.6.2 在既有安全邊界上補強舊式 `hlExportPDF?type=JD&id=...` 裁判頁、官方搜尋結果頁 fallback、今日現行法日期語意與 TLR 候選本地相關性重排；但不宣稱支援所有法院格式、自然語言法規議題規劃、完整語義蘊含或系統性反方裁判搜尋。
 
 ## 文件
 
@@ -306,7 +306,7 @@ v0.6.1 已補強 Codex native MCP `_meta`、常見普通法院段落解析、TLR
 - [Error Codes](docs/ERROR_CODES.md)
 - [Threat Model](docs/THREAT_MODEL.md)
 - [Release Notes](docs/RELEASE_NOTES.md)
-- [v0.6.1 Release Audit](docs/V061_RELEASE_AUDIT.md)
+- [v0.6.2 Release Audit](docs/V062_RELEASE_AUDIT.md)
 - [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 

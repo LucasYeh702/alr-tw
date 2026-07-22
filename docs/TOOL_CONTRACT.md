@@ -28,7 +28,7 @@ All MCP tool results are wrapped in:
 }
 ```
 
-## v0.6.1 answer validation
+## v0.6.2 answer validation
 
 `claim_bindings` 是 optional array；每筆包含 `claim_id`、`claim_text`、`claim_type`、`importance` 與至少一個同 run 的 `evidence_ids`。允許的 `claim_type` 是 `law_rule`、`court_view`、`disposition`、`fact`、`procedure`、`limitation`。
 

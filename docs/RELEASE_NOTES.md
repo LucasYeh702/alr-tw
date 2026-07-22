@@ -1,11 +1,15 @@
-# ALR-TW v0.6.1
+# ALR-TW v0.6.2
 
 本版提供可安裝、可在明確模式下查詢真實官方來源的台灣法律 agentic RAG／MCP research harness，並補強 MCP host 相容性、普通裁判解析、TLR 候選升格、答案隱私與法律主張 grounding。外部 agent／LLM 負責提出問題與草擬答案；ALR-TW 則在 server 端管理研究狀態、取得來源、升格證據、驗證引用並決定答案能否呈現。
 
 架構採台灣大陸法系角度：法規與法律時點優先，普通裁判依審級及段落角色處理，憲法法庭多數意見與個別意見分離。ALR-TW 不是法律意見服務，也不以外部檢索結果取代官方法源。
 
-## v0.6.1 修正重點
+## v0.6.2 修正重點
 
+- 舊式司法院 `hlExportPDF?type=JD&id=...` 頁面可解析 canonical JID，且仍執行 exact JID mismatch 阻擋
+- 官方搜尋支援 POST 直接回傳結果清單，以及只有結果連結、沒有 iframe 的頁面變體
+- `as_of_date` 等於查詢當日時按現行法處理，不再誤標成歷史法規版本問題
+- TLR 候選加入有輸入上限的本地相關性重排與民刑事衝突降權；結果仍為 candidate-only
 - MCP `tools/call` 在嚴格業務參數驗證前正規化保留的 `_meta`，其他未知欄位仍拒絕
 - 普通裁判 parser 支援目前的 `text-pre` 頁面、partial source 保留及 role-safe 段落分類
 - TLR candidate 改以 typed identity、JID 與 provenance 回查司法院官方來源，識別不一致時阻擋 evidence promotion
@@ -51,16 +55,16 @@
 
 ## 工程與安全文件
 
-- 架構與可信邊界：[ARCHITECTURE_CONTRACT.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.1/docs/ARCHITECTURE_CONTRACT.md)
-- MCP tools 與輸入輸出契約：[TOOL_CONTRACT.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.1/docs/TOOL_CONTRACT.md)
-- TLR provider 與 candidate-only 規則：[TLR_PROVIDER.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.1/docs/TLR_PROVIDER.md)
-- 官方來源取得方式：[OFFICIAL_PROVIDERS.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.1/docs/OFFICIAL_PROVIDERS.md)
-- 研究資料保存與清除：[STORAGE_AND_PURGE.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.1/docs/STORAGE_AND_PURGE.md)
-- Trust model 與 evidence promotion：[TRUST_MODEL.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.1/docs/TRUST_MODEL.md)
-- Data policy 與外部查詢邊界：[DATA_POLICY.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.1/DATA_POLICY.md)
-- Release 接受條件：[AGENTIC_HARNESS_ACCEPTANCE.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.1/docs/AGENTIC_HARNESS_ACCEPTANCE.md)
-- 發布審核規程：[RELEASE_AUDIT_PROCEDURE.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.1/docs/RELEASE_AUDIT_PROCEDURE.md)
-- 完整版本變更：[CHANGELOG.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.1/CHANGELOG.md)
+- 架構與可信邊界：[ARCHITECTURE_CONTRACT.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.2/docs/ARCHITECTURE_CONTRACT.md)
+- MCP tools 與輸入輸出契約：[TOOL_CONTRACT.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.2/docs/TOOL_CONTRACT.md)
+- TLR provider 與 candidate-only 規則：[TLR_PROVIDER.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.2/docs/TLR_PROVIDER.md)
+- 官方來源取得方式：[OFFICIAL_PROVIDERS.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.2/docs/OFFICIAL_PROVIDERS.md)
+- 研究資料保存與清除：[STORAGE_AND_PURGE.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.2/docs/STORAGE_AND_PURGE.md)
+- Trust model 與 evidence promotion：[TRUST_MODEL.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.2/docs/TRUST_MODEL.md)
+- Data policy 與外部查詢邊界：[DATA_POLICY.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.2/DATA_POLICY.md)
+- Release 接受條件：[AGENTIC_HARNESS_ACCEPTANCE.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.2/docs/AGENTIC_HARNESS_ACCEPTANCE.md)
+- 發布審核規程：[RELEASE_AUDIT_PROCEDURE.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.2/docs/RELEASE_AUDIT_PROCEDURE.md)
+- 完整版本變更：[CHANGELOG.md](https://github.com/LucasYeh702/alr-tw/blob/v0.6.2/CHANGELOG.md)
 
 ## 已知邊界
 
@@ -82,5 +86,5 @@
 
 ## 版本建議
 
-- release tag：`v0.6.1`
-- release title：`v0.6.1`
+- release tag：`v0.6.2`
+- release title：`v0.6.2`

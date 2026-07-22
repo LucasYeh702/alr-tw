@@ -322,20 +322,28 @@ class OfficialJudgmentProvider:
         if result_page is None:
             return self._error(self._error_code_for_transport(error), error)
 
-        list_href, total_count = self.parse_result_list_reference(result_page)
-        if list_href is None:
-            if self._looks_not_found(result_page):
-                return self._search_not_found()
-            return self._error(ProviderErrorCode.OFFICIAL_PARSE_ERROR, "RESULT_LIST_REFERENCE_MISSING")
-        list_page, error = await self._fetch_text(
-            urljoin(f"{JUDGMENT_SEARCH_ORIGIN}/FJUD/", list_href)
-        )
-        if list_page is None:
-            return self._error(self._error_code_for_transport(error), error)
         try:
-            hits = self.parse_search_hits(list_page, limit=safe_limit)
+            hits = self.parse_search_hits(result_page, limit=safe_limit)
         except ValueError as exc:
             return self._error(ProviderErrorCode.OFFICIAL_PARSE_ERROR, str(exc))
+        list_href, total_count = self.parse_result_list_reference(result_page)
+        if not hits:
+            if list_href is None:
+                if self._looks_not_found(result_page):
+                    return self._search_not_found()
+                return self._error(
+                    ProviderErrorCode.OFFICIAL_PARSE_ERROR,
+                    "RESULT_LIST_REFERENCE_MISSING",
+                )
+            list_page, error = await self._fetch_text(
+                urljoin(f"{JUDGMENT_SEARCH_ORIGIN}/FJUD/", list_href)
+            )
+            if list_page is None:
+                return self._error(self._error_code_for_transport(error), error)
+            try:
+                hits = self.parse_search_hits(list_page, limit=safe_limit)
+            except ValueError as exc:
+                return self._error(ProviderErrorCode.OFFICIAL_PARSE_ERROR, str(exc))
         if not hits:
             return self._search_not_found()
         candidates = [
@@ -600,16 +608,29 @@ class OfficialJudgmentProvider:
     @staticmethod
     def parse_result_list_reference(document: str) -> tuple[str | None, int | None]:
         soup = OfficialJudgmentProvider._soup(document)
-        iframe = soup.select_one('iframe[src*="qryresultlst.aspx"][src*="ty=JUDBOOK"]')
-        if iframe is None:
+        reference = None
+        href = ""
+        for node in [*soup.select("iframe[src]"), *soup.select("a[href]")]:
+            attribute = "src" if node.name == "iframe" else "href"
+            candidate = html.unescape(str(node.get(attribute) or "")).strip()
+            parsed = urlsplit(candidate)
+            if (
+                parsed.hostname in {None, "judgment.judicial.gov.tw"}
+                and parsed.path.rsplit("/", 1)[-1].lower() == "qryresultlst.aspx"
+            ):
+                reference = node
+                href = candidate
+                break
+        if reference is None:
             return None, 0 if OfficialJudgmentProvider._looks_not_found(document) else None
-        href = str(iframe.get("src") or "").strip()
         if not href:
             return None, None
-        badge = soup.select_one('a[href*="qryresultlst.aspx"] .badge')
+        badge = reference.select_one(".badge") if reference.name == "a" else None
+        if badge is None:
+            badge = soup.select_one("a[href] .badge")
         count_text = badge.get_text(strip=True).replace(",", "") if badge else ""
         total = int(count_text) if count_text.isdigit() else None
-        return html.unescape(href), total
+        return href, total
 
     @staticmethod
     def parse_search_hits(
@@ -620,9 +641,13 @@ class OfficialJudgmentProvider:
         soup = OfficialJudgmentProvider._soup(document)
         hits: list[JudgmentSearchHit] = []
         seen: set[str] = set()
-        for anchor in soup.select('a[href*="data.aspx"][href*="id="]'):
+        result_anchors = []
+        for anchor in soup.select("a[href]"):
             href = html.unescape(str(anchor.get("href") or ""))
             absolute = urljoin(f"{JUDGMENT_SEARCH_ORIGIN}/FJUD/", href)
+            if not urlsplit(absolute).path.lower().endswith("/data.aspx"):
+                continue
+            result_anchors.append(anchor)
             jid = OfficialJudgmentProvider.jid_from_identifier(absolute)
             if jid is None or jid in seen:
                 continue
@@ -649,7 +674,7 @@ class OfficialJudgmentProvider:
             seen.add(jid)
             if limit is not None and len(hits) >= limit:
                 break
-        if soup.select('a[href*="data.aspx"]') and not hits:
+        if result_anchors and not hits:
             raise ValueError("SEARCH_RESULT_SCHEMA_CHANGED")
         return hits
 
@@ -728,6 +753,14 @@ class OfficialJudgmentProvider:
         if legacy is not None:
             canonical = OfficialJudgmentProvider.jid_from_identifier(
                 str(legacy.get("href"))
+            )
+            if canonical is not None:
+                return canonical
+
+        legacy_pdf = soup.select_one('#hlExportPDF[href*="id="]')
+        if legacy_pdf is not None:
+            canonical = OfficialJudgmentProvider.jid_from_identifier(
+                str(legacy_pdf.get("href"))
             )
             if canonical is not None:
                 return canonical
@@ -880,17 +913,29 @@ class OfficialJudgmentProvider:
         direct = OfficialJudgmentProvider.normalize_jid(value)
         if direct is not None:
             return direct
-        candidate = value.strip()
-        if candidate.startswith("/") or candidate.lower().startswith(("data.aspx", "printdata.aspx")):
+        candidate = html.unescape(value.strip())
+        if candidate.startswith("/") or not urlsplit(candidate).scheme:
             candidate = urljoin(f"{JUDGMENT_SEARCH_ORIGIN}/FJUD/", candidate)
         parsed = urlsplit(candidate)
+        path = parsed.path.lower()
+        allowed_paths = {
+            "/fjud/data.aspx",
+            "/fjud/printdata.aspx",
+            "/fjud/hlexportpdf",
+            "/fjud/hlexportpdf.aspx",
+        }
         if (
             parsed.scheme != "https"
             or parsed.hostname != "judgment.judicial.gov.tw"
-            or parsed.path.lower() not in {"/fjud/data.aspx", "/fjud/printdata.aspx"}
+            or path not in allowed_paths
         ):
             return None
-        for encoded in parse_qs(parsed.query).get("id", []):
+        query = {key.lower(): values for key, values in parse_qs(parsed.query).items()}
+        if path in {"/fjud/hlexportpdf", "/fjud/hlexportpdf.aspx"} and not any(
+            value.upper() == "JD" for value in query.get("type", [])
+        ):
+            return None
+        for encoded in query.get("id", []):
             normalized = OfficialJudgmentProvider.normalize_jid(unquote(encoded))
             if normalized is not None:
                 return normalized

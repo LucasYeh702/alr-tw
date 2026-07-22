@@ -2,7 +2,7 @@
 
 繁體中文 | [English](README.en.md)
 
-ALR-TW v0.6.1 是台灣法律研究安全 harness 的 release-blocker repair 版本。外部 agent／LLM 可透過 MCP 建立研究 run；來源取得、研究義務、證據升格、答案驗證與清除則由 server 掌控。架構採台灣大陸法系角度：現行法規與法律時點優先，普通裁判依審級及段落角色處理，憲法法庭多數理由、協同意見與不同意見分離。
+ALR-TW v0.6.2 是台灣法律研究安全 harness 的官方網頁相容性修正版。外部 agent／LLM 可透過 MCP 建立研究 run；來源取得、研究義務、證據升格、答案驗證與清除則由 server 掌控。架構採台灣大陸法系角度：現行法規與法律時點優先，普通裁判依審級及段落角色處理，憲法法庭多數理由、協同意見與不同意見分離。
 
 本專案已整合並在 `hybrid_verified` 模式使用 [TLR（Taiwan Legal RAG）](https://github.com/aa0101181514/tw-legal-rag)尋找普通裁判候選，再由 ALR-TW 回查司法院官方全文；TLR 結果本身不是正式引用證據。
 
@@ -10,7 +10,7 @@ ALR-TW v0.6.1 是台灣法律研究安全 harness 的 release-blocker repair 版
 
 本 repo 不包含 LLM，也不包含 agent 實作。規劃、工具選擇與自然語言推理由外部呼叫端提供；ALR-TW 只負責可稽核工具與確定性閘門。Repo 內的示範 ranking 參數僅供測試，不是 production ranking 設定。
 
-> v0.6.1 仍是 `0.x` 預覽版本，並依 release audit 以已揭露限制發布。答案必須由具資格的人員依官方原文、時點與個案事實複核。
+> v0.6.2 仍是 `0.x` 預覽版本。答案必須由具資格的人員依官方原文、時點與個案事實複核。
 
 ## Agentic RAG 能力
 
@@ -27,11 +27,11 @@ User query
   -> validated | qualified | blocked
 ```
 
-v0.6.1 提供 query understanding、outbound/output privacy 分離、法規／裁判／憲法來源規劃、TLR 候選官方升格、partial source 保留、裁判角色分類、explicit claim bindings、deterministic grounding v2、短期 resumable run 與 deterministic finalization。公開版尚未實作系統性反方裁判搜尋。
+v0.6.2 提供 query understanding、outbound/output privacy 分離、法規／裁判／憲法來源規劃、TLR 候選官方升格、partial source 保留、裁判角色分類、explicit claim bindings、deterministic grounding v2、短期 resumable run 與 deterministic finalization。另補強舊式司法院裁判頁、搜尋結果 fallback、今日現行法日期語意與 TLR 本地重排。公開版尚未實作系統性反方裁判搜尋。
 
 外部 agent 可以規劃研究與起草答案，但不能自行宣告來源為官方資料、把候選升格成證據，或繞過最終驗證。
 
-## v0.6.1 的安全模型
+## v0.6.2 的安全模型
 
 ```text
 外部 agent 提問／起草
@@ -78,7 +78,7 @@ alr-tw doctor --live
 
 普通裁判不需要司法院 API token。啟用 live mode 後，搜尋詞與篩選條件會直接送到司法院裁判書查詢網站；不得以未公開案情、個人秘密或受保密義務保護的資料作為搜尋詞。也不要把 TLR API key 或真實查詢寫入 repo。
 
-## v0.6.1 MCP tools
+## v0.6.2 MCP tools
 
 | Tool | 用途 |
 |---|---|
@@ -122,7 +122,7 @@ alr-tw doctor --live
 
 精確查到來源不等於答案已驗證。Final answer 仍必須通過 `validate_legal_answer`。
 
-v0.6.1 的核心法律主張必須以 `claim_bindings` 綁定同一 run 的 evidence ID。只傳 `answer_text` 的舊 caller 會標示 `binding_mode=legacy_unbound`，未綁定核心主張不得進入 `validated`。驗證方法為 `deterministic_grounding_v2`，包含中文 2–4 gram、否定、例外、法條／數字 anchor 與角色規則；這不是 semantic entailment（語義蘊含）。
+v0.6.2 的核心法律主張必須以 `claim_bindings` 綁定同一 run 的 evidence ID。只傳 `answer_text` 的舊 caller 會標示 `binding_mode=legacy_unbound`，未綁定核心主張不得進入 `validated`。驗證方法為 `deterministic_grounding_v2`，包含中文 2–4 gram、否定、例外、法條／數字 anchor 與角色規則；這不是 semantic entailment（語義蘊含）。
 
 ## Claim Grounding 與 Trust Gate
 
@@ -218,7 +218,7 @@ Choose data mode
 - [Error Codes](docs/ERROR_CODES.md)
 - [Threat Model](docs/THREAT_MODEL.md)
 - [Release Notes](docs/RELEASE_NOTES.md)
-- [v0.6.1 Release Audit](docs/V061_RELEASE_AUDIT.md)
+- [v0.6.2 Release Audit](docs/V062_RELEASE_AUDIT.md)
 - [Changelog](CHANGELOG.md)
 
 ## 法律聲明

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from dataclasses import dataclass, field
 from urllib.parse import parse_qs, unquote, urlsplit
 
@@ -82,8 +84,10 @@ def resolve_judgment_candidate(
 
 def rank_and_dedupe_judgment_identities(
     identities: list[ResolvedJudgmentIdentity],
+    *,
+    query: str = "",
 ) -> list[ResolvedJudgmentIdentity]:
-    ordered = sorted(identities, key=_sort_key)
+    ordered = sorted(identities, key=lambda item: _sort_key(item, query=query))
     deduplicated: dict[str, ResolvedJudgmentIdentity] = {}
     merged_ids: dict[str, list[str]] = {}
     for item in ordered:
@@ -151,9 +155,14 @@ def _jid_from_url(value: str | None) -> str | None:
     return None
 
 
-def _sort_key(item: ResolvedJudgmentIdentity) -> tuple[int, int, float, str]:
+def _sort_key(
+    item: ResolvedJudgmentIdentity,
+    *,
+    query: str,
+) -> tuple[int, float, int, float, str]:
     if item.candidate is None:
         provider_priority = 0
+        relevance = 0.0
         rank = 0
         score = 0.0
         candidate_id = ""
@@ -166,7 +175,59 @@ def _sort_key(item: ResolvedJudgmentIdentity) -> tuple[int, int, float, str]:
             if item.canonical_jid
             else 3
         )
+        relevance = _query_relevance(item.candidate, query)
         rank = item.candidate.candidate_rank or 2**31 - 1
         score = -(item.candidate.score or 0.0)
         candidate_id = item.candidate.candidate_id
-    return provider_priority, rank, score, candidate_id
+    return provider_priority, -relevance, rank, score, candidate_id
+
+
+def _query_relevance(candidate: ProviderCandidate, query: str) -> float:
+    """Cheap local reranker; candidates remain untrusted until official verification."""
+
+    normalized_query = _compact_text(query[:512])
+    if len(normalized_query) < 2:
+        return 0.0
+    fields = [candidate.title or "", candidate.excerpt or ""]
+    fields.extend(
+        str(candidate.metadata.get(key) or "")
+        for key in (
+            "citation_text",
+            "case_cause",
+            "court",
+            "court_name",
+            "case_type",
+            "case_category",
+        )
+    )
+    candidate_text = _compact_text(" ".join(fields)[:8192])
+    if not candidate_text:
+        return 0.0
+
+    query_ngrams = _ngrams(normalized_query)
+    candidate_ngrams = _ngrams(candidate_text)
+    overlap = query_ngrams & candidate_ngrams
+    score = float(sum(len(token) ** 2 for token in overlap))
+
+    civil_cues = ("勞動", "勞工", "雇主", "解僱", "資遣", "契約", "民法", "損害賠償")
+    criminal_cues = ("犯罪", "刑法", "刑事", "有罪", "無罪", "詐欺", "竊盜", "量刑")
+    query_is_civil = any(token in normalized_query for token in civil_cues)
+    query_is_criminal = any(token in normalized_query for token in criminal_cues)
+    if query_is_civil and not query_is_criminal and "刑事" in candidate_text:
+        score -= 10_000.0
+    elif query_is_criminal and not query_is_civil and "民事" in candidate_text:
+        score -= 10_000.0
+    return score
+
+
+def _compact_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).lower()
+    return re.sub(r"[^0-9a-z\u3400-\u9fff]+", "", normalized)
+
+
+def _ngrams(value: str) -> set[str]:
+    return {
+        value[index : index + size]
+        for size in (2, 3, 4)
+        for index in range(max(0, len(value) - size + 1))
+    }

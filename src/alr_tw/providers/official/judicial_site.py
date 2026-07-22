@@ -47,7 +47,7 @@ class JudicialSiteTransport(Protocol):
 class HttpxJudicialSiteTransport:
     """Cookie-preserving, fixed-host transport with redirect and byte limits."""
 
-    def __init__(self, *, user_agent: str = "Mozilla/5.0 ALR-TW/0.6.1") -> None:
+    def __init__(self, *, user_agent: str = "Mozilla/5.0 ALR-TW/0.6.2") -> None:
         self.user_agent = user_agent
         self._client: Any | None = None
         self._open_count = 0

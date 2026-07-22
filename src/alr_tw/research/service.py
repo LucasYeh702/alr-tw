@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 import re
 from threading import RLock
 from typing import Any, Protocol
@@ -35,6 +35,8 @@ from alr_tw.verification.claim_support import (
 from alr_tw.verification.output_privacy import screen_answer_output
 
 from .state_machine import transition_run
+
+TAIWAN_TIME = timezone(timedelta(hours=8))
 
 
 _BINDING_CLAIM_TYPES = {
@@ -137,6 +139,7 @@ def _plan_obligations(
     depth: ResearchDepth,
     as_of_date: date | None,
     include_counter_authority: bool,
+    current_date: date | None = None,
 ) -> list[ResearchObligation]:
     kinds = [ResearchObligationKind.QUERY_UNDERSTANDING]
     if mode == DataMode.HYBRID_VERIFIED:
@@ -153,7 +156,10 @@ def _plan_obligations(
             kinds.append(ResearchObligationKind.COUNTER_AUTHORITY)
     if any(token in query for token in ("憲法", "釋字", "憲判字", "基本權")):
         kinds.append(ResearchObligationKind.CONSTITUTIONAL_RESEARCH)
-    if as_of_date is not None or any(token in query for token in ("修法前", "修法後", "當時")):
+    reference_date = current_date or datetime.now(TAIWAN_TIME).date()
+    if (as_of_date is not None and as_of_date != reference_date) or any(
+        token in query for token in ("修法前", "修法後", "當時")
+    ):
         kinds.append(ResearchObligationKind.LEGAL_TIME_CONTEXT)
     kinds.extend(
         [
@@ -210,6 +216,7 @@ class ResearchService:
                 depth=depth,
                 as_of_date=as_of_date,
                 include_counter_authority=include_counter_authority,
+                current_date=timestamp.astimezone(TAIWAN_TIME).date(),
             ),
             coverage=CoverageState(),
         )

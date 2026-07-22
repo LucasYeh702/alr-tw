@@ -2,7 +2,7 @@
 
 [繁體中文](README.zh-TW.md) | English
 
-ALR-TW v0.6.1 is a release-blocker repair version of the Taiwan-law research safety harness. An external agent or LLM may create and advance a research run over MCP, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
+ALR-TW v0.6.2 is an official-web compatibility update for the Taiwan-law research safety harness. An external agent or LLM may create and advance a research run over MCP, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
 
 In `hybrid_verified` mode, this project uses [TLR (Taiwan Legal RAG)](https://github.com/aa0101181514/tw-legal-rag) to recall ordinary-judgment candidates, then asks ALR-TW to verify them against Judicial Yuan official full text. TLR results are not final citation evidence by themselves.
 
@@ -10,7 +10,7 @@ This project is neither legal advice nor a complete Taiwan legal database.
 
 This repository does not ship an LLM or agent implementation. Planning, tool selection, and natural-language reasoning come from the external caller; ALR-TW supplies auditable tools and deterministic gates. The demo ranking parameters are illustrative test settings, not production ranking configuration.
 
-> v0.6.1 remains a `0.x` public preview and is released with the disclosed limitation recorded in the V0.6.1 release audit. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
+> v0.6.2 remains a `0.x` public preview. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
 
 ## Agentic RAG capabilities
 
@@ -27,7 +27,7 @@ User query
   -> validated | qualified | blocked
 ```
 
-The v0.6.1 surface adds Codex `_meta` compatibility, partial judgment-source preservation, typed TLR-to-official promotion, separate outbound/output privacy, explicit claim-to-evidence bindings, and deterministic grounding v2. The public version does not implement systematic counter-authority search and does not claim semantic entailment.
+The v0.6.2 surface adds legacy Judicial Yuan page compatibility, direct-result and link-only search fallbacks, current-day legal-time semantics, and bounded local TLR relevance reranking while preserving the existing safety model. The public version does not implement natural-language statutory issue planning or systematic counter-authority search and does not claim semantic entailment.
 
 An external agent may plan research and draft an answer, but it cannot declare a source official, promote a candidate into evidence, or bypass final validation.
 
@@ -83,7 +83,7 @@ Ordinary-judgment lookup does not require a Judicial Yuan API token. In a live m
 
 Secrets are redacted from `doctor` output and must not be committed, traced, or persisted in SQLite.
 
-## v0.6.1 MCP tools
+## v0.6.2 MCP tools
 
 | Tool | Purpose |
 |---|---|
