@@ -45,6 +45,7 @@ from .tools import (
     run_agentic_demo_tool,
     validate_citation_tool,
 )
+from .request_normalization import normalize_call_tool_params
 from ..legal_nlp.privacy import mask_sensitive_text
 from ..legal_nlp.query_normalizer import normalize_query
 
@@ -197,8 +198,8 @@ class McpSession:
                 )
         except ValueError as exc:
             return error_response(request_id, -32602, str(exc))
-        except Exception as exc:
-            return error_response(request_id, -32000, str(exc))
+        except Exception:
+            return error_response(request_id, -32000, "INTERNAL_ERROR")
 
         return error_response(request_id, -32601, f"Unknown method: {method}")
 
@@ -601,11 +602,9 @@ def _v060_tool_definitions() -> list[dict[str, Any]]:
 
 
 def call_tool(params: dict[str, Any], *, session: McpSession | None = None) -> dict[str, Any]:
-    _reject_unexpected_keys(params, {"name", "arguments"})
-    name = _required_string(params, "name")
-    arguments = params.get("arguments") or {}
-    if not isinstance(arguments, dict):
-        raise ValueError("tool arguments must be an object")
+    normalized_call = normalize_call_tool_params(params)
+    name = normalized_call.name
+    arguments = normalized_call.arguments
 
     if name in V060_TOOLS:
         if session is None:
@@ -1040,7 +1039,9 @@ def _required_array_of_dict(arguments: dict[str, Any], name: str) -> list[dict[s
 def _reject_unexpected_keys(arguments: dict[str, Any], allowed: set[str]) -> None:
     unexpected = sorted(set(arguments) - allowed)
     if unexpected:
-        raise ValueError(f"unexpected arguments: {', '.join(unexpected)}")
+        raise ValueError(
+            f"INVALID_TOOL_ARGUMENTS: unexpected arguments: {', '.join(unexpected)}"
+        )
 
 
 def _object_params(params: Any, label: str) -> dict[str, Any]:
