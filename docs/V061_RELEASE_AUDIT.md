@@ -1,7 +1,9 @@
 # ALR-TW v0.6.1 Release Audit
 
-Audit date: 2026-07-22 (Asia/Taipei)  
-Source commit under test: `4eb60381f2b7ab445d0f0759e7d8dcb999eba7e1`  
+Audit date: 2026-07-22 (Asia/Taipei)
+
+Source commit under test: `bf4320cd9f2fe56eacc05da419b92e0192056750`
+
 Release decision: **BLOCKED — do not tag or publish yet**
 
 This audit records commands actually executed. A passing synthetic or contract test is not presented as a passing real ordinary-court corpus or live-provider canary.
@@ -33,8 +35,8 @@ Artifacts:
 
 | Artifact | SHA-256 |
 |---|---|
-| `alr_tw-0.6.1-py3-none-any.whl` | `43e1d582d09e45d99c0ac000c51ae06774417771f116b83148ebc10094a77f24` |
-| `alr_tw-0.6.1.tar.gz` | `e22786cd6e3c11774c607051170326208effbb30791c025e941aedb836983106` |
+| `alr_tw-0.6.1-py3-none-any.whl` | `a4f67d331b87e515e2aa94b1cac33e5a44736573ba399534767099a860072672` |
+| `alr_tw-0.6.1.tar.gz` | `82919735488b08371c960ee1664971203bcfe7dd58d5d2e98a4d371038ba082a` |
 
 ## Fresh-wheel MCP and host canaries
 
