@@ -75,6 +75,44 @@ def _advance_to_ready(service: ResearchService, run_id: str) -> None:
     raise AssertionError("run did not reach ready_for_draft")
 
 
+def _save_eligible_law_evidence(
+    store: SqliteStore,
+    run_id: str,
+    text: str,
+    now: datetime,
+) -> EvidenceSpan:
+    digest = EvidenceSpan.hash_text(text)
+    source = SourceRecord(
+        source_id="legacy-compatible-source",
+        source_key="law:legacy-compatible",
+        source_version_id="law:legacy-compatible:v1",
+        material_type=MaterialType.LAW,
+        provider_id="official-law",
+        source_tier=SourceTier.OFFICIAL,
+        trust_status=TrustStatus.EVIDENCE_ELIGIBLE,
+        official_identifier="DEMO:legacy-compatible",
+        official_url="https://example.test/law/legacy-compatible",
+        citation="示範法第1條",
+        fetched_at=now,
+        verified_at=now,
+        expires_at=now + timedelta(hours=24),
+        content_hash=digest,
+        normalized_content_hash=digest,
+        normalized_text=text,
+    )
+    evidence = EvidenceSpan.from_exact_text(
+        evidence_id="legacy-compatible-evidence",
+        source_id=source.source_id,
+        section_id="article-1",
+        section_type="law_text",
+        exact_text=text,
+        eligible_for_claim_support=True,
+    )
+    store.save_source(run_id, source)
+    store.save_evidence(run_id, evidence)
+    return evidence
+
+
 def test_validate_answer_blocks_and_removes_untrusted_answer_without_evidence(tmp_path: Path):
     service = ResearchService(SqliteStore(tmp_path / "cache"))
     run = service.create_run("民法第184條", mode=DataMode.SYNTHETIC, depth=ResearchDepth.QUICK)
@@ -85,6 +123,61 @@ def test_validate_answer_blocks_and_removes_untrusted_answer_without_evidence(tm
     assert result["decision"] == "blocked"
     assert result["safe_to_present"] is False
     assert result["answer_text"] is None
+    assert result["binding_mode"] == "legacy_unbound"
+    assert "CLAIM_CITATION_BINDING_REQUIRED" in result["blockers"]
+
+
+def test_legacy_unbound_supporting_claim_is_qualified_not_validated(tmp_path: Path):
+    now = datetime.now(UTC)
+    store = SqliteStore(tmp_path / "cache")
+    service = ResearchService(store)
+    run = service.create_run(
+        "示範法第1條",
+        mode=DataMode.OFFICIAL_ONLY,
+        depth=ResearchDepth.QUICK,
+        now=now,
+    )
+    _advance_to_ready(service, run.run_id)
+    text = "此外，行為人應負損害賠償責任"
+    _save_eligible_law_evidence(store, run.run_id, text, now)
+
+    result = service.validate_answer(
+        run.run_id,
+        text,
+        "validate-legacy-compatible",
+        now=now,
+    )
+
+    assert result["decision"] == "qualified"
+    assert result["safe_to_present"] is True
+    assert result["binding_mode"] == "legacy_unbound"
+    assert "claim_bindings" in result["required_qualification"]
+
+
+def test_legacy_unbound_core_claim_stays_blocked_with_eligible_evidence(tmp_path: Path):
+    now = datetime.now(UTC)
+    store = SqliteStore(tmp_path / "cache")
+    service = ResearchService(store)
+    run = service.create_run(
+        "示範法第1條",
+        mode=DataMode.OFFICIAL_ONLY,
+        depth=ResearchDepth.QUICK,
+        now=now,
+    )
+    _advance_to_ready(service, run.run_id)
+    text = "行為人應負損害賠償責任"
+    _save_eligible_law_evidence(store, run.run_id, text, now)
+
+    result = service.validate_answer(
+        run.run_id,
+        text,
+        "validate-legacy-core",
+        now=now,
+    )
+
+    assert result["decision"] == "blocked"
+    assert result["safe_to_present"] is False
+    assert "CLAIM_CITATION_BINDING_REQUIRED" in result["blockers"]
 
 
 def test_validate_answer_uses_only_server_owned_eligible_evidence(tmp_path: Path):
@@ -123,12 +216,44 @@ def test_validate_answer_uses_only_server_owned_eligible_evidence(tmp_path: Path
     )
     store.save_source(run.run_id, source)
     store.save_evidence(run.run_id, evidence)
+    store.save_source(
+        run.run_id,
+        source.model_copy(
+            update={
+                "source_id": "unused-stale-source",
+                "source_key": "law:unused-stale",
+                "source_version_id": "law:unused-stale:v1",
+                "fetched_at": now - timedelta(minutes=2),
+                "verified_at": now - timedelta(minutes=2),
+                "expires_at": now - timedelta(minutes=1),
+            }
+        ),
+    )
 
-    result = service.validate_answer(run.run_id, text, "validate_1")
+    result = service.validate_answer(
+        run.run_id,
+        text,
+        "validate_1",
+        claim_bindings=[
+            {
+                "claim_id": "claim-law-184",
+                "claim_text": text,
+                "claim_type": "law_rule",
+                "importance": "core",
+                "evidence_ids": [evidence.evidence_id],
+            }
+        ],
+    )
 
     assert result["decision"] == "validated"
     assert result["safe_to_present"] is True
     assert result["answer_text"] == text
+    assert result["schema_version"] == "alr-tw.answer-validation/v3"
+    assert result["binding_mode"] == "structured"
+    assert result["verification_method"] == "deterministic_grounding_v2"
+    assert result["semantic_entailment_performed"] is False
+    assert result["privacy"]["status"] == "safe"
+    assert result["citations"][0]["evidence_ids"] == [evidence.evidence_id]
 
 
 def test_expired_server_evidence_cannot_validate_answer(tmp_path: Path):
@@ -168,13 +293,25 @@ def test_expired_server_evidence_cannot_validate_answer(tmp_path: Path):
     store.save_source(run.run_id, source)
     store.save_evidence(run.run_id, evidence)
 
-    result = service.validate_answer(run.run_id, text, "validate-expired", now=now)
+    result = service.validate_answer(
+        run.run_id,
+        text,
+        "validate-expired",
+        now=now,
+        claim_bindings=[
+            {
+                "claim_id": "claim-expired",
+                "claim_text": text,
+                "claim_type": "law_rule",
+                "evidence_ids": [evidence.evidence_id],
+            }
+        ],
+    )
 
     assert result["decision"] == "blocked"
     assert result["decision_code"] == "ANSWER_BLOCKED"
     assert result["answer_text"] is None
     assert "SOURCE_STALE" in result["blockers"]
-    assert "SOURCE_NOT_EVIDENCE_ELIGIBLE" in result["blockers"]
 
 
 def test_ephemeral_run_is_purged_after_validation_response(tmp_path: Path):
@@ -235,8 +372,22 @@ def test_final_validation_blocks_answer_containing_unmasked_pii(tmp_path: Path):
     store.save_source(run.run_id, source)
     store.save_evidence(run.run_id, evidence)
 
-    result = service.validate_answer(run.run_id, text, "validate-pii")
+    result = service.validate_answer(
+        run.run_id,
+        text,
+        "validate-pii",
+        claim_bindings=[
+            {
+                "claim_id": "claim-pii",
+                "claim_text": text,
+                "claim_type": "law_rule",
+                "evidence_ids": [evidence.evidence_id],
+            }
+        ],
+    )
 
     assert result["decision"] == "blocked"
     assert result["answer_text"] is None
     assert "ANSWER_CONTAINS_SENSITIVE_DATA" in result["blockers"]
+    assert result["privacy"]["status"] == "redaction_required"
+    assert "EMAIL" in result["privacy"]["redactions"]

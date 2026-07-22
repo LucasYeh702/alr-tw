@@ -2,7 +2,7 @@
 
 [繁體中文](README.zh-TW.md) | English
 
-ALR-TW v0.6.0 is a public-preview safety harness for Taiwan-law research. An external agent or LLM may create and advance a research run over MCP, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
+ALR-TW v0.6.1 is a release-blocker repair version of the Taiwan-law research safety harness. An external agent or LLM may create and advance a research run over MCP, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
 
 In `hybrid_verified` mode, this project uses [TLR (Taiwan Legal RAG)](https://github.com/aa0101181514/tw-legal-rag) to recall ordinary-judgment candidates, then asks ALR-TW to verify them against Judicial Yuan official full text. TLR results are not final citation evidence by themselves.
 
@@ -10,7 +10,7 @@ This project is neither legal advice nor a complete Taiwan legal database.
 
 This repository does not ship an LLM or agent implementation. Planning, tool selection, and natural-language reasoning come from the external caller; ALR-TW supplies auditable tools and deterministic gates. The demo ranking parameters are illustrative test settings, not production ranking configuration.
 
-> v0.6.0 remains a `0.x` public preview. Interfaces may change, and a qualified professional must verify every answer against official text, the applicable legal time, and the facts of the matter.
+> v0.6.1 remains a `0.x` preview. It must not be described as public-preview ready until the required V0.6.1 release-audit gates pass. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
 
 ## Agentic RAG capabilities
 
@@ -27,7 +27,7 @@ User query
   -> validated | qualified | blocked
 ```
 
-The v0.6.0 surface includes query understanding, privacy screening, material-specific source planning, candidate recall, exact legal-source lookup, official-content verification, legal-time checks, judgment-role classification, counter-authority coverage, claim grounding, resumable short-lived runs, and deterministic finalization.
+The v0.6.1 surface adds Codex `_meta` compatibility, partial judgment-source preservation, typed TLR-to-official promotion, separate outbound/output privacy, explicit claim-to-evidence bindings, and deterministic grounding v2. The public version does not implement systematic counter-authority search and does not claim semantic entailment.
 
 An external agent may plan research and draft an answer, but it cannot declare a source official, promote a candidate into evidence, or bypass final validation.
 

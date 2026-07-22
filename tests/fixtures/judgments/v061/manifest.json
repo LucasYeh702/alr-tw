@@ -1,0 +1,81 @@
+{
+  "schema_version": "alr-tw.judgment-fixture-manifest/v1",
+  "corpus_id": "V061-SYNTHETIC-JUDGMENT-LAYOUT-REGRESSION",
+  "snapshot_date": "2026-07-22",
+  "fixture_kind": "synthetic_layout_regression",
+  "satisfies_ordinary_court_release_gate": false,
+  "cases": [
+    {
+      "fixture_file": "case-01.html",
+      "canonical_jid": "DEMO,130,測勞,1,20990101,1",
+      "official_url": "https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&id=DEMO%2C130%2C%E6%B8%AC%E5%8B%9E%2C1%2C20990101%2C1",
+      "sha256": "d57e321ed7afd8dd050575bd55dcbcf3c4fcdf02babec2e054ab11111137eaed",
+      "heading_family": "主文／理由",
+      "expected_parse_status": "complete",
+      "expected_min_eligible_reasoning_spans": 1
+    },
+    {
+      "fixture_file": "case-02.html",
+      "canonical_jid": "DEMO,130,測,2,20990102,1",
+      "official_url": "https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&id=DEMO%2C130%2C%E6%B8%AC%2C2%2C20990102%2C1",
+      "sha256": "5ef5d9075585585cafada76f1441cf88c15c41db09d1386aa1ba6b6725b9fcbb",
+      "heading_family": "fragmented headings",
+      "expected_parse_status": "complete",
+      "expected_min_eligible_reasoning_spans": 1
+    },
+    {
+      "fixture_file": "case-03.html",
+      "canonical_jid": "DEMO,130,測民,3,20990103,1",
+      "official_url": "https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&id=DEMO%2C130%2C%E6%B8%AC%E6%B0%91%2C3%2C20990103%2C1",
+      "sha256": "370bf23a4794ec9401b5a7b2ec72f7878c3bc1253b6dc3e9898a05a72bfb1fcc",
+      "heading_family": "事實及理由",
+      "expected_parse_status": "complete",
+      "expected_min_eligible_reasoning_spans": 1
+    },
+    {
+      "fixture_file": "case-04.html",
+      "canonical_jid": "DEMO,130,測刑,4,20990104,1",
+      "official_url": "https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&id=DEMO%2C130%2C%E6%B8%AC%E5%88%91%2C4%2C20990104%2C1",
+      "sha256": "5366387d19a06898c536edfe7bfffdb31e22f1a7927f0f8b3a30fdbbe0dcd773",
+      "heading_family": "犯罪事實及理由",
+      "expected_parse_status": "complete",
+      "expected_min_eligible_reasoning_spans": 1
+    },
+    {
+      "fixture_file": "case-05.html",
+      "canonical_jid": "DEMO,130,測訴,5,20990105,1",
+      "official_url": "https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&id=DEMO%2C130%2C%E6%B8%AC%E8%A8%B4%2C5%2C20990105%2C1",
+      "sha256": "3e8efb12d32bcc9ee53e639b8563494ec110deaea2ce9ce9b9f1f539535ffd9b",
+      "heading_family": "法院之判斷",
+      "expected_parse_status": "complete",
+      "expected_min_eligible_reasoning_spans": 1
+    },
+    {
+      "fixture_file": "case-06.html",
+      "canonical_jid": "DEMO,130,測上,6,20990106,1",
+      "official_url": "https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&id=DEMO%2C130%2C%E6%B8%AC%E4%B8%8A%2C6%2C20990106%2C1",
+      "sha256": "70d3dc5958518793ee4327f2dd6de73d7fac339b75eee4cc23495b99c49f5803",
+      "heading_family": "得心證之理由",
+      "expected_parse_status": "complete",
+      "expected_min_eligible_reasoning_spans": 1
+    },
+    {
+      "fixture_file": "case-07.html",
+      "canonical_jid": "DEMO,130,測部,7,20990107,1",
+      "official_url": "https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&id=DEMO%2C130%2C%E6%B8%AC%E9%83%A8%2C7%2C20990107%2C1",
+      "sha256": "0a180f0f3c9d0a94f2bb40c2c359652964c15b633e36f41603fad9fefa3d8ecf",
+      "heading_family": "partial mixed",
+      "expected_parse_status": "partial",
+      "expected_min_eligible_reasoning_spans": 0
+    },
+    {
+      "fixture_file": "case-08.html",
+      "canonical_jid": "DEMO,130,測程,8,20990108,1",
+      "official_url": "https://judgment.judicial.gov.tw/FJUD/data.aspx?ty=JD&id=DEMO%2C130%2C%E6%B8%AC%E7%A8%8B%2C8%2C20990108%2C1",
+      "sha256": "4716dda65839ff64e8e10b2e27c6932a94c5dcbc271a21864987f3210f03cdf1",
+      "heading_family": "程序事項 partial",
+      "expected_parse_status": "partial",
+      "expected_min_eligible_reasoning_spans": 0
+    }
+  ]
+}

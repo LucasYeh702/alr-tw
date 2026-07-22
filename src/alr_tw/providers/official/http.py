@@ -23,7 +23,7 @@ class HttpTransport(Protocol):
 class HttpxAllowlistedTransport:
     """HTTPS-only transport with redirect and response-size validation."""
 
-    def __init__(self, allowed_hosts: set[str], *, user_agent: str = "ALR-TW/0.6"):
+    def __init__(self, allowed_hosts: set[str], *, user_agent: str = "ALR-TW/0.6.1"):
         self.allowed_hosts = {host.lower() for host in allowed_hosts}
         self.user_agent = user_agent
 

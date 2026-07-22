@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 from pydantic import SecretStr
 
 from alr_tw.contracts.providers import (
+    CandidateIdentity,
     ProviderCandidate,
     ProviderCapabilities,
     ProviderErrorCode,
@@ -27,6 +28,7 @@ from alr_tw.contracts.sources import (
     SourceTier,
     TrustStatus,
 )
+from alr_tw.providers.official.judgments import OfficialJudgmentProvider
 
 from .privacy import PrivacyScreenResult, screen_external_query
 
@@ -288,6 +290,16 @@ class TlrSemanticRecallProvider:
                 official_url=citation_url,
                 excerpt=snippet or None,
                 score=None,
+                identity=CandidateIdentity(
+                    canonical_jid=(
+                        OfficialJudgmentProvider.normalize_jid(doc_id)
+                        or OfficialJudgmentProvider.jid_from_identifier(citation_url or "")
+                    ),
+                    provider_document_id=doc_id,
+                    formal_citation=citation,
+                    official_url=citation_url,
+                ),
+                candidate_rank=int(raw.get("rank") or rank),
                 metadata={
                     "rank": int(raw.get("rank") or rank),
                     "doc_id": doc_id,
@@ -328,7 +340,7 @@ class TlrSemanticRecallProvider:
         return candidates, sources
 
     def _headers(self) -> dict[str, str]:
-        headers = {"User-Agent": "ALR-TW/0.6", "Accept": "application/json"}
+        headers = {"User-Agent": "ALR-TW/0.6.1", "Accept": "application/json"}
         if self._api_key is not None:
             headers["Authorization"] = f"Bearer {self._api_key.get_secret_value()}"
         return headers

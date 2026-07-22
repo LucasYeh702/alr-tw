@@ -26,6 +26,12 @@ from alr_tw.providers.official import (
     OfficialLawProvider,
 )
 from alr_tw.providers.tlr import TlrSemanticRecallProvider, screen_external_query
+from alr_tw.research.judgment_identity import (
+    ResolvedJudgmentIdentity,
+    direct_judgment_identity,
+    rank_and_dedupe_judgment_identities,
+    resolve_judgment_candidate,
+)
 from alr_tw.storage.sqlite_store import SqliteStore
 
 _T = TypeVar("_T")
@@ -205,7 +211,17 @@ class ProviderObligationExecutor:
             result = _run(self.providers.laws.search(run.query, limit=10))
             calls.append(self._provider_call(result))
             warnings.append("LAW_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP")
-        coverage = run.coverage.model_copy(update={"law_checked": True})
+        limitations = list(run.coverage.limitations)
+        if not citations:
+            limitations.append("LAW_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP")
+        elif added_evidence == 0:
+            limitations.append("LAW_OFFICIAL_VERIFICATION_INCOMPLETE")
+        coverage = run.coverage.model_copy(
+            update={
+                "law_checked": added_evidence > 0,
+                "limitations": sorted(set(limitations)),
+            }
+        )
         return self._outcome(
             obligation,
             calls=calls,
@@ -287,64 +303,184 @@ class ProviderObligationExecutor:
         run: ResearchRun,
         obligation: ResearchObligation,
     ) -> dict[str, Any]:
-        identifiers: list[str] = []
+        candidates = self.store.list_candidates(run.run_id)
+        resolved: list[ResolvedJudgmentIdentity] = []
         direct = self._jid_from_text(run.query)
         if direct:
-            identifiers.append(direct)
+            resolved.append(direct_judgment_identity(direct))
         else:
             formal = self._formal_citation_from_text(run.query)
             if formal:
-                identifiers.append(formal)
-        for candidate in self.store.list_candidates(run.run_id):
-            candidate_jid = OfficialJudgmentProvider.normalize_jid(
-                candidate.official_identifier or ""
-            ) or self._jid_from_url(candidate.official_url)
-            if candidate_jid and candidate_jid not in identifiers:
-                identifiers.append(candidate_jid)
-        if not identifiers:
-            coverage = run.coverage.model_copy(update={"judgment_checked": True})
+                resolved.append(direct_judgment_identity(formal))
+        for candidate in candidates:
+            identity = resolve_judgment_candidate(candidate)
+            if identity is not None:
+                resolved.append(identity)
+
+        targets = rank_and_dedupe_judgment_identities(resolved)
+        direct_count = int(bool(direct or self._formal_citation_from_text(run.query)))
+        candidate_count = len(candidates) + direct_count
+        resolved_count = len(resolved)
+        unresolved_count = max(0, candidate_count - resolved_count)
+        if not targets:
+            missing_limitations = ["JUDGMENT_RECALL_INCOMPLETE"]
+            if unresolved_count:
+                missing_limitations.append("JUDGMENT_CANDIDATE_RESOLUTION_INCOMPLETE")
+            coverage = run.coverage.model_copy(
+                update={
+                    "judgment_checked": False,
+                    "limitations": sorted(
+                        set(run.coverage.limitations + missing_limitations)
+                    ),
+                }
+            )
             return self._outcome(
                 obligation,
-                warnings=["JUDGMENT_RECALL_INCOMPLETE"],
+                warnings=missing_limitations,
+                metadata={
+                    "candidate_count": candidate_count,
+                    "resolved_count": resolved_count,
+                    "attempted_count": 0,
+                    "verified_source_count": 0,
+                    "eligible_evidence_count": 0,
+                    "partial_parse_count": 0,
+                    "failed_count": unresolved_count,
+                    "truncated": False,
+                    "limitations": missing_limitations,
+                },
                 updates={"coverage": coverage, "judgment_recall_incomplete": True},
             )
         calls: list[dict[str, Any]] = []
         warnings: list[str] = []
         source_count = 0
         evidence_count = 0
-        for jid in identifiers[:5]:
+        partial_parse_count = 0
+        failed_count = unresolved_count
+        attempted_targets = targets[:5]
+        truncated = len(targets) > len(attempted_targets)
+        for target in attempted_targets:
+            identifier = target.lookup_identifier
 
             def fetch_judgment(
-                jid: str = jid,
+                identifier: str = identifier,
             ) -> tuple[ProviderResult, SourceRecord | None, list[EvidenceSpan]]:
-                return _run(self.providers.judgments.exact_lookup(jid))
+                return _run(self.providers.judgments.exact_lookup(identifier))
 
-            result, source, evidence = self._cached_lookup(
-                run.run_id,
-                (
-                    f"judgment:{jid}"
-                    if OfficialJudgmentProvider.normalize_jid(jid)
-                    else f"judgment-formal:{_compact_identifier(jid)}"
-                ),
-                fetch_judgment,
-            )
+            if target.candidate is None:
+                result, source, evidence = self._cached_lookup(
+                    run.run_id,
+                    (
+                        f"judgment:{identifier}"
+                        if OfficialJudgmentProvider.normalize_jid(identifier)
+                        else f"judgment-formal:{_compact_identifier(identifier)}"
+                    ),
+                    fetch_judgment,
+                )
+            else:
+                result, source, evidence = fetch_judgment()
+                if result.error_code is ProviderErrorCode.OFFICIAL_IDENTIFIER_MISMATCH:
+                    result = result.model_copy(
+                        update={
+                            "error_code": ProviderErrorCode.CANDIDATE_OFFICIAL_ID_MISMATCH,
+                            "message": "CANDIDATE_OFFICIAL_ID_MISMATCH",
+                            "metadata": {
+                                **result.metadata,
+                                "candidate_id": target.candidate.candidate_id,
+                                "resolution_method": target.resolution_method,
+                                "requested_identifier": target.canonical_jid,
+                            },
+                        }
+                    )
+                if (
+                    source is not None
+                    and target.canonical_jid is not None
+                    and source.official_identifier != target.canonical_jid
+                ):
+                    result = ProviderResult(
+                        status=ProviderResultStatus.ERROR,
+                        provider_id=self.providers.judgments.provider_id,
+                        error_code=ProviderErrorCode.CANDIDATE_OFFICIAL_ID_MISMATCH,
+                        message="CANDIDATE_OFFICIAL_ID_MISMATCH",
+                        coverage_complete=False,
+                        metadata={
+                            "candidate_id": target.candidate.candidate_id,
+                            "resolution_method": target.resolution_method,
+                            "requested_identifier": target.canonical_jid,
+                            "resolved_identifier": source.official_identifier,
+                        },
+                    )
+                    source = None
+                    evidence = []
+                elif source is not None:
+                    source = source.model_copy(
+                        update={
+                            "metadata": {
+                                **source.metadata,
+                                "origin_provider_id": target.candidate.provider_id,
+                                "origin_candidate_id": target.candidate.candidate_id,
+                                "origin_candidate_rank": target.candidate.candidate_rank,
+                                "provider_document_id": (
+                                    target.candidate.identity.provider_document_id
+                                    if target.candidate.identity is not None
+                                    else target.candidate.metadata.get("doc_id")
+                                ),
+                                "identity_resolution_method": target.resolution_method,
+                                "resolved_canonical_jid": source.official_identifier,
+                                "merged_candidate_ids": list(target.merged_candidate_ids),
+                            }
+                        }
+                    )
+                    self.store.save_source(run.run_id, source)
+                    for item in evidence:
+                        self.store.save_evidence(run.run_id, item)
             calls.append(self._provider_call(result))
             if source is not None:
                 source_count += 1
+                partial_parse_count += int(
+                    source.metadata.get("parse_status") == "partial"
+                )
                 for item in evidence:
                     evidence_count += int(item.eligible_for_claim_support)
             else:
+                failed_count += 1
                 warnings.append(result.error_code.value if result.error_code else result.status.value)
-        coverage = run.coverage.model_copy(update={"judgment_checked": True})
+        limitations: list[str] = []
+        if unresolved_count:
+            limitations.append("JUDGMENT_CANDIDATE_RESOLUTION_INCOMPLETE")
+        if truncated:
+            limitations.append("JUDGMENT_VERIFICATION_BUDGET_TRUNCATED")
+        if partial_parse_count:
+            limitations.append("JUDGMENT_PARSE_PARTIAL")
+        if failed_count:
+            limitations.append("JUDGMENT_OFFICIAL_VERIFICATION_INCOMPLETE")
+        warnings.extend(limitations)
+        coverage = run.coverage.model_copy(
+            update={
+                "judgment_checked": bool(attempted_targets),
+                "limitations": sorted(set(run.coverage.limitations + limitations)),
+            }
+        )
+        verification_summary = {
+            "candidate_count": candidate_count,
+            "resolved_count": resolved_count,
+            "attempted_count": len(attempted_targets),
+            "verified_source_count": source_count,
+            "eligible_evidence_count": evidence_count,
+            "partial_parse_count": partial_parse_count,
+            "failed_count": failed_count,
+            "truncated": truncated,
+            "limitations": sorted(set(limitations)),
+        }
         return self._outcome(
             obligation,
             calls=calls,
             warnings=warnings,
             added_sources=source_count,
             added_evidence=evidence_count,
+            metadata=verification_summary,
             updates={
                 "coverage": coverage,
-                "judgment_recall_incomplete": source_count == 0,
+                "judgment_recall_incomplete": source_count == 0 or bool(limitations),
             },
         )
 
@@ -375,7 +511,17 @@ class ProviderObligationExecutor:
             result = _run(self.providers.constitutional.search(run.query, limit=10))
             calls.append(self._provider_call(result))
             warnings.append("CONSTITUTIONAL_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP")
-        coverage = run.coverage.model_copy(update={"constitutional_checked": True})
+        limitations = list(run.coverage.limitations)
+        if not identifier:
+            limitations.append("CONSTITUTIONAL_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP")
+        elif evidence_count == 0:
+            limitations.append("CONSTITUTIONAL_OFFICIAL_VERIFICATION_INCOMPLETE")
+        coverage = run.coverage.model_copy(
+            update={
+                "constitutional_checked": evidence_count > 0,
+                "limitations": sorted(set(limitations)),
+            }
+        )
         return self._outcome(
             obligation,
             calls=calls,
@@ -390,10 +536,22 @@ class ProviderObligationExecutor:
         run: ResearchRun,
         obligation: ResearchObligation,
     ) -> dict[str, Any]:
-        coverage = run.coverage.model_copy(update={"counter_authority_checked": True})
+        limitation = "COUNTER_AUTHORITY_SEARCH_NOT_IMPLEMENTED"
+        coverage = run.coverage.model_copy(
+            update={
+                "counter_authority_checked": False,
+                "limitations": sorted(set(run.coverage.limitations + [limitation])),
+            }
+        )
         return self._outcome(
             obligation,
-            warnings=["COUNTER_AUTHORITY_REVIEW_REQUIRES_IDENTIFIED_CANDIDATES"],
+            warnings=[limitation],
+            metadata={
+                "provider_call_count": 0,
+                "candidate_count": 0,
+                "attempted_count": 0,
+                "verified_count": 0,
+            },
             updates={"coverage": coverage},
         )
 

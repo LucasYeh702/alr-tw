@@ -81,3 +81,7 @@ def screen_external_query(query: str) -> PrivacyScreenResult:
         allowed=True,
         query_to_send=text,
     )
+
+
+# Precise public alias: this policy applies only before data leaves the process.
+screen_outbound_query = screen_external_query

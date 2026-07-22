@@ -89,6 +89,9 @@ def test_tlr_search_returns_candidate_only_source() -> None:
     assert sources[0].trust_status == TrustStatus.EXTERNAL_CANDIDATE
     assert "TLR_CANDIDATE_ONLY" in sources[0].warnings
     assert result.candidates[0].metadata["doc_id"] == "synthetic-doc-1"
+    assert result.candidates[0].identity is not None
+    assert result.candidates[0].identity.provider_document_id == "synthetic-doc-1"
+    assert result.candidates[0].candidate_rank == 1
 
 
 def test_tlr_privacy_block_makes_no_network_call() -> None:

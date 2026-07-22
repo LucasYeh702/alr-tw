@@ -14,6 +14,7 @@ from typing import Any, Mapping
 from urllib.parse import parse_qs, unquote, urlencode, urljoin, urlsplit
 
 from alr_tw.contracts.providers import (
+    CandidateIdentity,
     ProviderCandidate,
     ProviderCapabilities,
     ProviderErrorCode,
@@ -35,6 +36,12 @@ from .judicial_site import (
     HttpxJudicialSiteTransport,
     JudicialSiteResponse,
     JudicialSiteTransport,
+)
+from .judgment_parser import (
+    JudgmentRole,
+    ParsedJudgment,
+    extract_judgment_blocks,
+    parse_judgment_blocks,
 )
 
 JUDGMENT_SEARCH_ORIGIN = "https://judgment.judicial.gov.tw"
@@ -202,11 +209,12 @@ class OfficialJudgmentProvider:
         try:
             parsed = self.parse_detail_page(document, expected_jid=jid, official_url=official_url)
         except ValueError as exc:
-            code = (
-                ProviderErrorCode.OFFICIAL_IDENTIFIER_MISMATCH
-                if str(exc) == "JID_MISMATCH"
-                else ProviderErrorCode.OFFICIAL_PARSE_ERROR
-            )
+            error_codes = {
+                "JID_MISMATCH": ProviderErrorCode.OFFICIAL_IDENTIFIER_MISMATCH,
+                "JUDGMENT_CONTENT_MISSING": ProviderErrorCode.JUDGMENT_CONTENT_MISSING,
+                "JUDGMENT_TEXT_EMPTY": ProviderErrorCode.JUDGMENT_TEXT_EMPTY,
+            }
+            code = error_codes.get(str(exc), ProviderErrorCode.OFFICIAL_PARSE_ERROR)
             return self._error(code, str(exc)), None, []
 
         timestamp = now or datetime.now(UTC)
@@ -218,7 +226,16 @@ class OfficialJudgmentProvider:
                 source_ids=[source.source_id],
                 evidence_ids=[item.evidence_id for item in evidence],
                 coverage_complete=True,
-                metadata={"jid": jid, "retrieval": "official_website_html"},
+                metadata={
+                    "jid": jid,
+                    "retrieval": "official_website_html",
+                    "parse_status": source.metadata.get("parse_status"),
+                    "parser_version": source.metadata.get("parser_version"),
+                    "eligible_evidence_count": sum(
+                        item.eligible_for_claim_support for item in evidence
+                    ),
+                    "warnings": list(source.warnings),
+                },
             ),
             source,
             evidence,
@@ -321,7 +338,10 @@ class OfficialJudgmentProvider:
             return self._error(ProviderErrorCode.OFFICIAL_PARSE_ERROR, str(exc))
         if not hits:
             return self._search_not_found()
-        candidates = [self._candidate_from_hit(hit, query) for hit in hits]
+        candidates = [
+            self._candidate_from_hit(hit, query, rank=rank)
+            for rank, hit in enumerate(hits, start=1)
+        ]
         return ProviderResult(
             status=ProviderResultStatus.FOUND,
             provider_id=self.provider_id,
@@ -641,12 +661,7 @@ class OfficialJudgmentProvider:
         official_url: str,
     ) -> dict[str, Any]:
         soup = OfficialJudgmentProvider._soup(document)
-        canonical = soup.select_one('#hlPrint[href*="printData.aspx"][href*="id="]')
-        canonical_jid = (
-            OfficialJudgmentProvider.jid_from_identifier(str(canonical.get("href")))
-            if canonical is not None
-            else None
-        )
+        canonical_jid = OfficialJudgmentProvider._canonical_jid_from_detail(soup)
         if canonical_jid is None:
             raise ValueError("JUDGMENT_CANONICAL_ID_MISSING")
         if canonical_jid != expected_jid:
@@ -666,30 +681,20 @@ class OfficialJudgmentProvider:
                     value.get_text(" ", strip=True)
                 )
 
-        content = soup.select_one("#jud .jud_content .htmlcontent")
-        if content is None:
-            content = soup.select_one("#jud .jud_content .text-pre")
-        if content is None:
+        content_candidates = [
+            soup.select_one("#jud .jud_content .htmlcontent"),
+            soup.select_one("#jud .jud_content .text-pre"),
+        ]
+        if not any(item is not None for item in content_candidates):
             raise ValueError("JUDGMENT_CONTENT_MISSING")
-        lines: list[str] = []
-        blocks = content.find_all(["div", "p", "pre"], recursive=False)
-        if blocks:
-            for block in blocks:
-                line = OfficialJudgmentProvider._normalize_inline(block.get_text(" ", strip=True))
-                if line:
-                    lines.append(line)
-        else:
-            lines.extend(
-                OfficialJudgmentProvider._normalize_inline(line)
-                for line in content.get_text("\n").splitlines()
-                if OfficialJudgmentProvider._normalize_inline(line)
-            )
-        text = "\n".join(lines).strip()
-        if not text:
-            raise ValueError("JUDGMENT_TEXT_EMPTY")
-        disposition, reasoning = OfficialJudgmentProvider.split_sections(text)
-        if not disposition or not reasoning:
-            raise ValueError("JUDGMENT_SECTIONS_MISSING")
+        blocks: list[str] = []
+        for content in content_candidates:
+            if content is None:
+                continue
+            blocks = extract_judgment_blocks(content)
+            if blocks:
+                break
+        parsed_judgment = parse_judgment_blocks(blocks, canonical_jid=expected_jid)
 
         parts = expected_jid.split(",")
         title = metadata.get("裁判字號") or soup.title.get_text(" ", strip=True)
@@ -702,11 +707,40 @@ class OfficialJudgmentProvider:
             "date": metadata.get("裁判日期", parts[4]),
             "title": title,
             "case_cause": metadata.get("裁判案由", ""),
-            "text": text,
-            "disposition": disposition,
-            "reasoning": reasoning,
+            "text": parsed_judgment.full_text,
+            "disposition": "\n".join(
+                item.exact_text
+                for item in parsed_judgment.sections
+                if item.role is JudgmentRole.DISPOSITION
+            ),
+            "reasoning": "\n".join(
+                item.exact_text
+                for item in parsed_judgment.sections
+                if item.role in {JudgmentRole.COURT_HOLDING, JudgmentRole.COURT_REASONING}
+            ),
+            "parsed_judgment": parsed_judgment,
             "official_url": official_url,
         }
+
+    @staticmethod
+    def _canonical_jid_from_detail(soup: Any) -> str | None:
+        legacy = soup.select_one('#hlPrint[href*="printData.aspx"][href*="id="]')
+        if legacy is not None:
+            canonical = OfficialJudgmentProvider.jid_from_identifier(
+                str(legacy.get("href"))
+            )
+            if canonical is not None:
+                return canonical
+
+        pdf = soup.select_one('#hlExportPDF[href*="jrecno="][href*="tablename="]')
+        if pdf is None:
+            return None
+        query = parse_qs(urlsplit(str(pdf.get("href"))).query)
+        table_name = next(iter(query.get("tablename", [])), "").strip().upper()
+        record_number = next(iter(query.get("jrecno", [])), "").strip()
+        if not table_name or not record_number:
+            return None
+        return OfficialJudgmentProvider.normalize_jid(f"{table_name},{record_number}")
 
     @staticmethod
     def split_sections(text: str) -> tuple[str, str]:
@@ -730,6 +764,12 @@ class OfficialJudgmentProvider:
         digest = hashlib.sha256(f"{jid}\n{timestamp.isoformat()}\n{text}".encode()).hexdigest()
         source_id = f"src_judgment_{digest[:24]}"
         content_hash = EvidenceSpan.hash_text(text)
+        parsed_judgment = parsed.get("parsed_judgment")
+        if not isinstance(parsed_judgment, ParsedJudgment):
+            raise ValueError("JUDGMENT_PARSE_RESULT_INVALID")
+        eligible_span_count = sum(
+            item.eligible_for_claim_support for item in parsed_judgment.sections
+        )
         source = SourceRecord(
             source_id=source_id,
             source_key=f"judgment:{jid}",
@@ -737,7 +777,11 @@ class OfficialJudgmentProvider:
             material_type=MaterialType.JUDGMENT,
             provider_id=self.provider_id,
             source_tier=SourceTier.OFFICIAL,
-            trust_status=TrustStatus.EVIDENCE_ELIGIBLE,
+            trust_status=(
+                TrustStatus.EVIDENCE_ELIGIBLE
+                if eligible_span_count
+                else TrustStatus.OFFICIAL_VERIFIED
+            ),
             official_identifier=jid,
             official_url=str(parsed["official_url"]),
             citation=str(parsed["title"]),
@@ -752,57 +796,69 @@ class OfficialJudgmentProvider:
                 "decision_date": parsed["date"],
                 "case_cause": parsed["case_cause"],
                 "retrieval": "official_website_html",
+                "parse_status": parsed_judgment.parse_status.value,
+                "parser_version": parsed_judgment.parser_version,
+                "eligible_span_count": eligible_span_count,
+                "unclassified_text_present": parsed_judgment.unparsed_remainder is not None,
             },
+            warnings=list(parsed_judgment.warnings),
+        )
+        role_map = {
+            JudgmentRole.DISPOSITION: EvidenceSectionType.DISPOSITION,
+            JudgmentRole.COURT_HOLDING: EvidenceSectionType.COURT_HOLDING,
+            JudgmentRole.COURT_REASONING: EvidenceSectionType.COURT_REASONING,
+            JudgmentRole.PARTY_ARGUMENT: EvidenceSectionType.PARTY_ARGUMENT,
+            JudgmentRole.FACTS: EvidenceSectionType.FACTS,
+            JudgmentRole.PROCEDURE: EvidenceSectionType.PROCEDURE,
+            JudgmentRole.MIXED: EvidenceSectionType.MIXED,
+            JudgmentRole.UNKNOWN: EvidenceSectionType.UNKNOWN,
+        }
+        section_priority = {
+            JudgmentRole.DISPOSITION: 0,
+            JudgmentRole.COURT_HOLDING: 1,
+            JudgmentRole.COURT_REASONING: 1,
+            JudgmentRole.PARTY_ARGUMENT: 2,
+            JudgmentRole.FACTS: 3,
+            JudgmentRole.PROCEDURE: 3,
+            JudgmentRole.MIXED: 4,
+            JudgmentRole.UNKNOWN: 4,
+        }
+        ordered_sections = sorted(
+            parsed_judgment.sections,
+            key=lambda item: (section_priority[item.role], item.section_id),
         )
         evidence = [
             EvidenceSpan.from_exact_text(
-                evidence_id=f"ev_{source_id}_disposition",
+                evidence_id=f"ev_{source_id}_{item.section_id}",
                 source_id=source_id,
-                section_id="disposition",
-                section_type=EvidenceSectionType.DISPOSITION,
-                exact_text=str(parsed["disposition"]),
-                eligible_for_claim_support=True,
+                section_id=item.section_id,
+                section_type=role_map[item.role],
+                exact_text=item.exact_text,
+                eligible_for_claim_support=item.eligible_for_claim_support,
             )
+            for item in ordered_sections
         ]
-        for index, (section_type, section_text) in enumerate(
-            self.segment_reasoning_roles(str(parsed["reasoning"])), start=1
-        ):
-            evidence.append(
-                EvidenceSpan.from_exact_text(
-                    evidence_id=f"ev_{source_id}_reasoning_{index}",
-                    source_id=source_id,
-                    section_id=f"reasoning-{index}",
-                    section_type=section_type,
-                    exact_text=section_text,
-                    eligible_for_claim_support=True,
-                )
-            )
         return source, evidence
 
     @staticmethod
     def segment_reasoning_roles(
         reasoning: str,
     ) -> list[tuple[EvidenceSectionType, str]]:
-        paragraphs = [item.strip() for item in re.split(r"\n+", reasoning) if item.strip()]
-        party_markers = (
-            "上訴意旨",
-            "抗告意旨",
-            "聲請意旨",
-            "原告主張",
-            "被告辯稱",
-            "上訴人主張",
-            "被上訴人抗辯",
-            "抗辯略以",
+        parsed = parse_judgment_blocks(
+            ["理由", *[item for item in re.split(r"\n+", reasoning) if item.strip()]],
+            canonical_jid="COMPAT,0,SEGMENT,0,00000000,0",
         )
-        return [
-            (
-                EvidenceSectionType.PARTY_ARGUMENT
-                if any(marker in paragraph for marker in party_markers)
-                else EvidenceSectionType.COURT_REASONING,
-                paragraph,
-            )
-            for paragraph in paragraphs
-        ] or [(EvidenceSectionType.COURT_REASONING, reasoning)]
+        role_map = {
+            JudgmentRole.COURT_HOLDING: EvidenceSectionType.COURT_HOLDING,
+            JudgmentRole.COURT_REASONING: EvidenceSectionType.COURT_REASONING,
+            JudgmentRole.PARTY_ARGUMENT: EvidenceSectionType.PARTY_ARGUMENT,
+            JudgmentRole.FACTS: EvidenceSectionType.FACTS,
+            JudgmentRole.PROCEDURE: EvidenceSectionType.PROCEDURE,
+            JudgmentRole.MIXED: EvidenceSectionType.MIXED,
+            JudgmentRole.UNKNOWN: EvidenceSectionType.UNKNOWN,
+            JudgmentRole.DISPOSITION: EvidenceSectionType.DISPOSITION,
+        }
+        return [(role_map[item.role], item.exact_text) for item in parsed.sections]
 
     @staticmethod
     def normalize_jid(value: str) -> str | None:
@@ -888,7 +944,13 @@ class OfficialJudgmentProvider:
                 return False
         return True
 
-    def _candidate_from_hit(self, hit: JudgmentSearchHit, query: str) -> ProviderCandidate:
+    def _candidate_from_hit(
+        self,
+        hit: JudgmentSearchHit,
+        query: str,
+        *,
+        rank: int = 1,
+    ) -> ProviderCandidate:
         digest = hashlib.sha256(f"{hit.jid}\n{query}".encode()).hexdigest()
         return ProviderCandidate(
             candidate_id=f"candidate_official_judgment_{digest[:24]}",
@@ -897,6 +959,13 @@ class OfficialJudgmentProvider:
             official_identifier=hit.jid,
             official_url=hit.official_url,
             excerpt=hit.excerpt or None,
+            identity=CandidateIdentity(
+                canonical_jid=hit.jid,
+                provider_document_id=hit.jid,
+                formal_citation=hit.title,
+                official_url=hit.official_url,
+            ),
+            candidate_rank=rank,
             metadata={"candidate_tier": "official_search_result"},
         )
 

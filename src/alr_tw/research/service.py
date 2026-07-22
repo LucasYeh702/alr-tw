@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+import re
 from threading import RLock
 from typing import Any, Protocol
+import unicodedata
 from uuid import uuid4
 
 from alr_tw.contracts.providers import DataMode
@@ -20,15 +22,83 @@ from alr_tw.contracts.research import (
 )
 from alr_tw.contracts.sources import EvidenceSectionType, EvidenceSpan, TrustStatus
 from alr_tw.storage.sqlite_store import SqliteStore
-from alr_tw.providers.tlr.privacy import screen_external_query
 from alr_tw.verification.claim_support import (
+    AnswerClaim,
+    ClaimBinding,
+    ClaimType,
+    Importance,
     LegalSegment,
     SectionRole,
     check_claim_support,
     extract_answer_claims,
 )
+from alr_tw.verification.output_privacy import screen_answer_output
 
 from .state_machine import transition_run
+
+
+_BINDING_CLAIM_TYPES = {
+    "law_rule": ClaimType.STATUTORY_RULE,
+    "court_view": ClaimType.COURT_VIEW,
+    "disposition": ClaimType.COURT_VIEW,
+    "fact": ClaimType.FACTUAL_SUMMARY,
+    "procedure": ClaimType.PROCEDURAL_STATEMENT,
+    "limitation": ClaimType.RISK_ASSESSMENT,
+}
+
+
+def _claim_key(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value)
+    return re.sub(r"[^\u3400-\u9fffA-Za-z0-9]", "", normalized).lower()
+
+
+def _claims_for_validation(
+    answer_text: str,
+    bindings: list[ClaimBinding],
+) -> list[AnswerClaim]:
+    extracted = extract_answer_claims(answer_text)
+    if not bindings:
+        return extracted
+    claim_ids = [item.claim_id for item in bindings]
+    if len(claim_ids) != len(set(claim_ids)):
+        raise ValueError("CLAIM_BINDING_ID_DUPLICATED")
+    answer_key = _claim_key(answer_text)
+    bound_claims: list[AnswerClaim] = []
+    bound_keys: list[str] = []
+    for item in bindings:
+        key = _claim_key(item.claim_text)
+        if not key or key not in answer_key:
+            raise ValueError("CLAIM_BINDING_TEXT_NOT_IN_ANSWER")
+        bound_keys.append(key)
+        bound_claims.append(
+            AnswerClaim(
+                claim_id=item.claim_id,
+                claim_text=item.claim_text,
+                claim_type=_BINDING_CLAIM_TYPES[item.claim_type],
+                referenced_citation_ids=list(dict.fromkeys(item.evidence_ids)),
+                importance=(
+                    Importance.CORE
+                    if item.importance == "core"
+                    else Importance.SUPPLEMENTARY
+                ),
+            )
+        )
+    for claim in extracted:
+        key = _claim_key(claim.claim_text)
+        if not any(key in bound or bound in key for bound in bound_keys):
+            bound_claims.append(claim)
+    return bound_claims
+
+
+def _coverage_qualification(run: ResearchRun) -> str:
+    qualifications: list[str] = []
+    if "COUNTER_AUTHORITY_SEARCH_NOT_IMPLEMENTED" in run.coverage.limitations:
+        qualifications.append("公開版未執行系統性的反方裁判搜尋；結論僅限目前已驗證來源。")
+    if run.semantic_recall_degraded or run.judgment_recall_incomplete:
+        qualifications.append("本次普通法院裁判盤點可能不完整，結論僅限已驗證來源。")
+    if not qualifications:
+        qualifications.append("本次結論受限於已揭露的檢索與法源涵蓋範圍。")
+    return "".join(qualifications)
 
 
 class ObligationExecutor(Protocol):
@@ -278,6 +348,7 @@ class ResearchService:
         answer_text: str,
         operation_id: str,
         *,
+        claim_bindings: list[dict[str, Any]] | list[ClaimBinding] | None = None,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         if not answer_text.strip():
@@ -289,6 +360,12 @@ class ResearchService:
                 raise ValueError("RESEARCH_RUN_EXPIRED")
             if run.state != ResearchState.READY_FOR_DRAFT:
                 raise ValueError("RESEARCH_OBLIGATION_PENDING")
+            bindings = [
+                item if isinstance(item, ClaimBinding) else ClaimBinding.model_validate(item)
+                for item in (claim_bindings or [])
+            ]
+            claims = _claims_for_validation(answer_text, bindings)
+            answer_privacy = screen_answer_output(answer_text)
             claim = self.store.record_operation(
                 run_id,
                 operation_id,
@@ -299,6 +376,25 @@ class ResearchService:
             run = transition_run(run, ResearchState.VALIDATING, updated_at=timestamp)
             sources = {source.source_id: source for source in self.store.list_sources(run_id)}
             evidence = self.store.list_evidence(run_id)
+            evidence_by_id = {item.evidence_id: item for item in evidence}
+            bound_evidence_ids = {
+                evidence_id for item in bindings for evidence_id in item.evidence_ids
+            }
+            binding_reasons: list[str] = []
+            for evidence_id in sorted(bound_evidence_ids):
+                item = evidence_by_id.get(evidence_id)
+                if item is None:
+                    binding_reasons.append("CLAIM_EVIDENCE_NOT_FOUND")
+                    continue
+                source = sources.get(item.source_id)
+                if source is None:
+                    binding_reasons.append("CLAIM_EVIDENCE_SOURCE_NOT_FOUND")
+                elif source.expires_at <= timestamp:
+                    binding_reasons.append("SOURCE_STALE")
+                elif source.trust_status != TrustStatus.EVIDENCE_ELIGIBLE:
+                    binding_reasons.append("SOURCE_NOT_EVIDENCE_ELIGIBLE")
+                elif not item.eligible_for_claim_support:
+                    binding_reasons.append("EVIDENCE_NOT_ELIGIBLE_FOR_CLAIM_SUPPORT")
             eligible = [
                 item
                 for item in evidence
@@ -307,12 +403,6 @@ class ResearchService:
                 and sources[item.source_id].trust_status == TrustStatus.EVIDENCE_ELIGIBLE
                 and sources[item.source_id].expires_at > timestamp
             ]
-            reasons_from_sources: list[str] = []
-            if any(source.expires_at <= timestamp for source in sources.values()):
-                reasons_from_sources.append("SOURCE_STALE")
-            if sources and not eligible:
-                reasons_from_sources.append("SOURCE_NOT_EVIDENCE_ELIGIBLE")
-            claims = extract_answer_claims(answer_text)
             segments = [
                 self._claim_segment(
                     item,
@@ -327,19 +417,39 @@ class ResearchService:
                 answer=answer_text,
                 claims=claims,
                 segments=segments,
+                require_explicit_bindings=True,
             )
-            reasons.extend(reasons_from_sources)
+            reasons.extend(binding_reasons)
             if not claims:
                 reasons.append("CLAIM_SUPPORT_NOT_CHECKED")
-            answer_privacy = screen_external_query(answer_text)
-            if answer_privacy.redactions or not answer_privacy.allowed:
+            if answer_privacy.status == "redaction_required":
+                reasons.append("ANSWER_PRIVACY_REDACTION_REQUIRED")
+                reasons.append("ANSWER_CONTAINS_SENSITIVE_DATA")
+            elif answer_privacy.status == "blocked":
+                reasons.append("ANSWER_PRIVACY_BLOCKED")
                 reasons.append("ANSWER_CONTAINS_SENSITIVE_DATA")
             if "HISTORICAL_LAW_VERSION_UNSUPPORTED" in run.coverage.limitations:
                 reasons.append("HISTORICAL_LAW_VERSION_UNSUPPORTED")
-            safe = bool(eligible) and summary.semantic_safe_to_present and not reasons
-            if safe and (run.semantic_recall_degraded or run.judgment_recall_incomplete):
+            binding_mode = "structured" if bindings else "legacy_unbound"
+            safe = (
+                bool(eligible)
+                and summary.semantic_safe_to_present
+                and answer_privacy.allowed
+                and not reasons
+            )
+            coverage_qualified = bool(
+                run.semantic_recall_degraded
+                or run.judgment_recall_incomplete
+                or run.coverage.limitations
+            )
+            if safe and (coverage_qualified or binding_mode == "legacy_unbound"):
                 decision = ResearchState.QUALIFIED
-                qualification = "本次普通法院裁判盤點可能不完整，結論僅限已驗證來源。"
+                qualification = (
+                    "未提供 claim_bindings；本結果僅為舊版相容驗證，"
+                    "不得將其視為核心法律主張已完成 span-level 驗證。"
+                    if binding_mode == "legacy_unbound"
+                    else _coverage_qualification(run)
+                )
             elif safe:
                 decision = ResearchState.VALIDATED
                 qualification = None
@@ -356,7 +466,7 @@ class ResearchService:
             run = run.model_copy(update={"obligations": obligations})
             self.store.save_run(run)
             result = {
-                "schema_version": "alr-tw.answer-validation/v2",
+                "schema_version": "alr-tw.answer-validation/v3",
                 "run_id": run_id,
                 "decision": decision.value,
                 "decision_code": (
@@ -373,6 +483,15 @@ class ResearchService:
                 "required_qualification": qualification,
                 "claim_support": [item.model_dump(mode="json") for item in support],
                 "semantic_summary": summary.model_dump(mode="json"),
+                "verification_method": "deterministic_grounding_v2",
+                "semantic_entailment_performed": False,
+                "binding_mode": binding_mode,
+                "privacy": answer_privacy.model_dump(mode="json"),
+                "coverage_summary": {
+                    **run.coverage.model_dump(mode="json"),
+                    "semantic_recall_degraded": run.semantic_recall_degraded,
+                    "judgment_recall_incomplete": run.judgment_recall_incomplete,
+                },
                 "blockers": sorted(set(reasons)) if decision == ResearchState.BLOCKED else [],
                 "effective_mode": run.effective_mode.value,
                 "citations": [
@@ -385,10 +504,21 @@ class ResearchService:
                             item.evidence_id
                             for item in eligible
                             if item.source_id == source.source_id
+                            and (
+                                binding_mode == "legacy_unbound"
+                                or item.evidence_id in bound_evidence_ids
+                            )
                         ),
                     }
                     for source in sorted(sources.values(), key=lambda item: item.source_id)
-                    if any(item.source_id == source.source_id for item in eligible)
+                    if any(
+                        item.source_id == source.source_id
+                        and (
+                            binding_mode == "legacy_unbound"
+                            or item.evidence_id in bound_evidence_ids
+                        )
+                        for item in eligible
+                    )
                 ],
             }
             self.store.complete_operation(run_id, operation_id, result)
@@ -414,18 +544,22 @@ class ResearchService:
         role_map = {
             EvidenceSectionType.LAW_TEXT: SectionRole.STATUTE_TEXT,
             EvidenceSectionType.HOLDING: SectionRole.COURT_HOLDING,
+            EvidenceSectionType.COURT_HOLDING: SectionRole.COURT_HOLDING,
             EvidenceSectionType.DISPOSITION: SectionRole.DISPOSITION,
             EvidenceSectionType.COURT_REASONING: SectionRole.COURT_REASONING,
             EvidenceSectionType.PARTY_ARGUMENT: SectionRole.PARTY_ARGUMENT,
             EvidenceSectionType.FACTS: SectionRole.FACTS,
+            EvidenceSectionType.PROCEDURE: SectionRole.PROCEDURE,
             EvidenceSectionType.CONCURRING_OPINION: SectionRole.CONCURRING_OPINION,
             EvidenceSectionType.DISSENTING_OPINION: SectionRole.DISSENTING_OPINION,
+            EvidenceSectionType.MIXED: SectionRole.UNKNOWN,
+            EvidenceSectionType.UNKNOWN: SectionRole.UNKNOWN,
             EvidenceSectionType.OTHER: SectionRole.UNKNOWN,
         }
         return LegalSegment(
             segment_id=evidence.evidence_id,
             source_id=evidence.source_id,
-            citation_id=evidence.source_id,
+            citation_id=evidence.evidence_id,
             source_tier=source_tier,
             legal_material_type=material_type,
             section_role=role_map[evidence.section_type],
