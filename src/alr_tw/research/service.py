@@ -414,12 +414,16 @@ class ResearchService:
         role_map = {
             EvidenceSectionType.LAW_TEXT: SectionRole.STATUTE_TEXT,
             EvidenceSectionType.HOLDING: SectionRole.COURT_HOLDING,
+            EvidenceSectionType.COURT_HOLDING: SectionRole.COURT_HOLDING,
             EvidenceSectionType.DISPOSITION: SectionRole.DISPOSITION,
             EvidenceSectionType.COURT_REASONING: SectionRole.COURT_REASONING,
             EvidenceSectionType.PARTY_ARGUMENT: SectionRole.PARTY_ARGUMENT,
             EvidenceSectionType.FACTS: SectionRole.FACTS,
+            EvidenceSectionType.PROCEDURE: SectionRole.PROCEDURE,
             EvidenceSectionType.CONCURRING_OPINION: SectionRole.CONCURRING_OPINION,
             EvidenceSectionType.DISSENTING_OPINION: SectionRole.DISSENTING_OPINION,
+            EvidenceSectionType.MIXED: SectionRole.UNKNOWN,
+            EvidenceSectionType.UNKNOWN: SectionRole.UNKNOWN,
             EvidenceSectionType.OTHER: SectionRole.UNKNOWN,
         }
         return LegalSegment(
