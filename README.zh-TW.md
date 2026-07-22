@@ -218,6 +218,7 @@ Choose data mode
 - [Error Codes](docs/ERROR_CODES.md)
 - [Threat Model](docs/THREAT_MODEL.md)
 - [Release Notes](docs/RELEASE_NOTES.md)
+- [v0.6.1 Release Audit](docs/V061_RELEASE_AUDIT.md)
 - [Changelog](CHANGELOG.md)
 
 ## 法律聲明

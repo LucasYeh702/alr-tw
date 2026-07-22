@@ -306,6 +306,7 @@ v0.6.0 的 Codex native MCP `_meta`、常見普通法院段落解析、TLR `doc_
 - [Error Codes](docs/ERROR_CODES.md)
 - [Threat Model](docs/THREAT_MODEL.md)
 - [Release Notes](docs/RELEASE_NOTES.md)
+- [v0.6.1 Release Audit](docs/V061_RELEASE_AUDIT.md)
 - [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 
