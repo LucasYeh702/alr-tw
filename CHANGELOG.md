@@ -28,7 +28,7 @@
 
 ### Release status
 
-- 程式與 synthetic contract gates 已實作；正式發版仍以 [V0.6.1 Release Audit](docs/V061_RELEASE_AUDIT.md) 中的 fresh-wheel host canary 與公開政策允許的 ordinary-court corpus gate 為準。
+- 程式、synthetic contract gates、fresh-wheel host canary 與 live provider canaries 已通過；v0.6.1 依 [V0.6.1 Release Audit](docs/V061_RELEASE_AUDIT.md) 以已揭露的 ordinary-court real-corpus 驗證限制發布。該限制不視為 gate 通過。
 
 ## 0.6.0 - 2026-07-19
 

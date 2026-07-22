@@ -4,9 +4,9 @@ Audit date: 2026-07-22 (Asia/Taipei)
 
 Source commit under test: `605b51ab1da86423649a7178702c36ce7d1e8e68`
 
-Release decision: **TAG/RELEASE BLOCKED — branch publication permitted for clean-environment testing**
+Release decision: **ACCEPTED FOR v0.6.1 PUBLIC PREVIEW WITH A DISCLOSED CORPUS LIMITATION**
 
-This audit records commands actually executed. A passing synthetic or contract test is not presented as a passing real ordinary-court corpus or live-provider canary.
+This audit records commands actually executed. A passing synthetic or contract test is not presented as a passing real ordinary-court corpus or live-provider canary. The release accepts the unsatisfied real-corpus gate as a disclosed limitation; it does not convert that gate to PASS.
 
 ## Environment
 
@@ -31,7 +31,7 @@ This audit records commands actually executed. A passing synthetic or contract t
 | `uv run python scripts/check_public_boundary.py` | 0 | PASS |
 | `SOURCE_DATE_EPOCH=<source commit time> uv build` | 0 | PASS, wheel and sdist built |
 
-Artifacts:
+Candidate artifacts built from the source commit under test:
 
 | Artifact | SHA-256 |
 |---|---|
@@ -79,8 +79,8 @@ The first live TLR promotion attempt exposed two current-page variants: canonica
 | RG-MCP-01 | PASS | `params._meta` and direct `arguments._meta` contract tests |
 | RG-MCP-02 | PASS | all six high-level tools, fresh-wheel MCP SDK metadata canary |
 | RG-MCP-03 | PASS | unknown business fields remain rejected |
-| RG-JUD-01 | **BLOCKED** | no policy-approved 8-case real ordinary-court snapshot corpus in the public repo |
-| RG-JUD-02 | PARTIAL | synthetic layout and adversarial role regressions false party-to-court promotions = 0; real corpus not run |
+| RG-JUD-01 | **ACCEPTED LIMITATION** | no policy-approved 8-case real ordinary-court snapshot corpus in the public repo; not executed and not passed |
+| RG-JUD-02 | PARTIAL / ACCEPTED | synthetic layout and adversarial role regressions false party-to-court promotions = 0; real corpus not run |
 | RG-JUD-03 | PASS | partial parsing preserves an official non-eligible source |
 | RG-IDR-01 | PASS | canonical `doc_id` and official-URL fallback promotion tests |
 | RG-IDR-02 | PASS | canonical identifier mismatch blocks promotion |
@@ -118,11 +118,10 @@ The manifest explicitly sets `satisfies_ordinary_court_release_gate=false`. It d
   `QUALIFIED` with an explicit limitation.
 - The public implementation does not perform systematic counter-authority search. The coverage state remains false and final answers require an explicit limitation.
 
-## Not executed or not satisfied
+## Accepted limitation and deferred scope
 
-- Real V0.6.1 ordinary-court fixed corpus: **not executed / blocking** because no approved public-safe fixture path was provided and the repository policy forbids committing real corpus identifiers/content.
+- Real V0.6.1 ordinary-court fixed corpus: **not executed / accepted limitation** because no approved public-safe fixture path was provided and the repository policy forbids committing real corpus identifiers/content.
 - V0.6.2 operation leases/failure recovery and stable source-version identity: **deferred by specification**.
 
-Until the real fixed-corpus governance conflict is resolved, v0.6.1 must not be tagged,
-released, or described as public-preview ready. A non-release branch may be published solely
-for clean-environment engineering validation.
+v0.6.1 may be tagged and released as a `0.x` public preview with this limitation disclosed.
+It must not be described as having passed the real fixed-corpus gate.

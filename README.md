@@ -10,7 +10,7 @@ ALR-TW v0.6.1 是台灣法律研究安全 harness 的 release-blocker repair 版
 
 本 repo 不包含 LLM，也不包含 agent 實作。規劃、工具選擇與自然語言推理由外部呼叫端提供；ALR-TW 只負責可稽核工具與確定性閘門。Repo 內的示範 ranking 參數僅供測試，不是 production ranking 設定。
 
-> v0.6.1 仍是 `0.x` 預覽版本。V0.6.1 release audit 的必要 gates 全部完成前，不應描述為 public-preview ready；任何答案仍須由具資格的人員依官方原文、時點與個案事實複核。
+> v0.6.1 仍是 `0.x` 預覽版本。本版依 V0.6.1 release audit 以已揭露限制發布；任何答案仍須由具資格的人員依官方原文、時點與個案事實複核。
 
 ## Agentic RAG 能力
 

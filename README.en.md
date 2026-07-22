@@ -10,7 +10,7 @@ This project is neither legal advice nor a complete Taiwan legal database.
 
 This repository does not ship an LLM or agent implementation. Planning, tool selection, and natural-language reasoning come from the external caller; ALR-TW supplies auditable tools and deterministic gates. The demo ranking parameters are illustrative test settings, not production ranking configuration.
 
-> v0.6.1 remains a `0.x` preview. It must not be described as public-preview ready until the required V0.6.1 release-audit gates pass. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
+> v0.6.1 remains a `0.x` public preview and is released with the disclosed limitation recorded in the V0.6.1 release audit. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
 
 ## Agentic RAG capabilities
 
