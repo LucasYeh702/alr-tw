@@ -13,6 +13,8 @@
 | `OFFICIAL_SCHEMA_CHANGED` | 官方結構與受支援 schema 不符 |
 | `OFFICIAL_PARSE_ERROR` | 回應存在但無法安全解析 |
 | `OFFICIAL_CONTENT_CONFLICT` | 官方結構化資料與官方頁面內容衝突 |
+| `LEGACY_JUDGMENT_IDENTIFIER_UNRESOLVED` | 五段式舊判決查詢頁未提供可核對的官方識別標記；不得猜測版本尾碼 |
+| `LEGACY_JUDGMENT_IDENTIFIER_AMBIGUOUS` | 六段式請求只取得五段式官方標記，無法唯一驗證版本尾碼 |
 | `TLR_UNAVAILABLE` | TLR timeout、HTTP 或 schema failure |
 | `SEMANTIC_RECALL_DEGRADED` | 外部召回失敗，effective mode 已降為 official-only |
 | `PRIVACY_EXTERNAL_QUERY_BLOCKED` | 查詢為 sensitive／uncertain，禁止送外部 |

@@ -425,7 +425,12 @@ class ProviderObligationExecutor:
                                     else target.candidate.metadata.get("doc_id")
                                 ),
                                 "identity_resolution_method": target.resolution_method,
-                                "resolved_canonical_jid": source.official_identifier,
+                                "resolved_official_identifier": source.official_identifier,
+                                "resolved_canonical_jid": (
+                                    OfficialJudgmentProvider.normalize_jid(
+                                        source.official_identifier or ""
+                                    )
+                                ),
                                 "merged_candidate_ids": list(target.merged_candidate_ids),
                             }
                         }

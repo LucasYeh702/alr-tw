@@ -291,7 +291,7 @@ Choose data mode
 
 ## v0.6.2 發布說明
 
-v0.6.2 在既有安全邊界上補強舊式 `hlExportPDF`、`/EXPORTFILE/ExportToPdf.aspx` 裁判頁、TLR 五段 doc ID 的官方 canonical 補全、官方搜尋結果頁 fallback、今日現行法日期語意與 TLR 候選本地相關性重排；但不宣稱支援所有法院格式、自然語言法規議題規劃、完整語義蘊含或系統性反方裁判搜尋。
+v0.6.2 在既有安全邊界上補強舊式 `hlExportPDF`、`/EXPORTFILE/ExportToPdf.aspx` 裁判頁、TLR 五段 doc ID 的官方識別驗證、官方搜尋結果頁 fallback、今日現行法日期語意與 TLR 候選本地相關性重排。官方頁若只明示相同五段識別碼，會保留為 `legacy_five_part_jid`，不猜補版本尾碼；本版仍不宣稱支援所有法院格式、自然語言法規議題規劃、完整語義蘊含或系統性反方裁判搜尋。
 
 ## 文件
 

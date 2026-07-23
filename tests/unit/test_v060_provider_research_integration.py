@@ -236,6 +236,10 @@ class TlrPromotionJudgmentTransport(JudgmentFlowTransport):
         return JudicialSiteResponse(200, "查無符合條件".encode(), {}, url)
 
 
+class TlrLegacyPromotionJudgmentTransport(TlrPromotionJudgmentTransport):
+    jid = "DEMO,130,測,42,20990102"
+
+
 class TlrFixtureTransport:
     def __init__(self, response: TlrHttpResponse):
         self.response = response
@@ -428,9 +432,10 @@ def _tlr_promotion_service(
     *,
     doc_id: str,
     citation_url: str,
+    judgment_transport: TlrPromotionJudgmentTransport | None = None,
 ) -> tuple[ResearchService, TlrPromotionJudgmentTransport]:
     store = SqliteStore(tmp_path / "cache")
-    judgment_transport = TlrPromotionJudgmentTransport()
+    judgment_transport = judgment_transport or TlrPromotionJudgmentTransport()
     tlr_transport = TlrFixtureTransport(
         TlrHttpResponse(
             200,
@@ -509,6 +514,37 @@ def test_tlr_five_part_doc_id_is_completed_by_official_canonical_page(tmp_path: 
     assert official[0].official_identifier == jid
     assert official[0].metadata["identity_resolution_method"] == "provider_partial_jid"
     assert f"id={quote(partial_jid, safe='')}" in judgments.calls[-1][1]
+
+
+def test_tlr_five_part_doc_id_is_promoted_from_matching_legacy_page(tmp_path: Path) -> None:
+    legacy_transport = TlrLegacyPromotionJudgmentTransport()
+    jid = legacy_transport.jid
+    service, judgments = _tlr_promotion_service(
+        tmp_path,
+        doc_id=jid,
+        citation_url=OfficialJudgmentProvider.official_document_url(jid),
+        judgment_transport=legacy_transport,
+    )
+    run = service.create_run(
+        "合成侵權裁判舉證責任",
+        mode=DataMode.HYBRID_VERIFIED,
+        depth=ResearchDepth.STANDARD,
+    )
+
+    _advance(service, run.run_id)
+    official = [
+        source
+        for source in service.store.list_sources(run.run_id)
+        if source.provider_id == OfficialJudgmentProvider.provider_id
+    ]
+
+    assert len(official) == 1
+    assert official[0].official_identifier == jid
+    assert official[0].metadata["identifier_kind"] == "legacy_five_part_jid"
+    assert official[0].metadata["resolved_official_identifier"] == jid
+    assert official[0].metadata["resolved_canonical_jid"] is None
+    assert official[0].metadata["identity_resolution_method"] == "provider_partial_jid"
+    assert f"id={quote(jid, safe='')}" in judgments.calls[-1][1]
 
 
 def test_tlr_citation_url_jid_is_promoted_when_doc_id_is_opaque(tmp_path: Path) -> None:

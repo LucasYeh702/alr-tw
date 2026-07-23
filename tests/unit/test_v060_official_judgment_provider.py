@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Mapping
 from urllib.parse import quote
 
@@ -16,6 +17,14 @@ from alr_tw.providers.official.judgments import (
 from alr_tw.providers.official.judicial_site import JudicialSiteResponse
 
 JID = "TSTV,130,測,42,20990102,1"
+LEGACY_JID = "TSTV,88,測,1349,20990101"
+LEGACY_FIXTURE = (
+    Path(__file__).parents[1]
+    / "fixtures"
+    / "judgments"
+    / "v062"
+    / "legacy-five-part-detail.html"
+)
 
 
 def _detail_page(jid: str = JID, *, title: str = "臺灣示範地方法院刑事判決") -> str:
@@ -201,6 +210,50 @@ def test_five_part_jid_must_match_official_canonical_prefix() -> None:
     result, source, evidence = asyncio.run(provider.exact_lookup(wrong_partial))
 
     assert result.error_code is ProviderErrorCode.OFFICIAL_IDENTIFIER_MISMATCH
+    assert source is None and evidence == []
+
+
+def test_legacy_five_part_export_identifier_is_officially_verified_without_suffix() -> None:
+    document = LEGACY_FIXTURE.read_text(encoding="utf-8")
+    transport = FixtureSiteTransport([_response(document)])
+    provider = OfficialJudgmentProvider(transport)
+
+    result, source, evidence = asyncio.run(provider.exact_lookup(LEGACY_JID))
+
+    assert result.status is ProviderResultStatus.FOUND
+    assert result.metadata["jid"] == LEGACY_JID
+    assert result.metadata["identifier_kind"] == "legacy_five_part_jid"
+    assert source is not None and source.official_identifier == LEGACY_JID
+    assert source.metadata["identifier_kind"] == "legacy_five_part_jid"
+    assert evidence
+    assert f"id={quote(LEGACY_JID, safe='')}" in transport.calls[0][1]
+    assert f"{quote(LEGACY_JID, safe='')}%2C1" not in transport.calls[0][1]
+
+
+def test_six_part_request_cannot_be_verified_by_five_part_page_identifier() -> None:
+    document = LEGACY_FIXTURE.read_text(encoding="utf-8")
+    provider = OfficialJudgmentProvider(FixtureSiteTransport([_response(document)]))
+
+    result, source, evidence = asyncio.run(provider.exact_lookup(f"{LEGACY_JID},1"))
+
+    assert result.status is ProviderResultStatus.ERROR
+    assert result.error_code is ProviderErrorCode.LEGACY_JUDGMENT_IDENTIFIER_AMBIGUOUS
+    assert result.message == "LEGACY_JUDGMENT_IDENTIFIER_AMBIGUOUS"
+    assert source is None and evidence == []
+
+
+def test_five_part_page_without_official_identifier_has_explicit_legacy_error() -> None:
+    document = LEGACY_FIXTURE.read_text(encoding="utf-8").replace(
+        'id="hlExportPDF"',
+        'id="removedExportPDF"',
+    )
+    provider = OfficialJudgmentProvider(FixtureSiteTransport([_response(document)]))
+
+    result, source, evidence = asyncio.run(provider.exact_lookup(LEGACY_JID))
+
+    assert result.status is ProviderResultStatus.ERROR
+    assert result.error_code is ProviderErrorCode.LEGACY_JUDGMENT_IDENTIFIER_UNRESOLVED
+    assert result.message == "LEGACY_JUDGMENT_IDENTIFIER_UNRESOLVED"
     assert source is None and evidence == []
 
 

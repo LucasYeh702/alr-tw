@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 from urllib.parse import parse_qs, unquote, urlencode, urljoin, urlsplit
 
 from alr_tw.contracts.providers import (
@@ -129,6 +129,12 @@ class JudgmentSearchHit:
     excerpt: str = ""
 
 
+@dataclass(frozen=True)
+class JudgmentPageIdentity:
+    identifier: str
+    kind: Literal["canonical_jid", "legacy_five_part_jid"]
+
+
 class OfficialJudgmentProvider:
     provider_id = "official_judicial_yuan_judgments"
 
@@ -229,6 +235,13 @@ class OfficialJudgmentProvider:
         except ValueError as exc:
             error_codes = {
                 "JID_MISMATCH": ProviderErrorCode.OFFICIAL_IDENTIFIER_MISMATCH,
+                "JUDGMENT_PAGE_IDENTIFIERS_CONFLICT": ProviderErrorCode.OFFICIAL_CONTENT_CONFLICT,
+                "LEGACY_JUDGMENT_IDENTIFIER_UNRESOLVED": (
+                    ProviderErrorCode.LEGACY_JUDGMENT_IDENTIFIER_UNRESOLVED
+                ),
+                "LEGACY_JUDGMENT_IDENTIFIER_AMBIGUOUS": (
+                    ProviderErrorCode.LEGACY_JUDGMENT_IDENTIFIER_AMBIGUOUS
+                ),
                 "JUDGMENT_CONTENT_MISSING": ProviderErrorCode.JUDGMENT_CONTENT_MISSING,
                 "JUDGMENT_TEXT_EMPTY": ProviderErrorCode.JUDGMENT_TEXT_EMPTY,
             }
@@ -246,6 +259,7 @@ class OfficialJudgmentProvider:
                 coverage_complete=True,
                 metadata={
                     "jid": parsed["jid"],
+                    "identifier_kind": parsed["identifier_kind"],
                     "retrieval": "official_website_html",
                     "parse_status": source.metadata.get("parse_status"),
                     "parser_version": source.metadata.get("parser_version"),
@@ -704,16 +718,28 @@ class OfficialJudgmentProvider:
         official_url: str,
     ) -> dict[str, Any]:
         soup = OfficialJudgmentProvider._soup(document)
-        canonical_jid = OfficialJudgmentProvider._canonical_jid_from_detail(soup)
-        if canonical_jid is None:
-            raise ValueError("JUDGMENT_CANONICAL_ID_MISSING")
         expected_canonical = OfficialJudgmentProvider.normalize_jid(expected_jid)
         expected_partial = OfficialJudgmentProvider.normalize_partial_jid(expected_jid)
-        if expected_canonical is not None and canonical_jid != expected_canonical:
+        page_identity = OfficialJudgmentProvider._official_identity_from_detail(soup)
+        if page_identity is None:
+            if expected_partial is not None:
+                raise ValueError("LEGACY_JUDGMENT_IDENTIFIER_UNRESOLVED")
+            raise ValueError("JUDGMENT_CANONICAL_ID_MISSING")
+
+        official_identifier = page_identity.identifier
+        if expected_canonical is not None:
+            if page_identity.kind == "legacy_five_part_jid":
+                if expected_canonical.startswith(f"{official_identifier},"):
+                    raise ValueError("LEGACY_JUDGMENT_IDENTIFIER_AMBIGUOUS")
+                raise ValueError("JID_MISMATCH")
+            if official_identifier != expected_canonical:
+                raise ValueError("JID_MISMATCH")
+        elif expected_partial is None:
             raise ValueError("JID_MISMATCH")
-        if expected_canonical is None and (
-            expected_partial is None or not canonical_jid.startswith(f"{expected_partial},")
-        ):
+        elif page_identity.kind == "legacy_five_part_jid":
+            if official_identifier != expected_partial:
+                raise ValueError("JID_MISMATCH")
+        elif not official_identifier.startswith(f"{expected_partial},"):
             raise ValueError("JID_MISMATCH")
 
         metadata: dict[str, str] = {}
@@ -743,13 +769,17 @@ class OfficialJudgmentProvider:
             blocks = extract_judgment_blocks(content)
             if blocks:
                 break
-        parsed_judgment = parse_judgment_blocks(blocks, canonical_jid=canonical_jid)
+        parsed_judgment = parse_judgment_blocks(
+            blocks,
+            canonical_jid=official_identifier,
+        )
 
-        parts = canonical_jid.split(",")
+        parts = official_identifier.split(",")
         title = metadata.get("裁判字號") or soup.title.get_text(" ", strip=True)
         title = OfficialJudgmentProvider._normalize_inline(title)
         return {
-            "jid": canonical_jid,
+            "jid": official_identifier,
+            "identifier_kind": page_identity.kind,
             "year": parts[1],
             "case": parts[2],
             "number": parts[3],
@@ -772,32 +802,46 @@ class OfficialJudgmentProvider:
         }
 
     @staticmethod
-    def _canonical_jid_from_detail(soup: Any) -> str | None:
+    def _official_identity_from_detail(soup: Any) -> JudgmentPageIdentity | None:
+        identities: list[JudgmentPageIdentity] = []
+
+        def add_identifier(value: str) -> None:
+            canonical = OfficialJudgmentProvider.jid_from_identifier(value)
+            if canonical is not None:
+                identities.append(JudgmentPageIdentity(canonical, "canonical_jid"))
+                return
+            partial = OfficialJudgmentProvider.partial_jid_from_identifier(value)
+            if partial is not None:
+                identities.append(JudgmentPageIdentity(partial, "legacy_five_part_jid"))
+
         legacy = soup.select_one('#hlPrint[href*="printData.aspx"][href*="id="]')
         if legacy is not None:
-            canonical = OfficialJudgmentProvider.jid_from_identifier(
-                str(legacy.get("href"))
-            )
-            if canonical is not None:
-                return canonical
+            add_identifier(str(legacy.get("href")))
 
         legacy_pdf = soup.select_one('#hlExportPDF[href*="id="]')
         if legacy_pdf is not None:
-            canonical = OfficialJudgmentProvider.jid_from_identifier(
-                str(legacy_pdf.get("href"))
-            )
-            if canonical is not None:
-                return canonical
+            add_identifier(str(legacy_pdf.get("href")))
 
         pdf = soup.select_one('#hlExportPDF[href*="jrecno="][href*="tablename="]')
-        if pdf is None:
+        if pdf is not None:
+            query = parse_qs(urlsplit(str(pdf.get("href"))).query)
+            table_name = next(iter(query.get("tablename", [])), "").strip().upper()
+            record_number = next(iter(query.get("jrecno", [])), "").strip()
+            if table_name and record_number:
+                add_identifier(f"{table_name},{record_number}")
+
+        unique = {item.identifier: item for item in identities}
+        if not unique:
             return None
-        query = parse_qs(urlsplit(str(pdf.get("href"))).query)
-        table_name = next(iter(query.get("tablename", [])), "").strip().upper()
-        record_number = next(iter(query.get("jrecno", [])), "").strip()
-        if not table_name or not record_number:
-            return None
-        return OfficialJudgmentProvider.normalize_jid(f"{table_name},{record_number}")
+        canonical = [item for item in unique.values() if item.kind == "canonical_jid"]
+        partial = [item for item in unique.values() if item.kind == "legacy_five_part_jid"]
+        if len(canonical) > 1 or len(partial) > 1:
+            raise ValueError("JUDGMENT_PAGE_IDENTIFIERS_CONFLICT")
+        if canonical and partial:
+            if canonical[0].identifier.startswith(f"{partial[0].identifier},"):
+                return canonical[0]
+            raise ValueError("JUDGMENT_PAGE_IDENTIFIERS_CONFLICT")
+        return canonical[0] if canonical else partial[0]
 
     @staticmethod
     def split_sections(text: str) -> tuple[str, str]:
@@ -853,6 +897,7 @@ class OfficialJudgmentProvider:
                 "decision_date": parsed["date"],
                 "case_cause": parsed["case_cause"],
                 "retrieval": "official_website_html",
+                "identifier_kind": parsed["identifier_kind"],
                 "parse_status": parsed_judgment.parse_status.value,
                 "parser_version": parsed_judgment.parser_version,
                 "eligible_span_count": eligible_span_count,

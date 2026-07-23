@@ -27,7 +27,7 @@ User query
   -> validated | qualified | blocked
 ```
 
-The v0.6.2 surface adds legacy `hlExportPDF` and `/EXPORTFILE/ExportToPdf.aspx` compatibility, official canonical completion for five-part TLR document IDs, direct-result and link-only search fallbacks, current-day legal-time semantics, and bounded local TLR relevance reranking while preserving the existing safety model. The public version does not implement natural-language statutory issue planning or systematic counter-authority search and does not claim semantic entailment.
+The v0.6.2 surface adds legacy `hlExportPDF` and `/EXPORTFILE/ExportToPdf.aspx` compatibility, official identity verification for five-part TLR document IDs, direct-result and link-only search fallbacks, current-day legal-time semantics, and bounded local TLR relevance reranking while preserving the existing safety model. A page that exposes only the same five-part identifier remains explicitly classified as `legacy_five_part_jid`; no version suffix is guessed. The public version does not implement natural-language statutory issue planning or systematic counter-authority search and does not claim semantic entailment.
 
 An external agent may plan research and draft an answer, but it cannot declare a source official, promote a candidate into evidence, or bypass final validation.
 

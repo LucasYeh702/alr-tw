@@ -6,8 +6,8 @@
 
 ## v0.6.2 修正重點
 
-- 舊式 `hlExportPDF?type=JD&id=...` 與 `/EXPORTFILE/ExportToPdf.aspx?type=JD&id=...` 頁面可解析 canonical JID，且仍執行 exact JID mismatch 阻擋
-- TLR 五段 doc ID 會原樣回查司法院，僅接受官方頁面回傳且前五段一致的六段 canonical JID，不猜補版本序號
+- 舊式 `hlExportPDF?type=JD&id=...` 與 `/EXPORTFILE/ExportToPdf.aspx?type=JD&id=...` 頁面可解析六段 canonical JID 或五段 legacy ID，且仍執行 exact identifier mismatch 阻擋
+- TLR 五段 doc ID 會原樣回查司法院；頁面若提供六段 canonical JID，只接受前五段完全一致的唯一結果；頁面若只有相同五段 ID，則明確保留為 `legacy_five_part_jid`，不猜補版本序號
 - 官方搜尋支援 POST 直接回傳結果清單，以及只有結果連結、沒有 iframe 的頁面變體
 - `as_of_date` 等於查詢當日時按現行法處理，不再誤標成歷史法規版本問題
 - TLR 候選加入有輸入上限的本地相關性重排與民刑事衝突降權；結果仍為 candidate-only

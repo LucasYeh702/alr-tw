@@ -2,7 +2,7 @@
 
 ALR-TW v0.6.2 以 clean-room adapter（淨室轉接器）接入 [TLR（Taiwan Legal RAG）公開專案](https://github.com/aa0101181514/tw-legal-rag)的 HTTP API。實作只依公開 OpenAPI 行為撰寫；未複製 TLR 或其他參考專案的程式碼。
 
-TLR 回傳的 `doc_id`、`citation_url`、正式字號與 rank 會被正規化為 typed candidate identity。Candidate 先排序、依 canonical JID 去重，再由 ALR-TW 直接回查司法院官方全文；頁面 canonical JID 不一致時以 `CANDIDATE_OFFICIAL_ID_MISMATCH` 阻擋。TLR snippet 本身始終不可作 claim-support evidence。
+TLR 回傳的 `doc_id`、`citation_url`、正式字號與 rank 會被正規化為 typed candidate identity。Candidate 先排序、依可得的 canonical JID 去重，再由 ALR-TW 直接回查司法院官方全文；頁面識別碼不一致時以 `CANDIDATE_OFFICIAL_ID_MISMATCH` 阻擋。五段候選只有在官方頁明示相同五段 ID，或唯一提供前五段相符的六段 canonical JID 時，才能升格；TLR snippet 本身始終不可作 claim-support evidence。
 
 ## 角色與資料流
 

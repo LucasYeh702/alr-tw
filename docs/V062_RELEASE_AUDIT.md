@@ -1,6 +1,6 @@
 # ALR-TW v0.6.2 Release Audit
 
-Audit date: 2026-07-22 (Asia/Taipei)
+Audit date: 2026-07-23 (Asia/Taipei)
 
 Release decision: **IMPLEMENTATION VERIFIED; NOT YET TAGGED OR PUBLISHED**
 
@@ -13,8 +13,9 @@ state machine.
 The audited changes are:
 
 - legacy Judicial Yuan `hlExportPDF?type=JD&id=...` and
-  `/EXPORTFILE/ExportToPdf.aspx?type=JD&id=...` canonical JID extraction;
-- official canonical completion for five-part TLR document IDs;
+  `/EXPORTFILE/ExportToPdf.aspx?type=JD&id=...` identity extraction;
+- official canonical completion or explicit legacy verification for five-part TLR
+  document IDs;
 - direct-result and link-only official search page fallbacks;
 - current-day `as_of_date` handling;
 - bounded local TLR relevance reranking before official verification;
@@ -22,9 +23,15 @@ The audited changes are:
 
 ## Safety invariants
 
-- The requested JID must still match the canonical JID recovered from the official page.
-- A five-part document ID is never completed by guessing a version suffix. The official
-  page must return a valid six-part canonical JID whose first five parts match exactly.
+- The requested identifier must still match the identifier recovered from the official
+  page.
+- A five-part document ID is never completed by guessing a version suffix. A valid
+  six-part canonical JID is accepted only when its first five parts match exactly; a
+  legacy page that only exposes the same five-part identifier remains explicitly typed
+  as `legacy_five_part_jid`.
+- A six-part request cannot be verified by a five-part page marker. This fails closed as
+  `LEGACY_JUDGMENT_IDENTIFIER_AMBIGUOUS`; a five-part page without a verifiable marker
+  fails as `LEGACY_JUDGMENT_IDENTIFIER_UNRESOLVED`.
 - A TLR result remains an external candidate and cannot support a claim before successful
   Judicial Yuan exact lookup and evidence promotion.
 - Reranking only changes which candidates consume the five-target verification budget.
@@ -36,8 +43,8 @@ The audited changes are:
 
 | Gate | Result |
 |---|---:|
-| Targeted v0.6.2 and release-hardening tests | 96 passed |
-| Full pytest suite | 289 passed |
+| Legacy-ID provider, integration, and resolver tests | 47 passed |
+| Full pytest suite | 293 passed |
 | Ruff | passed |
 | mypy (`src`, 92 source files) | passed |
 | Forbidden-file scan | passed |
@@ -53,6 +60,12 @@ The public query `試用期間 解僱 資遣費`, constrained to civil cases, re
 official candidates on 2026-07-22. All five completed official exact lookup and evidence
 promotion successfully in approximately 3.2 seconds.
 
+On 2026-07-23, two reported public legacy pages whose only machine-readable identity was
+the same five-part `/EXPORTFILE/ExportToPdf.aspx` marker both completed exact lookup as
+`legacy_five_part_jid`. The probe persisted neither judgment text nor real identifiers.
+The committed regression fixture preserves that observed DOM shape with a synthetic ID
+and synthetic content.
+
 This is a point-in-time canary, not a claim that Judicial Yuan HTML, WAF behavior, or
 recall will remain stable.
 
@@ -60,8 +73,8 @@ recall will remain stable.
 
 | Artifact | SHA-256 |
 |---|---|
-| `alr_tw-0.6.2-py3-none-any.whl` | `0858fb20a7e9213a969de29bad86c73206b9f939cec7b18d9fb21fce8721663d` |
-| `alr_tw-0.6.2.tar.gz` | `caa442e699238a5c10bbf8b74fc084313d2bd869a542ea3982b7aebf2359a625` |
+| `alr_tw-0.6.2-py3-none-any.whl` | `5ec46c80da0e487d78d8d44195b25ec4463989c458374ed86f50be0b571dcb7d` |
+| `alr_tw-0.6.2.tar.gz` | `d55f93bf09a911736a21b0d50508124a3ee46ea786e0376dba9218a958675a31` |
 
 ## Remaining disclosed limitations
 
