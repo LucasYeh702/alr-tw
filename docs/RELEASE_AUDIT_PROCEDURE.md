@@ -1,4 +1,4 @@
-# v0.6 公開版發布審核規程
+# v0.6.x 公開版發布審核規程
 
 原則：fail closed。程式 regression、公開邊界、build artifact 或 live dependency 狀態必須分開記錄；外部服務暫時不可用不應被掩飾，也不應直接誤判為程式 regression。
 
@@ -27,14 +27,15 @@ uv run pytest -q
 ## C. Packaging 與 base-install smoke
 
 ```bash
+VERSION=0.6.2
 uv build
-python -m zipfile -l dist/alr_tw-0.6.0-py3-none-any.whl
+python -m zipfile -l "dist/alr_tw-${VERSION}-py3-none-any.whl"
 ```
 
 在新的 virtual environment 安裝 wheel：
 
 - base install 不應強迫安裝 browser 或 live provider dependencies；
-- `python -c 'import alr_tw, tw_legal_rag_mcp'` 成功且版本為 `0.6.0`；
+- `python -c 'import alr_tw, tw_legal_rag_mcp'` 成功且版本與 `VERSION` 一致；
 - `alr-tw doctor` 在 synthetic default 成功；
 - synthetic MCP initialize／tools/list 成功；
 - live extra 可安裝，沒有把秘密包進 artifact。
@@ -46,7 +47,7 @@ python -m zipfile -l dist/alr_tw-0.6.0-py3-none-any.whl
 - current protocol `2025-11-25`；
 - legacy supported protocol `2024-11-05`；
 - unsupported protocol fail closed；
-- tools/list 包含六個 v0.6 高階 tools；
+- tools/list 包含六個 v0.6 MCP tools；
 - synthetic run 可推進到 ready-for-draft，沒有 evidence 時 final validation blocked 且 answer body 為 null；
 - MCP purge 與 CLI purge parity。
 

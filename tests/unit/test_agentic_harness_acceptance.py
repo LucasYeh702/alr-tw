@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import alr_tw
+
 from alr_tw.harness.execution_graph import StepKind, graph_as_dict
 from alr_tw.harness.orchestrator import run_agentic_demo
 from tw_legal_rag_mcp.mcp_server.server import tool_definitions
@@ -75,7 +77,7 @@ def test_agentic_harness_name_is_backed_by_graph_tools_and_scenarios():
 def test_acceptance_doc_states_current_claim_boundary():
     text = Path("docs/AGENTIC_HARNESS_ACCEPTANCE.md").read_text(encoding="utf-8")
 
-    assert "v0.6.0" in text
+    assert f"v{alr_tw.__version__}" in text
     assert "server-owned research state" in text
     assert "TLR candidate-only recall" in text
     assert "外部 agent 不能注入正式證據" in text

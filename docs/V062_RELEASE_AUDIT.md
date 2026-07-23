@@ -2,7 +2,7 @@
 
 Audit date: 2026-07-23 (Asia/Taipei)
 
-Release decision: **IMPLEMENTATION VERIFIED; NOT YET TAGGED OR PUBLISHED**
+Release decision: **ACCEPTED FOR v0.6.2 PUBLIC PREVIEW**
 
 ## Scope
 
@@ -73,8 +73,8 @@ recall will remain stable.
 
 | Artifact | SHA-256 |
 |---|---|
-| `alr_tw-0.6.2-py3-none-any.whl` | `5ec46c80da0e487d78d8d44195b25ec4463989c458374ed86f50be0b571dcb7d` |
-| `alr_tw-0.6.2.tar.gz` | `d55f93bf09a911736a21b0d50508124a3ee46ea786e0376dba9218a958675a31` |
+| `alr_tw-0.6.2-py3-none-any.whl` | `3a393d6d203905a78df053fd23fbc79275b0cf26558387070413328194fd4384` |
+| `alr_tw-0.6.2.tar.gz` | `4bdd59434f23b201bc0385222209fbfb2a43398890da0ea672f5720cf449a02c` |
 
 ## Remaining disclosed limitations
 

@@ -1,6 +1,6 @@
 # Storage and Purge
 
-ALR-TW v0.6.0 使用單一 managed SQLite store（受管理 SQLite 儲存）保存短期研究狀態。預設位置是 `~/.cache/alr-tw/alr_tw_storage.sqlite3`，可用 `ALR_TW_STORAGE_PATH` 改寫。
+ALR-TW v0.6.2 使用單一 managed SQLite store（受管理 SQLite 儲存）保存短期研究狀態。預設位置是 `~/.cache/alr-tw/alr_tw_storage.sqlite3`，可用 `ALR_TW_STORAGE_PATH` 改寫。
 
 ## 保存內容
 
