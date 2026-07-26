@@ -12,7 +12,7 @@ semantic entailment, systematic counter-authority search, or a production SLA.
 - tag: `v0.7.0`
 - public branch: `main`
 - data boundary: contracts, validators, official-provider interfaces, and
-  synthetic fixtures only; no private Legal Portal runtime or production corpus
+  synthetic fixtures only; no production corpus or non-public operational state
 - optional recall: TLR remains `external_semantic_recall` and candidate-only;
   official evidence still requires Judicial Yuan verification
 

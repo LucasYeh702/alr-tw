@@ -8,10 +8,10 @@ TLR candidate-only recall, official evidence promotion, claim validation,
 short-lived storage, and purge while allowing an arbitrary external reasoning
 client to propose legal issues and authority locators.
 
-The private Legal Portal is the upstream incubator and internal
-production/reference implementation. ALR-TW is its independently implemented
-public-safe contract and validator extraction, not a parallel full deployment
-and not a reduced corpus. The public package has no private runtime dependency.
+The public package is an independently implemented, public-safe contract and
+validator runtime. It is agent-neutral and provider-neutral, and has no
+dependency on non-public deployment paths, corpora, indexes, manifests, or
+operational state.
 
 ## Required invariants
 

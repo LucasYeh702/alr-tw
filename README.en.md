@@ -34,50 +34,7 @@ The v0.7.0 surface provides legacy `hlExportPDF` and `/EXPORTFILE/ExportToPdf.as
 
 An external agent may plan research and draft an answer, but it cannot declare a source official, promote a candidate into evidence, or bypass final validation.
 
-## v0.7.0 agent-neutral verification runtime
-
-v0.7.0 narrows ALR-TW into an agent-neutral Taiwan-law research verification
-runtime. Any MCP client may perform issue identification, element analysis, and
-subsumption; ALR-TW remains independent of a particular agent project and owns
-capability negotiation, research state, official verification, evidence
-promotion, and the final decision.
-
-The product lineage is a one-way extraction, not a pair of parallel products:
-
-```text
-maintainer private Legal Portal
-  (upstream incubator + production/reference implementation)
-        |
-        | contract-first public-safe extraction only
-        v
-ALR-TW
-  (public contracts + validators + synthetic fixtures)
-        ^
-        | optional JSON/MCP integration
-external reasoning clients
-```
-
-ALR-TW is neither a parallel complete deployment nor a data-reduced copy of the
-private Legal Portal. The private runtime is an upstream incubator and internal
-reference implementation. ALR-TW has no runtime dependency on its repository,
-paths, corpus, indexes, manifests, or production parameters. Public users may
-connect their own providers through provider-neutral contracts.
-
-The development `client_assisted` mode accepts a structured issue and authority
-locator plan. Every locator remains an untrusted candidate; a client cannot
-submit evidence or an `official` trust decision. See the
-[agent-neutral interoperability contract](docs/INTEROPERABILITY_CONTRACT.md).
-
-The v0.7.0 P0 surface also provides `alr-tw.civil-law-analysis/v1` and
-`validate_civil_analysis` for claims, elements, element-level burdens,
-defenses, counter-authority, procedural posture, legal effects, and
-fact/evidence states. It performs structural and trust validation, not semantic
-entailment.
-The development tree adds `get_legal_research_capabilities`,
-`submit_legal_research_plan`, and `validate_civil_analysis`; existing
-server-owned tools remain compatible.
-
-### Optional external integration examples
+## Optional external integration examples
 
 These are non-normative examples, not ALR-TW distribution components:
 
@@ -85,8 +42,8 @@ These are non-normative examples, not ALR-TW distribution components:
 |---|---|---|
 | [TLR (Taiwan Legal RAG)](https://github.com/aa0101181514/tw-legal-rag) | Semantic candidate recall for ordinary judgments | Already supported through `hybrid_verified`; every result remains candidate-only until ALR-TW verifies Judicial Yuan official full text |
 
-If a frontend has already called TLR, that run should use `client_assisted` and
-submit the selected judgment locators so ALR-TW does not repeat the same recall.
+If a frontend has already called TLR, that run should submit the selected
+judgment locators so ALR-TW does not repeat the same recall.
 Listing an example does not make either project a core dependency, co-distributed
 component, or trusted evidence source. Each project retains independent code,
 versions, configuration, and licensing.
@@ -230,13 +187,11 @@ Start in the safe `synthetic` mode to verify that the client can launch the MCP 
 }
 ```
 
-The client should negotiate capabilities, create a run, register a plan when
-required by the discovery mode, and follow `next_operation`. A structured civil
-analysis should pass `validate_civil_analysis`, whose result never authorizes a
-final answer. Draft only from promoted server-owned evidence, then call
-`validate_legal_answer`. Only a final-answer `validated` result, or a
-`qualified` result allowed by disclosure rules, may be rendered.
-`lookup_legal_source` does not replace answer-level validation.
+The client should create a run, follow `next_operation`, and draft only from
+promoted server-owned evidence before calling `validate_legal_answer`. Only a
+final-answer `validated` result, or a `qualified` result allowed by disclosure
+rules, may be rendered. `lookup_legal_source` does not replace answer-level
+validation.
 
 ## Development verification
 

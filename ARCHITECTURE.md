@@ -2,10 +2,9 @@
 
 ALR-TW v0.7.0 將「agent 決定如何推理」與「server 決定何者可信」分開。外部 agent 可以提出查詢、逐步呼叫工具、提交爭點與法源 locator 並起草答案，但不能注入正式證據或跳過 obligations。v0.7.0 將這條邊界做成 agent-neutral interoperability contract，不依賴特定前端專案。
 
-ALR-TW 的上游是 maintainer 私人的 Legal Portal 孵化場與
-production/reference implementation。兩者不是平行完整產品：公開版只以
-contract-first 方式獨立萃取可公開的 contracts、validators、synthetic
-fixtures 與 boundary tests，不依賴私人 repo、資料或運維狀態。
+ALR-TW 是獨立的、前端無關且 provider-neutral 的公開法律研究驗證 harness，
+以 contract-first 方式提供可公開的 contracts、validators、synthetic fixtures
+與 boundary tests。它不綁定特定 agent、資料 provider 或部署環境。
 
 ```text
 MCP client / external agent

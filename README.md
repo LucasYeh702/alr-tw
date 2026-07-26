@@ -45,46 +45,7 @@ v0.7.0 提供的主要能力包括：
 - resumable run：研究義務、候選、證據及 tool events 可在短期 SQLite 中恢復；
 - deterministic finalization：最終是否可呈現由 server 規則決定，不由模型自行宣告。
 
-## v0.7.0 agent-neutral verification runtime
-
-v0.7.0 將 ALR-TW 收斂為前端無關的台灣法律研究驗證 runtime。任何 MCP
-client 都可以負責爭點、構成要件與涵攝；ALR-TW 不綁定特定 agent 專案，
-只固定能力協商、研究狀態、官方回查、證據升格與 final decision。
-
-產品關係採單向萃取，而非平行產品部署：
-
-```text
-maintainer private Legal Portal
-  (upstream incubator + production/reference implementation)
-        |
-        | contract-first public-safe extraction only
-        v
-ALR-TW
-  (public contracts + validators + synthetic fixtures)
-        ^
-        | optional JSON/MCP integration
-external reasoning clients
-```
-
-ALR-TW 不是另一套與私人 Legal Portal 平行的完整產品，也不是其資料庫的
-縮小版。私人 runtime 只作上游孵化與內部 reference implementation；
-ALR-TW 不依賴其 repo、路徑、資料、索引、manifest 或 production 參數。
-公開使用者可依 provider-neutral contract 接入自己的資料 provider。
-
-開發中的 `client_assisted` 模式允許前端提交結構化 issue／authority
-locator plan；所有 locator 仍是未受信任候選，不能提交 evidence 或
-`official` 判斷。詳見
-[Agent-neutral interoperability contract](docs/INTEROPERABILITY_CONTRACT.md)。
-
-v0.7.0 P0 另提供 `alr-tw.civil-law-analysis/v1` 與
-`validate_civil_analysis`：明示 claims、elements、逐要件舉證責任、
-defenses、counter-authority、procedural posture、法律效果及事實／證據
-狀態。這是 structural and trust validation，不是 semantic entailment。
-開發樹新增的 MCP 介面是 `get_legal_research_capabilities`、
-`submit_legal_research_plan` 與 `validate_civil_analysis`；既有
-server-owned tools 維持相容。
-
-### 可選外部整合範例
+## 可選外部整合範例
 
 下列專案只是非規範性整合範例，不是 ALR-TW 發布內容：
 
@@ -92,8 +53,8 @@ server-owned tools 維持相容。
 |---|---|---|
 | [TLR（Taiwan Legal RAG）](https://github.com/aa0101181514/tw-legal-rag) | 普通裁判的語意候選召回 | 已可由 `hybrid_verified` 模式使用；結果固定為 candidate-only，仍須由 ALR-TW 回查司法院官方全文 |
 
-如果前端已自行呼叫 TLR，該次 run 應使用 `client_assisted` 並提交選定的
-裁判 locator，避免再由 ALR-TW 執行一次相同召回。列為範例不代表外部
+如果前端已自行呼叫 TLR，該次 run 應提交選定的裁判 locator，避免再由
+ALR-TW 執行一次相同召回。列為範例不代表外部
 專案成為核心依賴、共同發布物或可信證據來源；各專案仍維持獨立程式碼、
 版本、設定與授權。
 
@@ -259,16 +220,13 @@ CLI 與 MCP 共用同一 purge 實作。清除本機資料無法撤回已傳送�
 
 建議的 agent 呼叫順序：
 
-1. `get_legal_research_capabilities` 協商目前可用能力；
-2. `research_legal_question` 建立 run；
-3. `client_assisted` run 先登錄 research plan；
-4. 按 `next_operation` 呼叫 `continue_legal_research`；
-5. 必要時用 `get_legal_research_state` 唯讀恢復狀態；
-6. 若有結構化民事分析，先呼叫 `validate_civil_analysis`；此結果不等於 final answer；
-7. 外部 agent 只依 run 中已升格的 evidence 起草；
-8. 以 `claim_bindings` 將每個核心主張綁到同一 run 的 evidence ID，再送進 `validate_legal_answer`；
-9. 只有 final-answer `validated` 或規則允許的 `qualified` 才可呈現；
-10. 依 retention policy 清除 run。
+1. `research_legal_question` 建立 run；
+2. 按 `next_operation` 呼叫 `continue_legal_research`；
+3. 必要時用 `get_legal_research_state` 唯讀恢復狀態；
+4. 外部 agent 只依 run 中已升格的 evidence 起草；
+5. 以 `claim_bindings` 將每個核心主張綁到同一 run 的 evidence ID，再送進 `validate_legal_answer`；
+6. 只有 final-answer `validated` 或規則允許的 `qualified` 才可呈現；
+7. 依 retention policy 清除 run。
 
 若只需要核對一個精確法源，可使用 `lookup_legal_source`，但不能跳過答案層級的 `validate_legal_answer`。
 

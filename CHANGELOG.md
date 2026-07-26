@@ -18,7 +18,7 @@
   synthetic-only context provider；
 - `validate_civil_analysis` MCP tool 與 validated／qualified／blocked
   synthetic end-to-end fixtures；
-- public-boundary lint 對私人 runtime dependency、production state、
+- public-boundary lint 對未公開 runtime dependency、production state、
   calibration 與 gold-label artifacts 的阻擋。
 
 ### Safety
@@ -33,8 +33,8 @@
 - `met` element 必須綁 server-owned normative source 以及 fact 或 eligible
   evidence；
 - `not_found_in_scope` 不得表示不存在反面見解；
-- private Legal Portal 只作 upstream incubator／reference implementation，
-  不是公開 package 的 runtime dependency。
+- 公開 package 不依賴未公開部署、production corpus、索引、manifest 或
+  operational state。
 
 ### Release status
 

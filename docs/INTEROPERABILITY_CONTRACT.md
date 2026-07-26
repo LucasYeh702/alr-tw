@@ -4,25 +4,13 @@
 agent、prompt skill、workflow engine 或人工控制程式都可以使用同一套契約；
 核心程式不依賴特定前端專案、模型或提示詞。
 
-## Product lineage
+## Public scope
 
-The maintainer's private Legal Portal is the upstream incubator and
-production/reference implementation. ALR-TW is a contract-first, public-safe
-extraction of reusable trust invariants; it is not a parallel full product and
-not a smaller copy of the private corpus.
-
-The extraction direction is one-way:
-
-```text
-private upstream incubator
-  -> public-safe contracts / validators / synthetic fixtures
-  -> optional external reasoning clients
-```
-
-The public package must not import or require the private runtime. It contains
-no private paths, corpus, indexes, manifests, production parameters, operational
-state, or private evaluation labels. A user supplies a conforming provider
-through public contracts.
+ALR-TW is a contract-first, public-safe, agent-neutral and provider-neutral
+runtime. It contains public contracts, validators, synthetic fixtures and
+trust-boundary tests only; it does not ship production corpus, private paths,
+indexes, manifests, operational state, or private evaluation labels. A user
+supplies a conforming provider through these public contracts.
 
 ## Responsibility boundary
 

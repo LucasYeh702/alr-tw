@@ -1,11 +1,12 @@
 # Deployment Starting Points
 
 This document gives generic, illustrative starting points for connecting
-ALR-TW to a real deployment. These are not production settings, not private
-runtime parameters, and not recommendations to copy without measurement.
+ALR-TW to a real deployment. These are not production settings or
+deployment-specific parameters, and are not recommendations to copy without
+measurement.
 
 The values below are public engineering magnitudes only. They do not describe
-any private runtime, corpus, holdout set, or tuned production configuration.
+any production corpus, holdout set, or tuned deployment configuration.
 
 ## Retrieval Shape
 

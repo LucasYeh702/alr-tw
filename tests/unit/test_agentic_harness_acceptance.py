@@ -88,8 +88,8 @@ def test_acceptance_doc_states_current_claim_boundary():
     assert "production SLA" in text
     assert "agent-neutral" in text
     assert "untrusted_client_proposal" in text
-    assert "upstream incubator" in text
-    assert "no private runtime dependency" in text
+    assert "provider-neutral" in text
+    assert "non-public deployment paths" in text
     assert "validate_civil_analysis" in text
     assert "not production legal correctness" in text
 
@@ -108,3 +108,7 @@ def test_v070_optional_external_integrations_are_documented_consistently():
         assert required_link in text, f"{path}: {required_link}"
         assert "client_assisted" in text, path
         assert "optional" in text.lower() or "可選" in text, path
+
+    interop_text = Path("docs/INTEROPERABILITY_CONTRACT.md").read_text(encoding="utf-8")
+    assert "client_assisted" in interop_text
+    assert "validate_civil_analysis" in interop_text

@@ -80,4 +80,4 @@ interfaces and must not be advertised as the v0.6 live evidence path.
 The v0.6 public repository may contain contracts, provider code, synthetic
 fixtures and public-safe parser fixtures. It must not contain production legal
 corpora, TLR credentials, private indexes, real user queries, private deployment
-paths or Legal Portal internals.
+paths or non-public implementation internals.

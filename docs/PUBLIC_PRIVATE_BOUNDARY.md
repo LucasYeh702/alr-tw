@@ -1,19 +1,11 @@
 # Public / Private Boundary
 
-## v0.7.0 product lineage
-
-The maintainer's private Legal Portal is the upstream incubator and
-production/reference implementation. ALR-TW is the public-safe extraction of
-provider contracts, stateless validators, deterministic trust rules, synthetic
-fixtures, and boundary tests.
-
-ALR-TW is not a second parallel full product and is not a reduced-data edition
-of the private runtime. The private implementation may incubate concepts, but
-the public package is independently implemented against documented contracts.
-It has no runtime import, package dependency, filesystem path, corpus, index,
-manifest, or operational dependency on the private implementation.
-
 ## v0.7.0 public boundary
+
+ALR-TW is an independent, public-safe provider-neutral harness. The public
+package contains provider contracts, stateless validators, deterministic trust
+rules, synthetic fixtures, and boundary tests only. It has no dependency on
+non-public deployment paths, corpora, indexes, manifests, or operational state.
 
 公開 repo 現在包含真實官方端點的有界 provider code 與 clean-room TLR adapter，但不包含下載後的 production corpus、永久 cache、token 或真實查詢。Live provider 在 operator 明確選擇模式後才執行；`synthetic` 仍是唯一 implicit default。
 

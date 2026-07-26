@@ -2,11 +2,9 @@
 
 ## v0.7.0 agent-neutral contract
 
-The maintainer's private Legal Portal is the upstream incubator and internal
-production/reference implementation. ALR-TW is a one-way, independently
-implemented public-safe extraction of contracts and invariants. It is not a
-parallel complete product, and no private runtime artifact is a public package
-dependency.
+ALR-TW is an independently implemented, public-safe contract and validator
+runtime. It is agent-neutral and provider-neutral; no non-public deployment
+artifact, corpus, index, manifest, or operational state is a package dependency.
 
 The v0.7.0 contract adds an optional untrusted planning boundary:
 

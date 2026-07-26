@@ -3,9 +3,8 @@
 ## Current release: v0.7.0
 
 v0.7.0 是 agent-neutral、provider-neutral 的台灣法律研究驗證 runtime。
-私人 Legal Portal 只作上游孵化場與 production/reference implementation；
-ALR-TW 是 contract-first、public-safe 的獨立萃取，不是平行完整產品，也不
-依賴私人 runtime 的資料、索引、manifest 或 production 參數。
+ALR-TW 是獨立的、contract-first、public-safe 公開法律研究驗證 harness，
+不綁定特定 agent、資料 provider 或部署環境。
 
 目前公開能力：
 
@@ -27,7 +26,7 @@ ALR-TW 是 contract-first、public-safe 的獨立萃取，不是平行完整產�
 - 官方法規、司法院裁判與憲法法庭 provider，含舊式裁判頁、五段 legacy JID、
   搜尋 fallback 與現行法日期語意處理；
 - synthetic validated／qualified／blocked end-to-end fixtures；
-- public-boundary lint 禁止私人 runtime dependency、production data、operator
+- public-boundary lint 禁止未公開 runtime dependency、production data、operator
   state、private manifests、ranking calibration 與 gold labels。
 
 ## 已知限制
