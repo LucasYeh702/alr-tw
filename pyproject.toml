@@ -22,7 +22,7 @@ tw-legal-rag-mcp = "tw_legal_rag_mcp.mcp_server.server:main"
 [project.optional-dependencies]
 dev = [
   "pytest>=8",
-  "ruff>=0.5",
+  "ruff==0.15.19",
   "mypy>=1.10",
 ]
 mcp = [
