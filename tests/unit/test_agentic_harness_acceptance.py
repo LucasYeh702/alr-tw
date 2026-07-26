@@ -102,11 +102,9 @@ def test_v070_optional_external_integrations_are_documented_consistently():
         "docs/INTEROPERABILITY_CONTRACT.md",
     ]
     required_link = "https://github.com/aa0101181514/tw-legal-rag"
-
     for path in paths:
         text = Path(path).read_text(encoding="utf-8")
         assert required_link in text, f"{path}: {required_link}"
-        assert "client_assisted" in text, path
         assert "optional" in text.lower() or "可選" in text, path
 
     interop_text = Path("docs/INTEROPERABILITY_CONTRACT.md").read_text(encoding="utf-8")

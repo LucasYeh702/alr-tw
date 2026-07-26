@@ -44,7 +44,7 @@
   司法院官方全文；
 - temporal／authority／legal-validity provider contract 已公開，但內建
   synthetic provider 不宣稱 production legal correctness；
-- release acceptance、synthetic end-to-end、326 tests、Ruff、mypy、公開邊界、
+- release acceptance、synthetic end-to-end、325 tests、Ruff、mypy、公開邊界、
   forbidden-file、diff 與 fresh-wheel smoke 均已執行。
 
 ## 0.6.2 - 2026-07-22

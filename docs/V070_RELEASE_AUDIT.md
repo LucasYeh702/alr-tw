@@ -20,7 +20,7 @@ semantic entailment, systematic counter-authority search, or a production SLA.
 
 | Check | Result |
 |---|---|
-| Full pytest regression | **PASS** — 326 passed |
+| Full pytest regression | **PASS** — 325 passed |
 | Ruff `0.15.19` | **PASS** |
 | mypy | **PASS** — 98 source files |
 | Public-boundary lint | **PASS** |

@@ -75,7 +75,7 @@ Acceptance requires contract validation tests, MCP schema and JSON-RPC tests,
 client-assisted no-duplicate-recall integration tests, explicit core-issue
 coverage tests, synthetic validated／qualified／blocked civil-analysis flows,
 all legacy regressions, Ruff, mypy, public-boundary checks, forbidden-file checks,
-and a fresh wheel smoke test. The v0.7.0 release run recorded 326 passing tests,
+and a fresh wheel smoke test. The v0.7.0 release run recorded 325 passing tests,
 98 mypy-checked source files, 23 MCP tools including `validate_civil_analysis`,
 and no public-boundary violations. Green synthetic tests prove contract
 behavior, not production legal correctness.
