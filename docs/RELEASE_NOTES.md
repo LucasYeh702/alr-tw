@@ -1,70 +1,48 @@
-# ALR-TW v0.7.0
+# ALR-TW v0.7.0 版本說明
 
-v0.7.0 是台灣法律 Agentic RAG／MCP research safety harness 的
-agent-neutral public preview。外部 agent／LLM 負責爭點辨識、構成要件、初步
-涵攝與擬稿；ALR-TW 在 server 端管理研究狀態、官方來源、證據升格、法律
-結構驗證、引用驗證與答案是否可呈現。
+v0.7.0 將 ALR-TW 更新為前端無關、provider-neutral 的台灣法律研究驗證
+harness。以下只列本版新增與調整的能力。
 
-架構採台灣大陸法系角度：法規與法律時點優先，普通裁判依審級及段落角色
-處理，憲法法庭多數意見與個別意見分離。ALR-TW 不是法律意見服務，也不以
-外部檢索結果取代官方法源。
+## 研究流程與 MCP
 
-## v0.7.0 能力
+- 新增能力協商工具 `get_legal_research_capabilities`；
+- 新增研究計畫與法源 locator 契約，支援 `server_managed` 與
+  `client_assisted` discovery mode；
+- 新增 `submit_legal_research_plan`，外部計畫、locator 與信任判斷維持
+  untrusted client proposal；
+- 新增 `validate_civil_analysis`，將外部民事法律分析交由 server 驗證；
+- `claim_bindings` 支援 issue-level coverage，核心爭點可與最終主張明確關聯；
+- 既有 server-owned research tools 維持相容。
 
-- agent-neutral interoperability：前端先協商能力，再以
-  `server_managed` 或 `client_assisted` 建立研究流程；
-- `ResearchPlanProposal`、法律爭點與 authority locator 採 provider-neutral
-  contract，client 提案永遠是 `untrusted_client_proposal`；
-- `CivilLawAnalysis` 公開 envelope，涵蓋 claims、elements、defenses、
-  counter-authority、procedural posture、法律效果與 fact/evidence states；
-- 逐要件舉證責任紀錄，`met` element 必須綁 server-owned normative source
-  以及 fact 或 eligible evidence；
-- temporal／authority／legal-validity provider contracts 與 fail-closed
-  `validate_civil_analysis`；它是結構／信任驗證，不是 semantic entailment；
-- 官方法規、司法院普通裁判與憲法法庭 provider；普通裁判直接解析司法院
-  搜尋頁與全文頁，不需要司法院 API token；
-- TLR clean-room adapter：在 `hybrid_verified` 提供普通裁判 candidate-only
-  recall，所有候選仍須回查司法院官方全文；
-- 舊式 `hlExportPDF`、`/EXPORTFILE/ExportToPdf.aspx`、五段 legacy JID、搜尋
-  fallback、現行法日期語意與 bounded local reranking；不猜補版本尾碼；
-- server-owned research state、短期 SQLite、TTL、ephemeral run、同步 purge、
-  deterministic grounding 與 output privacy；
-- validated／qualified／blocked final decision，blocked 不回傳 answer body；
-- public-boundary lint、synthetic fixtures 與完整契約測試。
+## 台灣大陸法系法律分析契約
 
-## 可選外部服務
+- 新增 `CivilLawAnalysis` envelope，統一描述 claims、elements、defenses、
+  counter-authority 與 procedural posture；
+- 新增法律效果分類：`right_constituting`、`right_impeding`、
+  `right_extinguishing`、`defense`、`liability_reduction`、
+  `remedy_calculation`；
+- 新增逐要件舉證責任欄位，涵蓋 burden bearer、presumption、burden shift、
+  standard of proof 與 rebuttal status；
+- 新增 fact／evidence 狀態：`alleged`、`admitted`、`disputed`、`supported`、
+  `proven`、`contradicted`、`inadmissible`、`excluded`；
+- 新增 provider-neutral temporal、authority 與 legal-validity context 契約；
+- `met` element 必須綁定 server-owned normative source 與 fact 或 eligible
+  evidence。
 
-- [TLR（Taiwan Legal RAG）](https://github.com/aa0101181514/tw-legal-rag)：
-  普通裁判候選召回來源；排序與摘要不能直接作正式引用；
-- `mcp-taiwan-legal-db`：僅作行為與介面參考，不是相依套件或整合元件。
+## 官方來源與候選召回
 
-## 已知限制
+- TLR 維持 clean-room candidate-only adapter；候選仍須回查司法院官方全文，
+  不得直接成為正式引用；
+- 官方法規、普通裁判與憲法法庭 provider 維持獨立的來源與角色驗證；
+- 司法院舊式裁判頁、五段 legacy JID、搜尋 fallback 與現行法日期語意處理
+  納入統一研究流程；
+- source、evidence、claim、issue、authority 與 legal context 的信任判斷均由
+  server 端計算，外部 client 不得自行升格或宣告 final decision。
 
-- 不提供 LLM、完整台灣法律資料庫、production corpus、完整歷史法規版本或
-  production SLA；
-- 不宣稱真正 semantic entailment、複雜涵攝正確性、系統性反面見解搜尋、
-  完整審級關係、所有程序裁定、附件／OCR 或特別法自動適用；
-- `not_found_in_scope` 不得推論不存在反面見解；
-- `hybrid_verified` 會將通過 privacy gate 的查詢送往 TLR；使用者不得輸入
-  個人秘密、未公開案情、私有契約、訴訟策略、證據弱點或談判底線；
-- 所有輸出仍應由具資格人員依官方原文、法律時點與具體事實複核。
+## 相容性與資料邊界
 
-## 工程與安全文件
-
-- 架構與可信邊界：[ARCHITECTURE_CONTRACT.md](ARCHITECTURE_CONTRACT.md)
-- MCP tools 與輸入輸出契約：[TOOL_CONTRACT.md](TOOL_CONTRACT.md)
-- 前端無關整合契約：[INTEROPERABILITY_CONTRACT.md](INTEROPERABILITY_CONTRACT.md)
-- TLR provider 與 candidate-only 規則：[TLR_PROVIDER.md](TLR_PROVIDER.md)
-- 官方來源取得方式：[OFFICIAL_PROVIDERS.md](OFFICIAL_PROVIDERS.md)
-- 研究資料保存與清除：[STORAGE_AND_PURGE.md](STORAGE_AND_PURGE.md)
-- Trust model：[TRUST_MODEL.md](TRUST_MODEL.md)
-- Data policy：[../DATA_POLICY.md](../DATA_POLICY.md)
-- Release acceptance：[V070_INTEROPERABILITY_ACCEPTANCE.md](V070_INTEROPERABILITY_ACCEPTANCE.md)
-- Release audit：[V070_RELEASE_AUDIT.md](V070_RELEASE_AUDIT.md)
-- 歷史版本變更：[../CHANGELOG.md](../CHANGELOG.md)
-
-## 發布識別
-
-- release tag：`v0.7.0`
-- release title：`v0.7.0`
-- current branch：`main`
+- `validated`、`qualified`、`blocked` final decision 維持 fail-closed 規則；
+- blocked 結果不回傳可呈現的 answer body；
+- synthetic、official-only、hybrid-verified 三種資料模式維持；
+- provider-neutral contract 允許使用者接入自有法規、裁判與其他合規資料來源；
+- 公開套件不內含 LLM、production corpus、私有索引或使用者資料。
