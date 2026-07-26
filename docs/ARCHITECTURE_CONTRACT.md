@@ -8,7 +8,7 @@ implemented public-safe extraction of contracts and invariants. It is not a
 parallel complete product, and no private runtime artifact is a public package
 dependency.
 
-The v0.7 development contract adds an optional untrusted planning boundary:
+The v0.7 contract adds an optional untrusted planning boundary:
 
 ```text
 external issue / authority-locator proposal

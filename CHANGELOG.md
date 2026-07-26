@@ -2,7 +2,7 @@
 
 本專案遵循語意化版本精神；`0.x` 仍屬公開預覽，介面可能調整。
 
-## Unreleased - v0.7.0 development
+## 0.7.0 - 2026-07-26
 
 ### Added
 
@@ -35,6 +35,17 @@
 - `not_found_in_scope` 不得表示不存在反面見解；
 - private Legal Portal 只作 upstream incubator／reference implementation，
   不是公開 package 的 runtime dependency。
+
+### Release status
+
+- v0.7.0 is a public-preview, agent-neutral verification runtime；它不是完整
+  台灣法律資料庫、semantic entailment engine 或 production SLA；
+- TLR 僅作 ordinary-judgment candidate recall，正式證據仍須由 ALR-TW 回查
+  司法院官方全文；
+- temporal／authority／legal-validity provider contract 已公開，但內建
+  synthetic provider 不宣稱 production legal correctness；
+- release acceptance、synthetic end-to-end、325 tests、Ruff、mypy、公開邊界、
+  forbidden-file、diff 與 fresh-wheel smoke 均已執行。
 
 ## 0.6.2 - 2026-07-22
 

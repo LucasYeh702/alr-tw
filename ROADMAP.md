@@ -17,7 +17,7 @@
 - 普通裁判全文 live lookup 直接使用司法院裁判書查詢與全文頁，不需要 Judicial Yuan API token；
 - 沒有內建 LLM、法律答案生成器或 production corpus。
 
-## v0.7 開發方向：Agent-neutral verification runtime
+## v0.7 已完成：Agent-neutral verification runtime
 
 私人 Legal Portal 是上游孵化場與 production/reference implementation；
 ALR-TW 是單向、contract-first、public-safe 的獨立萃取，不是平行完整產品，
@@ -71,6 +71,6 @@ P0／v0.7：
 - 行政、勞動、家事、消保、公司、證券、智財、稅法、採購及執行模板。
 
 詳見 [Agent-neutral interoperability contract](docs/INTEROPERABILITY_CONTRACT.md)
-與 [v0.7 development acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)。
+與 [v0.7 release acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)。
 
 後續功能不得改變 `candidate != evidence`、官方移除要同步治理、角色不可混用與 blocked 不洩漏草稿等核心 invariant。

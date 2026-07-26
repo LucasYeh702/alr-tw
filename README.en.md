@@ -12,9 +12,8 @@ This repository does not ship an LLM or agent implementation. Planning, tool sel
 
 > v0.6.2 remains a `0.x` public preview. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
 
-> The current `main` working tree and package version are `0.7.0.dev0`; the
-> latest published release remains `v0.6.2`. The v0.7 material below describes
-> development interfaces, not capabilities claimed for the existing release.
+> The current `main` working tree and package version are `0.7.0`; `v0.7.0` is
+> a public preview and does not claim complete production legal reasoning.
 
 ## Agentic RAG capabilities
 
@@ -35,7 +34,7 @@ The v0.6.2 surface adds legacy `hlExportPDF` and `/EXPORTFILE/ExportToPdf.aspx` 
 
 An external agent may plan research and draft an answer, but it cannot declare a source official, promote a candidate into evidence, or bypass final validation.
 
-## v0.7 development direction
+## v0.7 agent-neutral verification runtime
 
 v0.7 narrows ALR-TW into an agent-neutral Taiwan-law research verification
 runtime. Any MCP client may perform issue identification, element analysis, and
@@ -296,7 +295,8 @@ Choose data mode
 - [Error Codes](docs/ERROR_CODES.md)
 - [Threat Model](docs/THREAT_MODEL.md)
 - [Release Notes](docs/RELEASE_NOTES.md)
-- [v0.7 Development Acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)
+- [v0.7 Interoperability Acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)
+- [v0.7 Release Audit](docs/V070_RELEASE_AUDIT.md)
 - [Changelog](CHANGELOG.md)
 
 ## Legal notice

@@ -12,8 +12,8 @@ ALR-TW v0.6.2 是台灣法律研究安全 harness 的官方網頁相容性修正
 
 > v0.6.2 仍是 `0.x` 預覽版本。答案必須由具資格的人員依官方原文、時點與個案事實複核。
 
-> 目前 `main` 工作樹與套件版本是 `0.7.0.dev0`；最新已發布版本仍是
-> `v0.6.2`。下列 v0.7 內容是開發中介面，不是既有 release 聲明。
+> 目前 `main` 工作樹與套件版本是 `0.7.0`；`v0.7.0` 是 public preview，
+> 仍不代表完整 production 法律判斷能力。
 
 ## Agentic RAG 能力
 
@@ -34,7 +34,7 @@ v0.6.2 提供 query understanding、outbound/output privacy 分離、法規／�
 
 外部 agent 可以規劃研究與起草答案，但不能自行宣告來源為官方資料、把候選升格成證據，或繞過最終驗證。
 
-## v0.7 開發方向
+## v0.7 agent-neutral verification runtime
 
 v0.7 將 ALR-TW 收斂為前端無關的台灣法律研究驗證 runtime。任何 MCP
 client 都可以負責爭點、構成要件與涵攝；ALR-TW 不綁定特定 agent 專案，
@@ -285,7 +285,8 @@ Choose data mode
 - [Threat Model](docs/THREAT_MODEL.md)
 - [Release Notes](docs/RELEASE_NOTES.md)
 - [v0.6.2 Release Audit](docs/V062_RELEASE_AUDIT.md)
-- [v0.7 Development Acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)
+- [v0.7 Interoperability Acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)
+- [v0.7 Release Audit](docs/V070_RELEASE_AUDIT.md)
 - [Changelog](CHANGELOG.md)
 
 ## 法律聲明

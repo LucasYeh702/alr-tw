@@ -12,8 +12,8 @@ ALR-TW v0.6.2 是台灣法律研究安全 harness 的官方網頁相容性修正
 
 > v0.6.2 仍是 `0.x` 預覽版本。任何答案仍須由具資格的人員依官方原文、時點與個案事實複核。
 
-> 目前 `main` 工作樹與套件版本是 `0.7.0.dev0`；最新已發布版本仍是
-> `v0.6.2`。下列 v0.7 內容是開發中介面，不是既有 release 聲明。
+> 目前 `main` 工作樹與套件版本是 `0.7.0`；`v0.7.0` 是 public preview，
+> 仍不代表完整 production 法律判斷能力。
 
 ## Agentic RAG 能力
 
@@ -45,7 +45,7 @@ v0.6.2 提供的主要能力包括：
 - resumable run：研究義務、候選、證據及 tool events 可在短期 SQLite 中恢復；
 - deterministic finalization：最終是否可呈現由 server 規則決定，不由模型自行宣告。
 
-## v0.7 開發方向
+## v0.7 agent-neutral verification runtime
 
 v0.7 將 ALR-TW 收斂為前端無關的台灣法律研究驗證 runtime。任何 MCP
 client 都可以負責爭點、構成要件與涵攝；ALR-TW 不綁定特定 agent 專案，
@@ -374,7 +374,8 @@ v0.6.2 在既有安全邊界上補強舊式 `hlExportPDF`、`/EXPORTFILE/ExportT
 - [Threat Model](docs/THREAT_MODEL.md)
 - [Release Notes](docs/RELEASE_NOTES.md)
 - [v0.6.2 Release Audit](docs/V062_RELEASE_AUDIT.md)
-- [v0.7 Development Acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)
+- [v0.7 Interoperability Acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)
+- [v0.7 Release Audit](docs/V070_RELEASE_AUDIT.md)
 - [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 

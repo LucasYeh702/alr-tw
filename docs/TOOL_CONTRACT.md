@@ -1,6 +1,6 @@
 # ALR-TW Tool Contract
 
-## v0.7 development interoperability tools
+## v0.7 interoperability tools
 
 | Tool | Required input | Contract |
 |---|---|---|

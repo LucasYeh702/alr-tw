@@ -1,9 +1,9 @@
-# ALR-TW v0.7.0.dev0 Interoperability Acceptance
+# ALR-TW v0.7.0 Interoperability Acceptance
 
-This is a development acceptance contract, not release evidence.
+This is the release acceptance record for the v0.7.0 public preview.
 
-ALR-TW v0.7.0.dev0 is an agent-neutral Taiwan-law research verification
-runtime under development. It preserves server-owned research state,
+ALR-TW v0.7.0 is an agent-neutral Taiwan-law research verification runtime.
+It preserves server-owned research state,
 TLR candidate-only recall, official evidence promotion, claim validation,
 short-lived storage, and purge while allowing an arbitrary external reasoning
 client to propose legal issues and authority locators.
@@ -58,7 +58,7 @@ the client submitted them.
 
 ## Not claimed
 
-The development version 不宣稱 it provides an LLM, 完整台灣法律資料庫, full
+The public-preview version 不宣稱 it provides an LLM, 完整台灣法律資料庫, full
 historical-law coverage, systematic counter-authority search, semantic
 entailment, legal advice, or a production SLA. It also does not claim:
 
@@ -69,11 +69,14 @@ entailment, legal advice, or a production SLA. It also does not claim:
   corporate, securities, intellectual-property, tax, procurement, or
   enforcement templates.
 
-## Development evidence
+## Release evidence
 
 Acceptance requires contract validation tests, MCP schema and JSON-RPC tests,
 client-assisted no-duplicate-recall integration tests, explicit core-issue
 coverage tests, synthetic validated／qualified／blocked civil-analysis flows,
 all v0.6 regressions, Ruff, mypy, public-boundary checks, and a fresh
-development-wheel smoke test. Green synthetic tests prove contract behavior,
-not production legal correctness.
+all v0.6 regressions, Ruff, mypy, public-boundary checks, forbidden-file checks,
+and a fresh wheel smoke test. The v0.7.0 release run recorded 325 passing tests,
+98 mypy-checked source files, 23 MCP tools including `validate_civil_analysis`,
+and no public-boundary violations. Green synthetic tests prove contract
+behavior, not production legal correctness.

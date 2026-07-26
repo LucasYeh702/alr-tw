@@ -1,6 +1,6 @@
 # ALR-TW Agent-Neutral Interoperability Contract
 
-本文件定義 v0.7 開發中的前端無關接口。任何能呼叫 MCP tool 的法律
+本文件定義 v0.7 的前端無關接口。任何能呼叫 MCP tool 的法律
 agent、prompt skill、workflow engine 或人工控制程式都可以使用同一套契約；
 核心程式不依賴特定前端專案、模型或提示詞。
 
