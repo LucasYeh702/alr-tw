@@ -2,7 +2,7 @@
 
 [繁體中文](README.zh-TW.md) | English
 
-ALR-TW v0.6.2 is an official-web compatibility update for the Taiwan-law research safety harness. An external agent or LLM may create and advance a research run over MCP, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
+ALR-TW v0.7.0 is the agent-neutral public preview of the Taiwan-law research safety harness. An external agent or LLM may create and advance a research run over MCP and propose issues or authority locators, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
 
 In `hybrid_verified` mode, this project uses [TLR (Taiwan Legal RAG)](https://github.com/aa0101181514/tw-legal-rag) to recall ordinary-judgment candidates, then asks ALR-TW to verify them against Judicial Yuan official full text. TLR results are not final citation evidence by themselves.
 
@@ -10,7 +10,7 @@ This project is neither legal advice nor a complete Taiwan legal database.
 
 This repository does not ship an LLM or agent implementation. Planning, tool selection, and natural-language reasoning come from the external caller; ALR-TW supplies auditable tools and deterministic gates. The demo ranking parameters are illustrative test settings, not production ranking configuration.
 
-> v0.6.2 remains a `0.x` public preview. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
+> v0.7.0 remains a `0.x` public preview. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
 
 > The current `main` working tree and package version are `0.7.0`; `v0.7.0` is
 > a public preview and does not claim complete production legal reasoning.
@@ -30,13 +30,13 @@ User query
   -> validated | qualified | blocked
 ```
 
-The v0.6.2 surface adds legacy `hlExportPDF` and `/EXPORTFILE/ExportToPdf.aspx` compatibility, official identity verification for five-part TLR document IDs, direct-result and link-only search fallbacks, current-day legal-time semantics, and bounded local TLR relevance reranking while preserving the existing safety model. A page that exposes only the same five-part identifier remains explicitly classified as `legacy_five_part_jid`; no version suffix is guessed. The public version does not implement natural-language statutory issue planning or systematic counter-authority search and does not claim semantic entailment.
+The v0.7.0 surface provides legacy `hlExportPDF` and `/EXPORTFILE/ExportToPdf.aspx` compatibility, official identity verification for five-part TLR document IDs, direct-result and link-only search fallbacks, current-day legal-time semantics, bounded local TLR relevance reranking, agent-neutral interoperability, and civil-law structural validation while preserving the existing safety model. A page that exposes only the same five-part identifier remains explicitly classified as `legacy_five_part_jid`; no version suffix is guessed. The public version does not implement systematic counter-authority search or semantic entailment.
 
 An external agent may plan research and draft an answer, but it cannot declare a source official, promote a candidate into evidence, or bypass final validation.
 
-## v0.7 agent-neutral verification runtime
+## v0.7.0 agent-neutral verification runtime
 
-v0.7 narrows ALR-TW into an agent-neutral Taiwan-law research verification
+v0.7.0 narrows ALR-TW into an agent-neutral Taiwan-law research verification
 runtime. Any MCP client may perform issue identification, element analysis, and
 subsumption; ALR-TW remains independent of a particular agent project and owns
 capability negotiation, research state, official verification, evidence
@@ -68,13 +68,13 @@ locator plan. Every locator remains an untrusted candidate; a client cannot
 submit evidence or an `official` trust decision. See the
 [agent-neutral interoperability contract](docs/INTEROPERABILITY_CONTRACT.md).
 
-The v0.7 P0 surface also provides `alr-tw.civil-law-analysis/v1` and
+The v0.7.0 P0 surface also provides `alr-tw.civil-law-analysis/v1` and
 `validate_civil_analysis` for claims, elements, element-level burdens,
 defenses, counter-authority, procedural posture, legal effects, and
 fact/evidence states. It performs structural and trust validation, not semantic
 entailment.
 The development tree adds `get_legal_research_capabilities`,
-`submit_legal_research_plan`, and `validate_civil_analysis`; existing v0.6
+`submit_legal_research_plan`, and `validate_civil_analysis`; existing
 server-owned tools remain compatible.
 
 ### Optional external integration examples
@@ -143,7 +143,7 @@ Ordinary-judgment lookup does not require a Judicial Yuan API token. In a live m
 
 Secrets are redacted from `doctor` output and must not be committed, traced, or persisted in SQLite.
 
-## v0.6.2 published MCP tools
+## v0.7.0 published MCP tools
 
 | Tool | Purpose |
 |---|---|
@@ -295,8 +295,8 @@ Choose data mode
 - [Error Codes](docs/ERROR_CODES.md)
 - [Threat Model](docs/THREAT_MODEL.md)
 - [Release Notes](docs/RELEASE_NOTES.md)
-- [v0.7 Interoperability Acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)
-- [v0.7 Release Audit](docs/V070_RELEASE_AUDIT.md)
+- [v0.7.0 Interoperability Acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)
+- [v0.7.0 Release Audit](docs/V070_RELEASE_AUDIT.md)
 - [Changelog](CHANGELOG.md)
 
 ## Legal notice

@@ -1,4 +1,4 @@
-"""Managed v0.6 research storage."""
+"""Managed v0.7.0 research storage."""
 
 from .purge import PurgeService
 from .sqlite_store import SqliteStore

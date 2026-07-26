@@ -5,7 +5,7 @@ LLM and no agent implementation. The external MCP client supplies the agent
 role; the harness records tool calls, validates citations, computes the trust
 gate, and returns a canonical trace.
 
-## v0.7 agent-neutral research flow
+## v0.7.0 agent-neutral research flow
 
 New clients should first call `get_legal_research_capabilities`.
 

@@ -1,52 +1,50 @@
 # Roadmap
 
-## 已完成
+## Current release: v0.7.0
 
-- `v0.1`：synthetic data、source trust policy、citation validation、CI guards。
-- `v0.2`：deterministic execution graph、MCP stdio、trace、validation report。
-- `v0.3`：claim grounding、role-aware semantic checks、fail-closed scenarios。
-- `v0.4`：opt-in identifier-backed judgment cache resolver 與 hash verification。
-- `v0.5`：externally driven MCP traces、agent client guide、release hardening。
-- `v0.6`：server-owned research service、統一短期 SQLite、官方法規／普通裁判／憲法 provider、clean-room TLR candidate recall、MCP tools、purge 與 public-preview release audit。
+v0.7.0 是 agent-neutral、provider-neutral 的台灣法律研究驗證 runtime。
+私人 Legal Portal 只作上游孵化場與 production/reference implementation；
+ALR-TW 是 contract-first、public-safe 的獨立萃取，不是平行完整產品，也不
+依賴私人 runtime 的資料、索引、manifest 或 production 參數。
 
-## v0.6 公開預覽限制
+目前公開能力：
 
-- 完整指定日期法規版本尚未提供；
-- 普通裁判不承諾全域召回率，完整審級圖尚未提供；
-- 程序裁定、附件與 OCR 依官方頁面可取得程度處理；
-- 普通裁判全文 live lookup 直接使用司法院裁判書查詢與全文頁，不需要 Judicial Yuan API token；
-- 沒有內建 LLM、法律答案生成器或 production corpus。
-
-## v0.7 已完成：Agent-neutral verification runtime
-
-私人 Legal Portal 是上游孵化場與 production/reference implementation；
-ALR-TW 是單向、contract-first、public-safe 的獨立萃取，不是平行完整產品，
-也不依賴私人 runtime。外部專案負責爭點辨識、構成要件拆解、涵攝與文字
-生成；ALR-TW 保持為公開 contracts、validators、研究狀態、官方驗證、
-evidence promotion 與 final decision 執行層。
-
-P0／v0.7：
-
-- `get_legal_research_capabilities`：前端先協商能力與信任責任；
+- `get_legal_research_capabilities`：先協商 provider、模式與信任責任；
 - `server_managed`／`client_assisted` discovery modes；
 - provider-neutral `ResearchPlanProposal`、法律爭點與 authority locator；
-- client locator 永遠 candidate-only，不能注入 evidence 或 trust decision；
+- client locator 永遠是 candidate-only，不能注入 evidence 或 trust decision；
 - client-assisted locator 直接走官方 exact lookup，避免同輪重複 TLR／關鍵字召回；
+- TLR clean-room adapter 可在 `hybrid_verified` 提供普通裁判候選召回，仍須回查司法院官方全文；
 - `claim_bindings.issue_ids` 與核心爭點明示覆蓋；
 - public `CivilLawAnalysis`：claims、elements、defenses、counter-authority、
   procedural posture 與完整法律效果 taxonomy；
 - 逐要件 burden-of-proof，以及 alleged／admitted／disputed／supported／
   proven／contradicted／inadmissible／excluded 狀態；
-- provider-neutral temporal／authority／legal-validity contracts、
-  fail-closed validator 與 synthetic provider；
-- `validate_civil_analysis` MCP tool；analysis 仍是
+- provider-neutral temporal／authority／legal-validity contracts、fail-closed
+  validator 與 synthetic provider；
+- `validate_civil_analysis` MCP tool；analysis 永遠是
   `untrusted_client_proposal`，不授權 final answer；
+- 官方法規、司法院裁判與憲法法庭 provider，含舊式裁判頁、五段 legacy JID、
+  搜尋 fallback 與現行法日期語意處理；
 - synthetic validated／qualified／blocked end-to-end fixtures；
-- public-boundary lint 禁止私人 runtime dependency、production data、
-  operator state、private manifests、ranking calibration 與 gold labels；
-- 原有 v0.6 六個高階工具維持向下相容。
+- public-boundary lint 禁止私人 runtime dependency、production data、operator
+  state、private manifests、ranking calibration 與 gold labels。
 
-## v0.8 候選：Applicability 與 counter-authority
+## 已知限制
+
+- 不提供 LLM、法律答案生成器或完整台灣法律資料庫；
+- 不承諾完整歷史法規版本、普通裁判全域召回率、完整審級關係、所有程序裁定、
+  附件或 OCR；
+- 不提供真正 semantic entailment、複雜涵攝正確性或系統性反面見解搜尋；
+- 不自動完成特別法優先、請求權競合、法律效果與損害合併；
+- 證據能力、證明力、程序時點，以及刑事、行政、勞動、家事、消保、公司、
+  證券、智財、稅法、採購及執行領域模板仍需使用者自行提供；
+- `hybrid_verified` 會將通過 privacy gate 的查詢送往 TLR；TLR 只作候選召回，
+  正式證據仍須由 ALR-TW 回查官方來源。
+
+## 後續方向
+
+### v0.8 候選：Applicability 與 counter-authority
 
 - 特別法／普通法、上位法／下位法、新舊法 applicability resolver；
 - 系統化 counter-authority contract 與 appellate／negative-treatment validator；
@@ -54,23 +52,16 @@ P0／v0.7：
 - 公開 provider SDK；production data 仍由使用者自備；
 - 完成真實能力與 bounded evaluation 後，才允許 capability 回報支援。
 
-## v0.9 候選：可插拔語義與其他法律領域
+### v0.9 候選：可插拔語義與其他法律領域
 
 - semantic verifier plugin interface，但不得宣稱取代律師判斷；
 - 刑事、行政及其他領域 analysis envelopes；
 - 律師標註 gold benchmark 與跨領域回歸測試；gold data 不進公開 repo。
 
-## 共同未解限制
-
-- 真正 semantic entailment 與複雜涵攝正確性；
-- 系統化反面見解主動探勘與「不存在」證明；
-- 完整歷史法規與 amendment lineage；
-- 不確定法律概念的形式化判斷；
-- 特別法自動適用、請求權競合、法律效果與損害合併；
-- 證據能力、證明力、程序時點，以及刑事完整三階層／共犯／競合／未遂；
-- 行政、勞動、家事、消保、公司、證券、智財、稅法、採購及執行模板。
+歷史版本與已完成工作的逐版紀錄請見 [CHANGELOG.md](CHANGELOG.md)。
 
 詳見 [Agent-neutral interoperability contract](docs/INTEROPERABILITY_CONTRACT.md)
-與 [v0.7 release acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)。
+與 [v0.7.0 release acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)。
 
-後續功能不得改變 `candidate != evidence`、官方移除要同步治理、角色不可混用與 blocked 不洩漏草稿等核心 invariant。
+後續功能不得改變 `candidate != evidence`、官方移除要同步治理、角色不可混用
+與 blocked 不洩漏草稿等核心 invariant。

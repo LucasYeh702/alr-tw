@@ -1,6 +1,6 @@
 # Architecture
 
-ALR-TW v0.6.2 將「agent 決定如何推理」與「server 決定何者可信」分開。外部 agent 可以提出查詢、逐步呼叫工具並起草答案，但不能注入正式證據或跳過 obligations。v0.7 進一步把這條邊界做成 agent-neutral interoperability contract，不依賴特定前端專案。
+ALR-TW v0.7.0 將「agent 決定如何推理」與「server 決定何者可信」分開。外部 agent 可以提出查詢、逐步呼叫工具、提交爭點與法源 locator 並起草答案，但不能注入正式證據或跳過 obligations。v0.7.0 將這條邊界做成 agent-neutral interoperability contract，不依賴特定前端專案。
 
 ALR-TW 的上游是 maintainer 私人的 Legal Portal 孵化場與
 production/reference implementation。兩者不是平行完整產品：公開版只以
@@ -73,7 +73,7 @@ validated | qualified | blocked
 
 ## Compatibility
 
-`alr_tw.*` 是 v0.6 中立 contracts、providers、research 與 storage 的主命名空間。`tw_legal_rag_mcp.*` 保留舊 synthetic／trace 工具並承載 MCP stdio server。兩者共用 source tier 與 fail-closed invariants；新功能不得反向依賴 client-controlled provenance。
+`alr_tw.*` 是 v0.7.0 中立 contracts、providers、research 與 storage 的主命名空間。`tw_legal_rag_mcp.*` 保留 legacy synthetic／trace 工具並承載 MCP stdio server。兩者共用 source tier 與 fail-closed invariants；新功能不得反向依賴 client-controlled provenance。
 
 ## Operational limits
 

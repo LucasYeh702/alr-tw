@@ -1,6 +1,6 @@
 # ALR-TW Tool Contract
 
-## v0.7 interoperability tools
+## v0.7.0 interoperability tools
 
 | Tool | Required input | Contract |
 |---|---|---|
@@ -33,7 +33,7 @@ closed。
 
 詳見 [Agent-neutral interoperability contract](INTEROPERABILITY_CONTRACT.md)。
 
-## v0.6 high-level tools
+## v0.7.0 server-managed tools
 
 | Tool | Required input | Contract |
 |---|---|---|
@@ -61,17 +61,17 @@ All MCP tool results are wrapped in:
 }
 ```
 
-## v0.6.2 answer validation
+## v0.7.0 answer validation
 
 `claim_bindings` 是 optional array；每筆包含 `claim_id`、`claim_text`、
-`claim_type`、`importance`、至少一個同 run 的 `evidence_ids`，以及 v0.7
+`claim_type`、`importance`、至少一個同 run 的 `evidence_ids`，以及 v0.7.0
 可選的 `issue_ids` 與 `citation_occurrences`。允許的 `claim_type` 是
 `law_rule`、`court_view`、`disposition`、`fact`、`procedure`、`limitation`。
 
 `citation_occurrences` 可提供 `evidence_id`、citation text 及 answer
 start／end offsets。Server 會核對文字 occurrence、bound evidence、source
 citation／identifier，並要求 citation 與 claim 位於同一 bounded clause。
-這是 additive strict mode；未提供時維持 v0.6 caller 相容。
+這是 additive strict mode；未提供時維持 legacy caller 相容。
 
 Server 會核對 evidence 存在、官方 trust status、expiry、claim-support eligibility 與 section role。核心法律 claim 沒有 span-level binding 時回 `CLAIM_CITATION_BINDING_REQUIRED`，不得以 run-wide 最高重疊通過。只傳 `answer_text` 的舊 caller 會取得 `binding_mode=legacy_unbound`。
 
@@ -95,7 +95,7 @@ semantic entailment。
 | `run_agentic_demo` | Deterministic ALR-TW scenario trace | Reports final action |
 | `begin_agentic_run` | Begin recording an externally driven tool run | Opens a server-side run state |
 | `finalize_agentic_run` | Assemble and gate a recorded externally driven tool run | Computes final action |
-| `get_claim_grounding_policy` | Returns claim-grounding contract for v0.3 | No direct citation effect |
+| `get_claim_grounding_policy` | Returns the current claim-grounding contract | No direct citation effect |
 | `extract_answer_claims` | Split an answer into deterministic public claim units | No direct citation effect |
 | `check_claim_support` | Check answer claims against evidence segments and return semantic grounding summary | No direct citation effect |
 | `build_validation_report` | Markdown validation report | No direct citation effect |
@@ -119,7 +119,7 @@ Public example tool calls are deterministic harness records. Their
 
 ## Externally Driven Run Recording
 
-v0.5 uses Design A: session-recorded run state. `McpSession` already owns the
+The legacy externally-driven flow uses Design A: session-recorded run state. `McpSession` already owns the
 stdio request lifecycle, so the server can keep one open run per session without
 invasive changes. This design records and gates externally driven tool runs
 because the server observes the actual MCP `tools/call` requests before it
@@ -169,7 +169,7 @@ the trace contains `answer: null`.
 
 Source tier semantics are unchanged. `synthetic` remains demo-only,
 `external_semantic_recall` remains candidate-only, and `verified_cache` keeps
-the v0.4 opt-in identifier-backed rules. Identifier resolution is recomputed by
+the existing opt-in identifier-backed rules. Identifier resolution is recomputed by
 the server-side synthetic resolver when the opt-in is enabled.
 
 ## Citation Validation Metadata

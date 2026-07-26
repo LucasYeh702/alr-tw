@@ -41,7 +41,7 @@ and not a reduced corpus. The public package has no private runtime dependency.
 - `not_found_in_scope` cannot establish that no counter-authority exists.
 - `validate_civil_analysis` never authorizes a final answer.
 - blocked 不包含 answer body.
-- Existing v0.6 server-owned tools remain backward compatible.
+- Existing server-managed tools remain backward compatible.
 
 ## Taiwan civil-law structure
 
@@ -74,9 +74,8 @@ entailment, legal advice, or a production SLA. It also does not claim:
 Acceptance requires contract validation tests, MCP schema and JSON-RPC tests,
 client-assisted no-duplicate-recall integration tests, explicit core-issue
 coverage tests, synthetic validated／qualified／blocked civil-analysis flows,
-all v0.6 regressions, Ruff, mypy, public-boundary checks, and a fresh
-all v0.6 regressions, Ruff, mypy, public-boundary checks, forbidden-file checks,
-and a fresh wheel smoke test. The v0.7.0 release run recorded 325 passing tests,
+all legacy regressions, Ruff, mypy, public-boundary checks, forbidden-file checks,
+and a fresh wheel smoke test. The v0.7.0 release run recorded 326 passing tests,
 98 mypy-checked source files, 23 MCP tools including `validate_civil_analysis`,
 and no public-boundary violations. Green synthetic tests prove contract
 behavior, not production legal correctness.

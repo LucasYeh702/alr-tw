@@ -1,6 +1,6 @@
 # Public / Private Boundary
 
-## v0.7 product lineage
+## v0.7.0 product lineage
 
 The maintainer's private Legal Portal is the upstream incubator and
 production/reference implementation. ALR-TW is the public-safe extraction of
@@ -13,7 +13,7 @@ the public package is independently implemented against documented contracts.
 It has no runtime import, package dependency, filesystem path, corpus, index,
 manifest, or operational dependency on the private implementation.
 
-## v0.6 clarification
+## v0.7.0 public boundary
 
 公開 repo 現在包含真實官方端點的有界 provider code 與 clean-room TLR adapter，但不包含下載後的 production corpus、永久 cache、token 或真實查詢。Live provider 在 operator 明確選擇模式後才執行；`synthetic` 仍是唯一 implicit default。
 
