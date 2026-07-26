@@ -1,4 +1,4 @@
-"""ALR-TW: Agentic Legal RAG / MCP Harness for Taiwan Law."""
+"""ALR-TW: agent-neutral legal research verification runtime for Taiwan law."""
 
 from ._version import __version__
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from typing import Literal
+import unicodedata
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -55,6 +56,11 @@ def screen_answer_output(answer_text: str) -> AnswerPrivacyResult:
     text = answer_text.strip()
     if not text:
         raise ValueError("answer_text is required")
+    text = "".join(
+        character
+        for character in unicodedata.normalize("NFKC", text)
+        if unicodedata.category(character) != "Cf"
+    )
     blocked = [marker for marker in _BLOCKED_MARKERS if marker in text]
     if blocked:
         return AnswerPrivacyResult(

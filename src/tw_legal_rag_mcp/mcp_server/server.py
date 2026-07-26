@@ -10,6 +10,12 @@ from uuid import uuid4
 
 from alr_tw import __version__
 from alr_tw.config import Settings, parse_retention
+from alr_tw.contracts.civil_analysis import CivilLawAnalysis
+from alr_tw.contracts.interop import (
+    DiscoveryMode,
+    ResearchPlanProposal,
+    interoperability_capabilities,
+)
 from alr_tw.contracts.research import ResearchDepth
 from alr_tw.harness.constants import FinalAction, ToolExecutionMode, TrustFailureReason
 from alr_tw.harness.orchestrator import _trust_gate_trace
@@ -76,11 +82,14 @@ RECORDED_AGENTIC_TOOLS = {
     "extract_answer_claims",
     "check_claim_support",
 }
-V060_TOOLS = {
+SERVER_OWNED_TOOLS = {
+    "get_legal_research_capabilities",
     "research_legal_question",
+    "submit_legal_research_plan",
     "continue_legal_research",
     "get_legal_research_state",
     "lookup_legal_source",
+    "validate_civil_analysis",
     "validate_legal_answer",
     "purge_research_storage",
 }
@@ -283,7 +292,7 @@ def initialize_result(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def tool_definitions() -> list[dict[str, Any]]:
-    return _v060_tool_definitions() + [
+    return _server_owned_tool_definitions() + [
         {
             "name": "agentic_legal_research",
             "description": (
@@ -502,9 +511,129 @@ def tool_definitions() -> list[dict[str, Any]]:
     ]
 
 
-def _v060_tool_definitions() -> list[dict[str, Any]]:
+def _research_plan_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "schema_version": {
+                "type": "string",
+                "const": "alr-tw.research-plan-proposal/v1",
+            },
+            "plan_id": {"type": "string"},
+            "issues": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 64,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "issue_id": {"type": "string"},
+                        "label": {"type": "string"},
+                        "proposition": {"type": "string"},
+                        "category": {
+                            "type": "string",
+                            "enum": [
+                                "claim_basis",
+                                "constitutive_element",
+                                "defense",
+                                "burden_of_proof",
+                                "procedural_prerequisite",
+                                "legal_effect",
+                                "temporal_applicability",
+                                "norm_hierarchy",
+                                "authority_weight",
+                                "counter_authority",
+                                "other",
+                            ],
+                        },
+                        "importance": {
+                            "type": "string",
+                            "enum": ["core", "supporting", "context"],
+                        },
+                        "parent_issue_id": {"type": "string"},
+                        "requires_conclusion": {"type": "boolean"},
+                    },
+                    "required": ["issue_id", "label", "proposition", "category"],
+                    "additionalProperties": False,
+                },
+            },
+            "authority_locators": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 128,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "locator_id": {"type": "string"},
+                        "material_type": {
+                            "type": "string",
+                            "enum": ["law", "judgment", "constitutional"],
+                        },
+                        "citation": {"type": "string"},
+                        "identifier": {"type": "string"},
+                        "purpose": {
+                            "type": "string",
+                            "enum": [
+                                "primary_rule",
+                                "interpretation",
+                                "counter_authority",
+                                "procedure",
+                                "legal_effect",
+                                "temporal_context",
+                                "other",
+                            ],
+                        },
+                        "issue_ids": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 32,
+                            "items": {"type": "string"},
+                        },
+                    },
+                    "required": [
+                        "locator_id",
+                        "material_type",
+                        "citation",
+                        "issue_ids",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+            "assumptions": {
+                "type": "array",
+                "maxItems": 32,
+                "items": {"type": "string"},
+            },
+            "limitations": {
+                "type": "array",
+                "maxItems": 32,
+                "items": {"type": "string"},
+            },
+        },
+        "required": ["plan_id", "issues", "authority_locators"],
+        "additionalProperties": False,
+    }
+
+
+def _civil_analysis_schema() -> dict[str, Any]:
+    return CivilLawAnalysis.model_json_schema()
+
+
+def _server_owned_tool_definitions() -> list[dict[str, Any]]:
     object_schema = {"type": "object", "additionalProperties": False}
     return [
+        {
+            "name": "get_legal_research_capabilities",
+            "description": (
+                "Negotiate the agent-neutral research, discovery, evidence, and "
+                "verification contract before creating a run."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
         {
             "name": "research_legal_question",
             "description": "Create a server-owned legal research run without drafting an answer.",
@@ -521,6 +650,10 @@ def _v060_tool_definitions() -> list[dict[str, Any]]:
                                 "enum": ["quick", "standard", "deep"],
                             },
                             "include_counter_authority": {"type": "boolean"},
+                            "discovery_mode": {
+                                "type": "string",
+                                "enum": ["server_managed", "client_assisted"],
+                            },
                             "retention": {"type": "string"},
                         },
                         "additionalProperties": False,
@@ -529,6 +662,24 @@ def _v060_tool_definitions() -> list[dict[str, Any]]:
                     "request_id": {"type": "string"},
                 },
                 "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "submit_legal_research_plan",
+            "description": (
+                "Register an immutable, untrusted issue and authority-locator proposal "
+                "for a client-assisted run. The proposal cannot create evidence."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "run_id": {"type": "string"},
+                    "operation_id": {"type": "string"},
+                    "plan": _research_plan_schema(),
+                    "request_id": {"type": "string"},
+                },
+                "required": ["run_id", "operation_id", "plan"],
                 "additionalProperties": False,
             },
         },
@@ -567,6 +718,25 @@ def _v060_tool_definitions() -> list[dict[str, Any]]:
                     "operation_id": {"type": "string"},
                 },
                 "required": ["text"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "validate_civil_analysis",
+            "description": (
+                "Validate an untrusted civil-law analysis envelope against server-owned "
+                "source, evidence, temporal, authority, and legal-validity context. "
+                "This structural check does not authorize a final answer."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "run_id": {"type": "string"},
+                    "operation_id": {"type": "string"},
+                    "analysis": _civil_analysis_schema(),
+                    "request_id": {"type": "string"},
+                },
+                "required": ["run_id", "operation_id", "analysis"],
                 "additionalProperties": False,
             },
         },
@@ -611,6 +781,36 @@ def _v060_tool_definitions() -> list[dict[str, Any]]:
                                     "items": {"type": "string"},
                                     "minItems": 1,
                                 },
+                                "issue_ids": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "citation_occurrences": {
+                                    "type": "array",
+                                    "maxItems": 32,
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "evidence_id": {"type": "string"},
+                                            "citation_text": {"type": "string"},
+                                            "start_offset": {
+                                                "type": "integer",
+                                                "minimum": 0,
+                                            },
+                                            "end_offset": {
+                                                "type": "integer",
+                                                "minimum": 1,
+                                            },
+                                        },
+                                        "required": [
+                                            "evidence_id",
+                                            "citation_text",
+                                            "start_offset",
+                                            "end_offset",
+                                        ],
+                                        "additionalProperties": False,
+                                    },
+                                },
                             },
                             "required": [
                                 "claim_id",
@@ -647,10 +847,10 @@ def call_tool(params: dict[str, Any], *, session: McpSession | None = None) -> d
     name = normalized_call.name
     arguments = normalized_call.arguments
 
-    if name in V060_TOOLS:
+    if name in SERVER_OWNED_TOOLS:
         if session is None:
             raise ValueError(f"{name} requires an MCP session")
-        payload = _call_v060_tool(name, arguments, session)
+        payload = _call_server_owned_tool(name, arguments, session)
     elif name == "begin_agentic_run":
         if session is None:
             raise ValueError("begin_agentic_run requires an MCP session")
@@ -760,11 +960,16 @@ def call_tool(params: dict[str, Any], *, session: McpSession | None = None) -> d
     }
 
 
-def _call_v060_tool(
+def _call_server_owned_tool(
     name: str,
     arguments: dict[str, Any],
     session: McpSession,
 ) -> dict[str, Any]:
+    if name == "get_legal_research_capabilities":
+        _reject_unexpected_keys(arguments, set())
+        return interoperability_capabilities(
+            Settings.from_env().data_mode
+        ).model_dump(mode="json")
     service = session.research_service()
     if name == "research_legal_question":
         _reject_unexpected_keys(arguments, {"query", "constraints", "client_id", "request_id"})
@@ -773,7 +978,13 @@ def _call_v060_tool(
             raise ValueError("constraints must be an object")
         _reject_unexpected_keys(
             constraints,
-            {"as_of_date", "research_depth", "include_counter_authority", "retention"},
+            {
+                "as_of_date",
+                "research_depth",
+                "include_counter_authority",
+                "discovery_mode",
+                "retention",
+            },
         )
         settings = Settings.from_env()
         depth = ResearchDepth(str(constraints.get("research_depth", "standard")))
@@ -786,6 +997,9 @@ def _call_v060_tool(
         include_counter = constraints.get("include_counter_authority", True)
         if not isinstance(include_counter, bool):
             raise ValueError("include_counter_authority must be a boolean")
+        discovery_mode = DiscoveryMode(
+            str(constraints.get("discovery_mode", DiscoveryMode.SERVER_MANAGED.value))
+        )
         ephemeral = retention_value.strip().lower() == "ephemeral"
         run = service.create_run(
             _required_string(arguments, "query"),
@@ -795,11 +1009,26 @@ def _call_v060_tool(
             ephemeral=ephemeral,
             as_of_date=date.fromisoformat(as_of_value) if as_of_value else None,
             retention_seconds=(86400 if ephemeral else parse_retention(retention_value)),
+            discovery_mode=discovery_mode,
         )
         return {
             "schema_version": "alr-tw.research-created/v1",
             "run": run.model_dump(mode="json"),
         }
+    if name == "submit_legal_research_plan":
+        _reject_unexpected_keys(
+            arguments,
+            {"run_id", "operation_id", "plan", "request_id"},
+        )
+        raw_plan = arguments.get("plan")
+        if not isinstance(raw_plan, dict):
+            raise ValueError("plan must be an object")
+        proposal = ResearchPlanProposal.model_validate(raw_plan)
+        return service.register_research_plan(
+            _required_string(arguments, "run_id"),
+            _required_string(arguments, "operation_id"),
+            proposal,
+        )
     if name == "continue_legal_research":
         _reject_unexpected_keys(arguments, {"run_id", "operation_id", "request_id"})
         return service.continue_run(
@@ -821,6 +1050,20 @@ def _call_v060_tool(
             _required_string(arguments, "text"),
             run_id=run_value,
             operation_id=operation_value,
+        )
+    if name == "validate_civil_analysis":
+        _reject_unexpected_keys(
+            arguments,
+            {"run_id", "operation_id", "analysis", "request_id"},
+        )
+        raw_analysis = arguments.get("analysis")
+        if not isinstance(raw_analysis, dict):
+            raise ValueError("analysis must be an object")
+        analysis = CivilLawAnalysis.model_validate(raw_analysis)
+        return service.validate_civil_analysis(
+            _required_string(arguments, "run_id"),
+            _required_string(arguments, "operation_id"),
+            analysis,
         )
     if name == "validate_legal_answer":
         _reject_unexpected_keys(
@@ -854,7 +1097,7 @@ def _call_v060_tool(
             confirmed=arguments.get("confirm") is True,
         )
         return result.model_dump(mode="json")
-    raise ValueError(f"Unknown v0.6 tool: {name}")
+    raise ValueError(f"Unknown server-owned tool: {name}")
 
 
 def _summarize_tool_input(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:

@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
 from urllib.parse import urljoin, urlparse
 
+from alr_tw._version import __version__
+
 
 JUDICIAL_JUDGMENT_HOST = "judgment.judicial.gov.tw"
 
@@ -47,7 +49,11 @@ class JudicialSiteTransport(Protocol):
 class HttpxJudicialSiteTransport:
     """Cookie-preserving, fixed-host transport with redirect and byte limits."""
 
-    def __init__(self, *, user_agent: str = "Mozilla/5.0 ALR-TW/0.6.2") -> None:
+    def __init__(
+        self,
+        *,
+        user_agent: str = f"Mozilla/5.0 ALR-TW/{__version__}",
+    ) -> None:
         self.user_agent = user_agent
         self._client: Any | None = None
         self._open_count = 0

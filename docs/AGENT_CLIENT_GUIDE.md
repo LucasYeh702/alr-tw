@@ -5,6 +5,42 @@ LLM and no agent implementation. The external MCP client supplies the agent
 role; the harness records tool calls, validates citations, computes the trust
 gate, and returns a canonical trace.
 
+## v0.7 agent-neutral research flow
+
+New clients should first call `get_legal_research_capabilities`.
+
+Choose one discovery mode:
+
+- `server_managed`: ALR-TW performs its bounded source discovery;
+- `client_assisted`: the client calls `submit_legal_research_plan` with legal
+  issues and exact authority locators before continuing the run.
+
+The client name, model, framework, and prompt format are not part of the
+contract. In `client_assisted`, the client owns issue analysis but does not own
+source verification:
+
+1. Create the run with `research_legal_question`.
+2. Submit an `alr-tw.research-plan-proposal/v1`.
+3. Continue server-owned obligations until `ready_for_draft`.
+4. If the client produces a structured civil analysis, submit
+   `alr-tw.civil-law-analysis/v1` to `validate_civil_analysis`. Treat
+   `qualified` as a mandatory disclosure and discard `blocked`; even
+   `validated` does not authorize an answer.
+5. Draft externally from server-owned evidence.
+6. Call `validate_legal_answer` with evidence IDs and, when a plan is
+   registered, the corresponding issue IDs.
+7. Render only final-answer `validated` or `qualified`.
+
+Do not call a full second recall workflow after selecting `server_managed`.
+Do not call TLR or an official judgment search again after selecting
+`client_assisted` with complete locators. See
+[Interoperability Contract](INTEROPERABILITY_CONTRACT.md).
+
+The civil-analysis envelope accepts IDs only. A client must not place source
+bodies, content hashes, official attestations, private case data, or provider
+credentials inside it. Fact and evidence status labels remain proposals until
+matched to server-owned run context.
+
 ## MCP Client Config
 
 Use stdio. The public server needs no API keys and makes no network calls.
@@ -21,7 +57,7 @@ Use stdio. The public server needs no API keys and makes no network calls.
 }
 ```
 
-## Suggested Tool Flow
+## Legacy synthetic trace flow
 
 1. Call `begin_agentic_run` with a public-safe query and keep the returned
    `run_id`.

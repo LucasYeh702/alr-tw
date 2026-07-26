@@ -377,6 +377,14 @@ class SqliteStore:
             ).fetchall()
         return [ProviderCandidate.model_validate_json(row["payload_json"]) for row in rows]
 
+    def get_operation(self, run_id: str, operation_id: str) -> dict[str, Any] | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT result_json FROM operations WHERE run_id = ? AND operation_id = ?",
+                (run_id, operation_id),
+            ).fetchone()
+        return json.loads(row["result_json"]) if row is not None else None
+
     def record_operation(
         self,
         run_id: str,

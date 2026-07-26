@@ -9,6 +9,14 @@ from typing import Any, Protocol
 import unicodedata
 from uuid import uuid4
 
+from alr_tw.contracts.civil_analysis import CivilLawAnalysis
+from alr_tw.contracts.interop import (
+    DiscoveryMode,
+    RegisteredResearchPlan,
+    ResearchPlanProposal,
+    ResearchResponsibility,
+)
+from alr_tw.contracts.legal_context import LegalContextProvider
 from alr_tw.contracts.providers import DataMode
 from alr_tw.contracts.research import (
     CoverageState,
@@ -20,8 +28,18 @@ from alr_tw.contracts.research import (
     ResearchRun,
     ResearchState,
 )
-from alr_tw.contracts.sources import EvidenceSectionType, EvidenceSpan, TrustStatus
+from alr_tw.contracts.sources import (
+    EvidenceSectionType,
+    EvidenceSpan,
+    MaterialType,
+    SourceRecord,
+    TrustStatus,
+)
 from alr_tw.storage.sqlite_store import SqliteStore
+from alr_tw.providers.synthetic import SyntheticLegalContextProvider
+from alr_tw.verification.civil_analysis import (
+    validate_civil_analysis as run_civil_analysis_validation,
+)
 from alr_tw.verification.claim_support import (
     AnswerClaim,
     ClaimBinding,
@@ -103,6 +121,162 @@ def _coverage_qualification(run: ResearchRun) -> str:
     return "".join(qualifications)
 
 
+def _issue_coverage(
+    run: ResearchRun,
+    bindings: list[ClaimBinding],
+) -> tuple[dict[str, Any], list[str]]:
+    registered = run.registered_plan
+    if registered is None:
+        return (
+            {
+                "schema_version": "alr-tw.issue-coverage/v1",
+                "mode": "not_applicable",
+                "required_core_issue_ids": [],
+                "bound_issue_ids": [],
+                "missing_core_issue_ids": [],
+                "unknown_issue_ids": [],
+            },
+            [],
+        )
+
+    issues = registered.proposal.issues
+    known_issue_ids = {item.issue_id for item in issues}
+    required_core_issue_ids = {
+        item.issue_id
+        for item in issues
+        if item.importance.value == "core" and item.requires_conclusion
+    }
+    bound_issue_ids = {issue_id for binding in bindings for issue_id in binding.issue_ids}
+    unknown_issue_ids = bound_issue_ids - known_issue_ids
+    missing_core_issue_ids = required_core_issue_ids - bound_issue_ids
+    blockers: list[str] = []
+    if unknown_issue_ids:
+        blockers.append("CLAIM_BINDING_ISSUE_NOT_IN_PLAN")
+    if missing_core_issue_ids:
+        blockers.append("CORE_RESEARCH_ISSUE_UNBOUND")
+    return (
+        {
+            "schema_version": "alr-tw.issue-coverage/v1",
+            "mode": "registered_plan",
+            "plan_id": registered.proposal.plan_id,
+            "required_core_issue_ids": sorted(required_core_issue_ids),
+            "bound_issue_ids": sorted(bound_issue_ids & known_issue_ids),
+            "missing_core_issue_ids": sorted(missing_core_issue_ids),
+            "unknown_issue_ids": sorted(unknown_issue_ids),
+        },
+        blockers,
+    )
+
+
+def _clause_span(value: str, position: int) -> tuple[int, int]:
+    boundaries = "。\n；;"
+    start = max(value.rfind(delimiter, 0, position) for delimiter in boundaries) + 1
+    following = [
+        index
+        for delimiter in boundaries
+        if (index := value.find(delimiter, position)) >= 0
+    ]
+    end = min(following) + 1 if following else len(value)
+    return start, end
+
+
+def _citation_occurrence_reasons(
+    answer_text: str,
+    bindings: list[ClaimBinding],
+    *,
+    evidence_by_id: dict[str, EvidenceSpan],
+    sources: dict[str, SourceRecord],
+) -> list[str]:
+    reasons: list[str] = []
+    for binding in bindings:
+        claim_positions: list[int] = []
+        start = 0
+        while (position := answer_text.find(binding.claim_text, start)) >= 0:
+            claim_positions.append(position)
+            start = position + len(binding.claim_text)
+        for occurrence in binding.citation_occurrences:
+            if occurrence.evidence_id not in binding.evidence_ids:
+                reasons.append("CITATION_OCCURRENCE_EVIDENCE_NOT_BOUND")
+                continue
+            if (
+                occurrence.end_offset > len(answer_text)
+                or occurrence.end_offset <= occurrence.start_offset
+                or answer_text[occurrence.start_offset : occurrence.end_offset]
+                != occurrence.citation_text
+            ):
+                reasons.append("CITATION_OCCURRENCE_TEXT_MISMATCH")
+                continue
+            evidence = evidence_by_id.get(occurrence.evidence_id)
+            source = sources.get(evidence.source_id) if evidence is not None else None
+            if source is None or not any(
+                value and value in occurrence.citation_text
+                for value in (source.citation, source.official_identifier)
+            ):
+                reasons.append("CITATION_OCCURRENCE_SOURCE_MISMATCH")
+            citation_clause = _clause_span(answer_text, occurrence.start_offset)
+            if not any(
+                _clause_span(answer_text, position) == citation_clause
+                for position in claim_positions
+            ):
+                reasons.append("CITATION_OCCURRENCE_OUTSIDE_BOUND_CLAUSE")
+    return reasons
+
+
+def _merge_plan_obligations(
+    obligations: list[ResearchObligation],
+    proposal: ResearchPlanProposal,
+) -> list[ResearchObligation]:
+    material_types = {item.material_type.value for item in proposal.authority_locators}
+    issue_categories = {item.category.value for item in proposal.issues}
+    purposes = {item.purpose.value for item in proposal.authority_locators}
+    required_kinds: list[ResearchObligationKind] = []
+    if "judgment" in material_types:
+        required_kinds.extend(
+            [
+                ResearchObligationKind.JUDGMENT_RECALL,
+                ResearchObligationKind.JUDGMENT_OFFICIAL_VERIFICATION,
+            ]
+        )
+    if "constitutional" in material_types:
+        required_kinds.append(ResearchObligationKind.CONSTITUTIONAL_RESEARCH)
+    if "counter_authority" in issue_categories or "counter_authority" in purposes:
+        required_kinds.append(ResearchObligationKind.COUNTER_AUTHORITY)
+    if "temporal_applicability" in issue_categories or "temporal_context" in purposes:
+        required_kinds.append(ResearchObligationKind.LEGAL_TIME_CONTEXT)
+
+    existing = {item.kind for item in obligations}
+    additions = [
+        ResearchObligation(kind=kind)
+        for kind in required_kinds
+        if kind not in existing
+    ]
+    if not additions:
+        return obligations
+    insert_at = next(
+        (
+            index
+            for index, item in enumerate(obligations)
+            if item.kind is ResearchObligationKind.EVIDENCE_SUFFICIENCY
+        ),
+        len(obligations),
+    )
+    return obligations[:insert_at] + additions + obligations[insert_at:]
+
+
+def _missing_required_locator_types(
+    run: ResearchRun,
+    proposal: ResearchPlanProposal,
+) -> list[MaterialType]:
+    obligation_kinds = {item.kind for item in run.obligations}
+    required = {MaterialType.LAW}
+    if ResearchObligationKind.JUDGMENT_RECALL in obligation_kinds:
+        required.add(MaterialType.JUDGMENT)
+    if ResearchObligationKind.CONSTITUTIONAL_RESEARCH in obligation_kinds:
+        required.add(MaterialType.CONSTITUTIONAL)
+    provided = {item.material_type for item in proposal.authority_locators}
+    return sorted(required - provided, key=lambda item: item.value)
+
+
 class ObligationExecutor(Protocol):
     def execute(
         self,
@@ -140,8 +314,12 @@ def _plan_obligations(
     as_of_date: date | None,
     include_counter_authority: bool,
     current_date: date | None = None,
+    discovery_mode: DiscoveryMode = DiscoveryMode.SERVER_MANAGED,
 ) -> list[ResearchObligation]:
-    kinds = [ResearchObligationKind.QUERY_UNDERSTANDING]
+    kinds: list[ResearchObligationKind] = []
+    if discovery_mode is DiscoveryMode.CLIENT_ASSISTED:
+        kinds.append(ResearchObligationKind.EXTERNAL_PLAN_REVIEW)
+    kinds.append(ResearchObligationKind.QUERY_UNDERSTANDING)
     if mode == DataMode.HYBRID_VERIFIED:
         kinds.append(ResearchObligationKind.PRIVACY_SCREEN)
     kinds.append(ResearchObligationKind.LAW_RESEARCH)
@@ -171,9 +349,18 @@ def _plan_obligations(
 
 
 class ResearchService:
-    def __init__(self, store: SqliteStore, executor: ObligationExecutor | None = None):
+    def __init__(
+        self,
+        store: SqliteStore,
+        executor: ObligationExecutor | None = None,
+        *,
+        legal_context_provider: LegalContextProvider | None = None,
+    ):
         self.store = store
         self.executor = executor or SyntheticObligationExecutor()
+        self.legal_context_provider = (
+            legal_context_provider or SyntheticLegalContextProvider()
+        )
         self._lock = RLock()
 
     def create_run(
@@ -187,6 +374,7 @@ class ResearchService:
         as_of_date: date | None = None,
         retention_seconds: int = 86400,
         now: datetime | None = None,
+        discovery_mode: DiscoveryMode = DiscoveryMode.SERVER_MANAGED,
     ) -> ResearchRun:
         normalized_query = query.strip()
         if not normalized_query:
@@ -217,8 +405,10 @@ class ResearchService:
                 as_of_date=as_of_date,
                 include_counter_authority=include_counter_authority,
                 current_date=timestamp.astimezone(TAIWAN_TIME).date(),
+                discovery_mode=discovery_mode,
             ),
             coverage=CoverageState(),
+            responsibility=ResearchResponsibility(discovery_mode=discovery_mode),
         )
         self.store.save_run(run)
         return run
@@ -228,13 +418,111 @@ class ResearchService:
 
     def get_state(self, run_id: str) -> dict[str, Any]:
         run = self._required_run(run_id)
+        registered_plan = run.registered_plan
         return {
             "schema_version": "alr-tw.research-state/v1",
             "run": run.model_dump(mode="json"),
             "source_count": len(self.store.list_sources(run_id)),
             "evidence_count": len(self.store.list_evidence(run_id)),
             "ready_for_draft": run.state == ResearchState.READY_FOR_DRAFT,
+            "awaiting_external_plan": (
+                run.responsibility.discovery_mode is DiscoveryMode.CLIENT_ASSISTED
+                and registered_plan is None
+            ),
+            "interoperability": {
+                "responsibility": run.responsibility.model_dump(mode="json"),
+                "registered_plan": (
+                    {
+                        "plan_id": registered_plan.proposal.plan_id,
+                        "proposal_digest": registered_plan.proposal_digest,
+                        "trust_status": registered_plan.trust_status,
+                        "issue_count": len(registered_plan.proposal.issues),
+                        "authority_locator_count": len(
+                            registered_plan.proposal.authority_locators
+                        ),
+                    }
+                    if registered_plan is not None
+                    else None
+                ),
+            },
         }
+
+    def register_research_plan(
+        self,
+        run_id: str,
+        operation_id: str,
+        proposal: ResearchPlanProposal | dict[str, Any],
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        if not operation_id.strip():
+            raise ValueError("operation_id is required")
+        normalized_proposal = (
+            proposal
+            if isinstance(proposal, ResearchPlanProposal)
+            else ResearchPlanProposal.model_validate(proposal)
+        )
+        with self._lock:
+            existing = self.store.get_operation(run_id, operation_id)
+            if existing is not None:
+                return existing
+            run = self._required_run(run_id)
+            timestamp = now or datetime.now(UTC)
+            if run.expires_at <= timestamp:
+                raise ValueError("RESEARCH_RUN_EXPIRED")
+            if run.state is not ResearchState.PLANNING:
+                raise ValueError("RESEARCH_PLAN_REGISTRATION_CLOSED")
+            if run.responsibility.discovery_mode is not DiscoveryMode.CLIENT_ASSISTED:
+                raise ValueError("CLIENT_ASSISTED_DISCOVERY_NOT_ENABLED")
+            if run.registered_plan is not None:
+                raise ValueError("RESEARCH_PLAN_ALREADY_REGISTERED")
+            missing_locator_types = _missing_required_locator_types(
+                run,
+                normalized_proposal,
+            )
+            if missing_locator_types:
+                raise ValueError(
+                    "RESEARCH_PLAN_REQUIRED_LOCATOR_MISSING: "
+                    + ", ".join(item.value for item in missing_locator_types)
+                )
+
+            registered = RegisteredResearchPlan.from_proposal(
+                normalized_proposal,
+                received_at=timestamp,
+            )
+            obligations = [
+                item.model_copy(update={"status": ResearchObligationStatus.COMPLETED})
+                if item.kind is ResearchObligationKind.EXTERNAL_PLAN_REVIEW
+                else item
+                for item in run.obligations
+            ]
+            obligations = _merge_plan_obligations(obligations, normalized_proposal)
+            run = run.model_copy(
+                update={
+                    "registered_plan": registered,
+                    "obligations": obligations,
+                    "updated_at": timestamp,
+                }
+            )
+            result = {
+                "schema_version": "alr-tw.research-plan-registration/v1",
+                "run_id": run_id,
+                "plan_id": registered.proposal.plan_id,
+                "proposal_digest": registered.proposal_digest,
+                "trust_status": registered.trust_status,
+                "accepted_issue_ids": [
+                    item.issue_id for item in registered.proposal.issues
+                ],
+                "accepted_locator_ids": [
+                    item.locator_id
+                    for item in registered.proposal.authority_locators
+                ],
+                "candidate_only": True,
+            }
+            self.store.record_operation(run_id, operation_id, {"status": "in_progress"})
+            self.store.save_run(run)
+            self.store.complete_operation(run_id, operation_id, result)
+            return result
 
     def lookup_source(
         self,
@@ -288,6 +576,11 @@ class ResearchService:
             timestamp = now or datetime.now(UTC)
             if run.expires_at <= timestamp:
                 raise ValueError("RESEARCH_RUN_EXPIRED")
+            if (
+                run.responsibility.discovery_mode is DiscoveryMode.CLIENT_ASSISTED
+                and run.registered_plan is None
+            ):
+                raise ValueError("EXTERNAL_RESEARCH_PLAN_REQUIRED")
             claim = self.store.record_operation(
                 run_id,
                 operation_id,
@@ -346,6 +639,62 @@ class ResearchService:
                 run = transition_run(run, ResearchState.VERIFYING, updated_at=timestamp)
             self.store.save_run(run)
             result = self._result(run, outcome, replayed=False)
+            self.store.complete_operation(run_id, operation_id, result)
+            return result
+
+    def validate_civil_analysis(
+        self,
+        run_id: str,
+        operation_id: str,
+        analysis: CivilLawAnalysis,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Validate an untrusted civil analysis against this run's server-owned state."""
+
+        with self._lock:
+            run = self._required_run(run_id)
+            timestamp = now or datetime.now(UTC)
+            if run.expires_at <= timestamp:
+                raise ValueError("RESEARCH_RUN_EXPIRED")
+            if run.state is not ResearchState.READY_FOR_DRAFT:
+                raise ValueError("RESEARCH_OBLIGATION_PENDING")
+            operation = self.store.record_operation(
+                run_id,
+                operation_id,
+                {"status": "in_progress"},
+            )
+            if not operation.created:
+                return operation.result
+
+            sources = self.store.list_sources(run_id)
+            evidence = self.store.list_evidence(run_id)
+            legal_context = self.legal_context_provider.assess(
+                sources,
+                as_of_date=(
+                    run.as_of_date
+                    or timestamp.astimezone(TAIWAN_TIME).date()
+                ),
+                assessed_at=timestamp,
+            )
+            validation = run_civil_analysis_validation(
+                analysis,
+                server_sources=sources,
+                server_evidence=evidence,
+                legal_context=legal_context,
+                validated_at=timestamp,
+            )
+            result = {
+                **validation.model_dump(mode="json"),
+                "run_id": run_id,
+                "legal_context": {
+                    "schema_version": legal_context.schema_version,
+                    "provider_id": legal_context.provider_id,
+                    "status": legal_context.status.value,
+                    "record_count": len(legal_context.records),
+                    "limitations": legal_context.limitations,
+                },
+            }
             self.store.complete_operation(run_id, operation_id, result)
             return result
 
@@ -427,6 +776,16 @@ class ResearchService:
                 require_explicit_bindings=True,
             )
             reasons.extend(binding_reasons)
+            issue_coverage, issue_reasons = _issue_coverage(run, bindings)
+            reasons.extend(issue_reasons)
+            reasons.extend(
+                _citation_occurrence_reasons(
+                    answer_text,
+                    bindings,
+                    evidence_by_id=evidence_by_id,
+                    sources=sources,
+                )
+            )
             if not claims:
                 reasons.append("CLAIM_SUPPORT_NOT_CHECKED")
             if answer_privacy.status == "redaction_required":
@@ -493,6 +852,7 @@ class ResearchService:
                 "verification_method": "deterministic_grounding_v2",
                 "semantic_entailment_performed": False,
                 "binding_mode": binding_mode,
+                "issue_coverage": issue_coverage,
                 "privacy": answer_privacy.model_dump(mode="json"),
                 "coverage_summary": {
                     **run.coverage.model_dump(mode="json"),

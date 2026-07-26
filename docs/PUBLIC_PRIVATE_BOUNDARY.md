@@ -1,5 +1,18 @@
 # Public / Private Boundary
 
+## v0.7 product lineage
+
+The maintainer's private Legal Portal is the upstream incubator and
+production/reference implementation. ALR-TW is the public-safe extraction of
+provider contracts, stateless validators, deterministic trust rules, synthetic
+fixtures, and boundary tests.
+
+ALR-TW is not a second parallel full product and is not a reduced-data edition
+of the private runtime. The private implementation may incubate concepts, but
+the public package is independently implemented against documented contracts.
+It has no runtime import, package dependency, filesystem path, corpus, index,
+manifest, or operational dependency on the private implementation.
+
 ## v0.6 clarification
 
 公開 repo 現在包含真實官方端點的有界 provider code 與 clean-room TLR adapter，但不包含下載後的 production corpus、永久 cache、token 或真實查詢。Live provider 在 operator 明確選擇模式後才執行；`synthetic` 仍是唯一 implicit default。
@@ -18,13 +31,19 @@ data, local indexes, caches, logs, credentials, or private workflow data.
 | Trust gate | yes |
 | Synthetic fixtures | yes |
 | Trace schema | yes |
+| Civil-law analysis schema and stateless validator | yes |
+| Temporal / authority / validity provider contract | yes |
 | Production corpus | no |
 | SQLite shards | no |
 | Chroma DB | no |
 | Verified cache | schema only |
 | Logs | no |
 | Private workflow data | no |
+| Production catalogs, registries, manifests, and reconciliation state | no |
+| Schedulers, operator attestations, backup, rollback, and release state | no |
+| Private gold labels and ranking calibration | no |
 
-The full local runtime can replace the synthetic adapters with compliant legal
-data sources. The public repo keeps only the schemas, policies, deterministic
-harness, tests, examples, and documentation needed to review the trust boundary.
+A user-owned runtime can replace the synthetic adapters with compliant legal
+data sources through provider-neutral contracts. The public repo keeps only the
+schemas, policies, deterministic harness, tests, examples, and documentation
+needed to review the trust boundary.

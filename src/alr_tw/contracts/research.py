@@ -7,6 +7,11 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .interop import (
+    DiscoveryMode,
+    RegisteredResearchPlan,
+    ResearchResponsibility,
+)
 from .providers import DataMode
 
 
@@ -39,6 +44,7 @@ class ResearchState(str, Enum):
 
 
 class ResearchObligationKind(str, Enum):
+    EXTERNAL_PLAN_REVIEW = "external_plan_review"
     QUERY_UNDERSTANDING = "query_understanding"
     PRIVACY_SCREEN = "privacy_screen"
     LAW_RESEARCH = "law_research"
@@ -115,6 +121,8 @@ class ResearchRun(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     semantic_recall_degraded: bool = False
     judgment_recall_incomplete: bool = False
+    responsibility: ResearchResponsibility = Field(default_factory=ResearchResponsibility)
+    registered_plan: RegisteredResearchPlan | None = None
 
     @model_validator(mode="after")
     def validate_timestamps_and_modes(self) -> ResearchRun:
@@ -128,4 +136,9 @@ class ResearchRun(BaseModel):
             self.requested_mode != DataMode.HYBRID_VERIFIED
         ):
             raise ValueError("effective mode cannot silently enable external semantic recall")
+        if (
+            self.responsibility.discovery_mode is DiscoveryMode.SERVER_MANAGED
+            and self.registered_plan is not None
+        ):
+            raise ValueError("registered plans require client-assisted discovery")
         return self

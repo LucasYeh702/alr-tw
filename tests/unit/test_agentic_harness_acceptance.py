@@ -10,6 +10,7 @@ from tw_legal_rag_mcp.mcp_server.server import tool_definitions
 def test_agentic_harness_release_acceptance_artifacts_exist():
     required_paths = [
         "docs/AGENTIC_HARNESS_ACCEPTANCE.md",
+        "docs/V070_INTEROPERABILITY_ACCEPTANCE.md",
         "docs/AGENTIC_WORKFLOW.md",
         "docs/TRUST_MODEL.md",
         "docs/TLR_CANDIDATE_MODE.md",
@@ -75,7 +76,7 @@ def test_agentic_harness_name_is_backed_by_graph_tools_and_scenarios():
 
 
 def test_acceptance_doc_states_current_claim_boundary():
-    text = Path("docs/AGENTIC_HARNESS_ACCEPTANCE.md").read_text(encoding="utf-8")
+    text = Path("docs/V070_INTEROPERABILITY_ACCEPTANCE.md").read_text(encoding="utf-8")
 
     assert f"v{alr_tw.__version__}" in text
     assert "server-owned research state" in text
@@ -85,3 +86,25 @@ def test_acceptance_doc_states_current_claim_boundary():
     assert "不宣稱" in text
     assert "完整台灣法律資料庫" in text
     assert "production SLA" in text
+    assert "agent-neutral" in text
+    assert "untrusted_client_proposal" in text
+    assert "upstream incubator" in text
+    assert "no private runtime dependency" in text
+    assert "validate_civil_analysis" in text
+    assert "not production legal correctness" in text
+
+
+def test_v070_optional_external_integrations_are_documented_consistently():
+    paths = [
+        "README.md",
+        "README.zh-TW.md",
+        "README.en.md",
+        "docs/INTEROPERABILITY_CONTRACT.md",
+    ]
+    required_link = "https://github.com/aa0101181514/tw-legal-rag"
+
+    for path in paths:
+        text = Path(path).read_text(encoding="utf-8")
+        assert required_link in text, f"{path}: {required_link}"
+        assert "client_assisted" in text, path
+        assert "optional" in text.lower() or "可選" in text, path

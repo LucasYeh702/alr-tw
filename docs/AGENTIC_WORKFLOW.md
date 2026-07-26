@@ -2,6 +2,23 @@
 
 This repository does not ship an LLM or agent implementation. The external client supplies planning and drafting; the server owns research state and trust decisions.
 
+## v0.7 agent-neutral client-assisted workflow
+
+1. 呼叫 `get_legal_research_capabilities`，不得假設 provider 或研究能力存在。
+2. 以 `discovery_mode=client_assisted` 建立 run。
+3. 外部 client 提出爭點與法源 locator，呼叫 `submit_legal_research_plan`。
+4. Server 將 plan 固定為 `untrusted_client_proposal`，並拒絕 client evidence／trust decision。
+5. Law／judgment／constitutional locator 由 server 執行 official exact lookup。
+6. 若前端產生民事結構分析，先呼叫 `validate_civil_analysis`；server 核對
+   normative source、fact／evidence、逐要件舉證責任及 legal context。
+7. 外部 client 以 server evidence 起草，並把 claim 綁定到 evidence ID 與 issue ID。
+8. `validate_legal_answer` 同時執行 evidence、role、time、privacy、claim 及 issue coverage gates。
+
+`client_assisted` 不代表 client 擁有 verification。它只改變初始 locator
+來源；civil-analysis `validated` 也不代表 final answer 已通過。兩者都不能
+改變 server-owned trust boundary。詳見
+[Interoperability Contract](INTEROPERABILITY_CONTRACT.md)。
+
 ## v0.6 server-owned workflow
 
 1. `research_legal_question` 建立 run 與固定順序 obligations，不生成答案。

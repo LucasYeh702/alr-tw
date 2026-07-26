@@ -2,6 +2,40 @@
 
 本專案遵循語意化版本精神；`0.x` 仍屬公開預覽，介面可能調整。
 
+## Unreleased - v0.7.0 development
+
+### Added
+
+- agent-neutral interoperability capabilities contract；
+- `get_legal_research_capabilities` 與 `submit_legal_research_plan` MCP tools；
+- `server_managed`／`client_assisted` discovery ownership；
+- provider-neutral legal issue、authority locator 與 immutable registered-plan contracts；
+- `claim_bindings.issue_ids` 與 explicit core-issue coverage；
+- public `CivilLawAnalysis` envelope，涵蓋 claims、elements、六種法律效果、
+  逐要件舉證責任、defenses、fact/evidence states、counter-authority 與
+  procedural posture；
+- provider-neutral temporal／authority／legal-validity contracts 與
+  synthetic-only context provider；
+- `validate_civil_analysis` MCP tool 與 validated／qualified／blocked
+  synthetic end-to-end fixtures；
+- public-boundary lint 對私人 runtime dependency、production state、
+  calibration 與 gold-label artifacts 的阻擋。
+
+### Safety
+
+- external research plans are always `untrusted_client_proposal`；
+- caller authority locators remain candidate-only and cannot include evidence or trust decisions；
+- client-assisted runs fail before research when the required plan or locator type is missing；
+- registered judgment locators use official exact lookup and do not trigger a duplicate keyword/TLR recall pass；
+- issue binding coverage is explicitly reported as non-entailment；
+- civil analysis、fact/evidence status 與 authority locator 一律保留
+  `untrusted_client_proposal` 邊界；
+- `met` element 必須綁 server-owned normative source 以及 fact 或 eligible
+  evidence；
+- `not_found_in_scope` 不得表示不存在反面見解；
+- private Legal Portal 只作 upstream incubator／reference implementation，
+  不是公開 package 的 runtime dependency。
+
 ## 0.6.2 - 2026-07-22
 
 ### Fixed

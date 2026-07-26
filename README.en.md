@@ -12,6 +12,10 @@ This repository does not ship an LLM or agent implementation. Planning, tool sel
 
 > v0.6.2 remains a `0.x` public preview. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
 
+> The current `main` working tree and package version are `0.7.0.dev0`; the
+> latest published release remains `v0.6.2`. The v0.7 material below describes
+> development interfaces, not capabilities claimed for the existing release.
+
 ## Agentic RAG capabilities
 
 ALR-TW decomposes legal research into an observable, retryable, and auditable server-owned flow:
@@ -30,6 +34,63 @@ User query
 The v0.6.2 surface adds legacy `hlExportPDF` and `/EXPORTFILE/ExportToPdf.aspx` compatibility, official identity verification for five-part TLR document IDs, direct-result and link-only search fallbacks, current-day legal-time semantics, and bounded local TLR relevance reranking while preserving the existing safety model. A page that exposes only the same five-part identifier remains explicitly classified as `legacy_five_part_jid`; no version suffix is guessed. The public version does not implement natural-language statutory issue planning or systematic counter-authority search and does not claim semantic entailment.
 
 An external agent may plan research and draft an answer, but it cannot declare a source official, promote a candidate into evidence, or bypass final validation.
+
+## v0.7 development direction
+
+v0.7 narrows ALR-TW into an agent-neutral Taiwan-law research verification
+runtime. Any MCP client may perform issue identification, element analysis, and
+subsumption; ALR-TW remains independent of a particular agent project and owns
+capability negotiation, research state, official verification, evidence
+promotion, and the final decision.
+
+The product lineage is a one-way extraction, not a pair of parallel products:
+
+```text
+maintainer private Legal Portal
+  (upstream incubator + production/reference implementation)
+        |
+        | contract-first public-safe extraction only
+        v
+ALR-TW
+  (public contracts + validators + synthetic fixtures)
+        ^
+        | optional JSON/MCP integration
+external reasoning clients
+```
+
+ALR-TW is neither a parallel complete deployment nor a data-reduced copy of the
+private Legal Portal. The private runtime is an upstream incubator and internal
+reference implementation. ALR-TW has no runtime dependency on its repository,
+paths, corpus, indexes, manifests, or production parameters. Public users may
+connect their own providers through provider-neutral contracts.
+
+The development `client_assisted` mode accepts a structured issue and authority
+locator plan. Every locator remains an untrusted candidate; a client cannot
+submit evidence or an `official` trust decision. See the
+[agent-neutral interoperability contract](docs/INTEROPERABILITY_CONTRACT.md).
+
+The v0.7 P0 surface also provides `alr-tw.civil-law-analysis/v1` and
+`validate_civil_analysis` for claims, elements, element-level burdens,
+defenses, counter-authority, procedural posture, legal effects, and
+fact/evidence states. It performs structural and trust validation, not semantic
+entailment.
+The development tree adds `get_legal_research_capabilities`,
+`submit_legal_research_plan`, and `validate_civil_analysis`; existing v0.6
+server-owned tools remain compatible.
+
+### Optional external integration examples
+
+These are non-normative examples, not ALR-TW distribution components:
+
+| Project | Optional role | ALR-TW boundary |
+|---|---|---|
+| [TLR (Taiwan Legal RAG)](https://github.com/aa0101181514/tw-legal-rag) | Semantic candidate recall for ordinary judgments | Already supported through `hybrid_verified`; every result remains candidate-only until ALR-TW verifies Judicial Yuan official full text |
+
+If a frontend has already called TLR, that run should use `client_assisted` and
+submit the selected judgment locators so ALR-TW does not repeat the same recall.
+Listing an example does not make either project a core dependency, co-distributed
+component, or trusted evidence source. Each project retains independent code,
+versions, configuration, and licensing.
 
 ## Safety boundary
 
@@ -83,7 +144,7 @@ Ordinary-judgment lookup does not require a Judicial Yuan API token. In a live m
 
 Secrets are redacted from `doctor` output and must not be committed, traced, or persisted in SQLite.
 
-## v0.6.2 MCP tools
+## v0.6.2 published MCP tools
 
 | Tool | Purpose |
 |---|---|
@@ -170,7 +231,13 @@ Start in the safe `synthetic` mode to verify that the client can launch the MCP 
 }
 ```
 
-The recommended client sequence is to create a run, follow `next_operation`, draft only from promoted server-owned evidence, and submit the draft to `validate_legal_answer`. Only a `validated` result, or a `qualified` result allowed by the disclosure rules, may be rendered. `lookup_legal_source` does not replace answer-level validation.
+The client should negotiate capabilities, create a run, register a plan when
+required by the discovery mode, and follow `next_operation`. A structured civil
+analysis should pass `validate_civil_analysis`, whose result never authorizes a
+final answer. Draft only from promoted server-owned evidence, then call
+`validate_legal_answer`. Only a final-answer `validated` result, or a
+`qualified` result allowed by disclosure rules, may be rendered.
+`lookup_legal_source` does not replace answer-level validation.
 
 ## Development verification
 
@@ -185,9 +252,16 @@ uv build
 
 ## Public / private boundary
 
-The public repository contains provider and resolver interfaces, source tiers, evidence-promotion and citation policies, MCP schemas, privacy and retention controls, purge and fail-closed rules, synthetic fixtures, tests, CI, and documentation.
+The public repository contains provider and resolver interfaces, the
+civil-analysis validator, source tiers, evidence-promotion and citation
+policies, MCP schemas, privacy and retention controls, purge and fail-closed
+rules, synthetic fixtures, tests, CI, and documentation.
 
-It does not contain a production corpus, permanent official full-text cache, real user records, private evaluations, vector shards, credentials, private endpoints, internal ranking or chunking parameters, or unredacted case material. Synthetic data is for demos and tests and must not be presented as current law.
+It does not contain a production corpus, permanent official full-text cache,
+real user records, private evaluations, vector shards, credentials, private
+endpoints, private manifests, operator state, gold labels, internal ranking or
+chunking parameters, or unredacted case material. Synthetic data is for demos
+and tests and must not be presented as current law.
 
 ## Connecting real data
 
@@ -214,6 +288,7 @@ Choose data mode
 - [Security](SECURITY.md)
 - [Trust Model](docs/TRUST_MODEL.md)
 - [Tool Contract](docs/TOOL_CONTRACT.md)
+- [Agent-neutral interoperability contract](docs/INTEROPERABILITY_CONTRACT.md)
 - [TLR Provider](docs/TLR_PROVIDER.md)
 - [Official Providers](docs/OFFICIAL_PROVIDERS.md)
 - [Storage and Purge](docs/STORAGE_AND_PURGE.md)
@@ -221,6 +296,7 @@ Choose data mode
 - [Error Codes](docs/ERROR_CODES.md)
 - [Threat Model](docs/THREAT_MODEL.md)
 - [Release Notes](docs/RELEASE_NOTES.md)
+- [v0.7 Development Acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)
 - [Changelog](CHANGELOG.md)
 
 ## Legal notice

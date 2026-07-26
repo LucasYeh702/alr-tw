@@ -14,6 +14,7 @@ from alr_tw.contracts.providers import (
     ProviderResult,
     ProviderResultStatus,
 )
+from alr_tw.contracts.interop import DiscoveryMode, ResearchPlanProposal
 from alr_tw.contracts.research import ResearchDepth, ResearchState
 from alr_tw.providers.official import (
     OfficialConstitutionalProvider,
@@ -402,6 +403,68 @@ def test_official_website_search_candidate_is_downloaded_and_promoted(tmp_path: 
     assert stored.coverage.counter_authority_checked is False
     assert "COUNTER_AUTHORITY_SEARCH_NOT_IMPLEMENTED" in stored.coverage.limitations
     assert [method for method, _ in judgments.calls] == ["GET", "POST", "GET", "GET"]
+
+
+def test_client_assisted_plan_skips_duplicate_judgment_search_and_verifies_exactly(
+    tmp_path: Path,
+) -> None:
+    store = SqliteStore(tmp_path / "cache")
+    judgments = JudgmentFlowTransport()
+    providers = ProviderSet(
+        laws=OfficialLawProvider(LawTransport(), verify_webpage=False),
+        constitutional=OfficialConstitutionalProvider(UnusedHttpTransport()),
+        judgments=OfficialJudgmentProvider(judgments),
+    )
+    service = ResearchService(store, ProviderObligationExecutor(store, providers))
+    run = service.create_run(
+        "請依指定法源分析本案",
+        mode=DataMode.OFFICIAL_ONLY,
+        depth=ResearchDepth.QUICK,
+        include_counter_authority=False,
+        discovery_mode=DiscoveryMode.CLIENT_ASSISTED,
+    )
+    plan = ResearchPlanProposal.model_validate(
+        {
+            "plan_id": "plan-exact-only",
+            "issues": [
+                {
+                    "issue_id": "issue-liability",
+                    "label": "責任成立",
+                    "proposition": "是否成立法律責任？",
+                    "category": "claim_basis",
+                }
+            ],
+            "authority_locators": [
+                {
+                    "locator_id": "law-7",
+                    "material_type": "law",
+                    "citation": "示範責任法第7條",
+                    "issue_ids": ["issue-liability"],
+                },
+                {
+                    "locator_id": "judgment-42",
+                    "material_type": "judgment",
+                    "citation": "臺灣示範地方法院130年度測訴字第42號刑事判決",
+                    "identifier": JudgmentFlowTransport.jid,
+                    "purpose": "interpretation",
+                    "issue_ids": ["issue-liability"],
+                },
+            ],
+        }
+    )
+    service.register_research_plan(run.run_id, "register-plan", plan)
+
+    _advance(service, run.run_id)
+    stored = service.get_run(run.run_id)
+    candidates = service.store.list_candidates(run.run_id)
+
+    assert stored is not None
+    assert stored.coverage.law_checked is True
+    assert stored.coverage.judgment_checked is True
+    assert stored.judgment_recall_incomplete is False
+    assert len(candidates) == 1
+    assert candidates[0].provider_id == "external_research_plan"
+    assert all(method != "POST" for method, _ in judgments.calls)
 
 
 def test_keyword_only_law_and_constitutional_handlers_do_not_claim_verified_coverage(

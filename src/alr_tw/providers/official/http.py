@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
 from urllib.parse import urljoin, urlparse
 
+from alr_tw._version import __version__
+
 
 @dataclass(frozen=True)
 class HttpResponse:
@@ -23,7 +25,12 @@ class HttpTransport(Protocol):
 class HttpxAllowlistedTransport:
     """HTTPS-only transport with redirect and response-size validation."""
 
-    def __init__(self, allowed_hosts: set[str], *, user_agent: str = "ALR-TW/0.6.2"):
+    def __init__(
+        self,
+        allowed_hosts: set[str],
+        *,
+        user_agent: str = f"ALR-TW/{__version__}",
+    ):
         self.allowed_hosts = {host.lower() for host in allowed_hosts}
         self.user_agent = user_agent
 

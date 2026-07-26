@@ -103,6 +103,30 @@ class AnswerClaim(ClaimContractModel):
     importance: Importance | str = Importance.CORE
 
 
+class CitationOccurrence(ClaimContractModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_id: str = Field(min_length=1)
+    citation_text: str = Field(min_length=1, max_length=500)
+    start_offset: int = Field(ge=0)
+    end_offset: int = Field(gt=0)
+
+    @classmethod
+    def from_text(
+        cls,
+        *,
+        evidence_id: str,
+        citation_text: str,
+        start_offset: int,
+    ) -> CitationOccurrence:
+        return cls(
+            evidence_id=evidence_id,
+            citation_text=citation_text,
+            start_offset=start_offset,
+            end_offset=start_offset + len(citation_text),
+        )
+
+
 class ClaimBinding(ClaimContractModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -118,6 +142,11 @@ class ClaimBinding(ClaimContractModel):
     ]
     importance: Literal["core", "supporting"] = "core"
     evidence_ids: list[str] = Field(min_length=1)
+    issue_ids: list[str] = Field(default_factory=list)
+    citation_occurrences: list[CitationOccurrence] = Field(
+        default_factory=list,
+        max_length=32,
+    )
 
 
 class ClaimSupportingSegment(ClaimContractModel):

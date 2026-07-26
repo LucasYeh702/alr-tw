@@ -159,3 +159,12 @@ def test_validate_answer_schema_exposes_structured_claim_bindings() -> None:
     assert "evidence IDs" in bindings["description"]
     assert bindings["items"]["additionalProperties"] is False
     assert "evidence_ids" in bindings["items"]["required"]
+    occurrences = bindings["items"]["properties"]["citation_occurrences"]
+    assert occurrences["type"] == "array"
+    assert occurrences["items"]["additionalProperties"] is False
+    assert occurrences["items"]["required"] == [
+        "evidence_id",
+        "citation_text",
+        "start_offset",
+        "end_offset",
+    ]

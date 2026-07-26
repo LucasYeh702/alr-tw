@@ -42,6 +42,19 @@ def test_explicit_unpublished_strategy_is_blocked() -> None:
     assert result.redacted_answer is None
 
 
+def test_fullwidth_and_zero_width_pii_obfuscation_is_normalized_before_screening() -> None:
+    zero_width = "\u200b"
+    synthetic_id = "Ａ１" + zero_width + "２３４５６７８９"
+    synthetic_mobile = "０９１２" + zero_width + "３４５６７８"
+
+    result = screen_answer_output(f"聯絡{synthetic_id}或{synthetic_mobile}")
+
+    assert result.status == "redaction_required"
+    assert {"TW_ID", "MOBILE"} <= set(result.redactions)
+    assert result.redacted_answer is not None
+    assert zero_width not in result.redacted_answer
+
+
 def test_outbound_query_keeps_conservative_length_gate() -> None:
     outbound = screen_outbound_query("侵權責任法律分析" * 30)
     output = screen_answer_output("侵權責任法律分析" * 30)

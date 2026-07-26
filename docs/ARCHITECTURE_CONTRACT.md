@@ -1,5 +1,36 @@
 # Architecture Contract
 
+## v0.7 agent-neutral extension
+
+The maintainer's private Legal Portal is the upstream incubator and internal
+production/reference implementation. ALR-TW is a one-way, independently
+implemented public-safe extraction of contracts and invariants. It is not a
+parallel complete product, and no private runtime artifact is a public package
+dependency.
+
+The v0.7 development contract adds an optional untrusted planning boundary:
+
+```text
+external issue / authority-locator proposal
+  -> immutable registered plan (candidate-only)
+  -> server-owned obligations and official verification
+  -> server-owned evidence
+  -> optional CivilLawAnalysis structural/trust validation
+  -> claim + issue binding
+  -> final validation
+```
+
+The external client may supply legal reasoning structure, but cannot supply
+evidence, verification status, source tier, content hash, or final decision.
+Core code and schemas must remain independent of any named agent frontend. See
+[Interoperability Contract](INTEROPERABILITY_CONTRACT.md).
+
+`CivilLawAnalysis`, `LegalContextProvider`, and
+`validate_civil_analysis` are public P0 interfaces. They validate server-owned
+references, legal-effect taxonomy, per-element burden records, temporal
+applicability, authority status, and legal validity. They do not duplicate
+citation support or privacy logic and do not perform semantic entailment.
+
 ## v0.6 server-owned contract
 
 新整合應以 `alr_tw.contracts` 的 provider-neutral models、`ResearchService`、`ProviderObligationExecutor` 與 `SqliteStore` 為主。外部 agent 只能建立／推進 run 與提交 draft；不得提交 evidence span 讓 final validation 採信。
@@ -49,6 +80,9 @@ source_manifest
 | `Retriever` | `src/tw_legal_rag_mcp/contracts.py` | Retriever protocol for query-to-candidate recall. |
 | `CitationVerifier` | `src/tw_legal_rag_mcp/contracts.py` | Verifier protocol for source policy and final-citation eligibility checks. |
 | `run_synthetic_contract_pipeline` | `src/tw_legal_rag_mcp/contracts.py` | Synthetic end-to-end contract demonstration without production data. |
+| `CivilLawAnalysis` | `src/alr_tw/contracts/civil_analysis.py` | Untrusted civil-law claims, elements, burdens, defenses, facts/evidence states, counter-authority, and procedure. |
+| `LegalContextProvider` | `src/alr_tw/contracts/legal_context.py` | Provider-neutral temporal, authority, and legal-validity port. |
+| `validate_civil_analysis` | `src/alr_tw/verification/civil_analysis.py` | Fail-closed structural and server-owned-reference validator; never a final-answer authorization. |
 
 ## Trust Invariants
 
@@ -78,6 +112,9 @@ This public contract intentionally excludes deployment-specific tuning and priva
 - SQLite FTS settings
 - tuned production ranking weights or production scoring formula
 - private evaluation holdouts
+- production catalogs, registries, promotion manifests, and reconciliation state
+- scheduler, operator attestation, backup, rollback, and release state
+- private gold labels and ranking calibration
 - user query logs
 - credentials, tokens, private endpoints, and local paths
 

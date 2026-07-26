@@ -9,17 +9,20 @@ from typing import Any, Callable, Coroutine, TypeVar
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from alr_tw.contracts.providers import (
+    CandidateIdentity,
     DataMode,
+    ProviderCandidate,
     ProviderErrorCode,
     ProviderResult,
     ProviderResultStatus,
 )
+from alr_tw.contracts.interop import AuthorityLocatorProposal, DiscoveryMode
 from alr_tw.contracts.research import (
     ResearchObligation,
     ResearchObligationKind,
     ResearchRun,
 )
-from alr_tw.contracts.sources import EvidenceSpan, SourceRecord
+from alr_tw.contracts.sources import EvidenceSpan, MaterialType, SourceRecord
 from alr_tw.providers.official import (
     OfficialConstitutionalProvider,
     OfficialJudgmentProvider,
@@ -149,6 +152,19 @@ class ProviderObligationExecutor:
             "claim_verified": False,
         }
 
+    @staticmethod
+    def _plan_locators(
+        run: ResearchRun,
+        material_type: MaterialType,
+    ) -> list[AuthorityLocatorProposal]:
+        if run.registered_plan is None:
+            return []
+        return [
+            item
+            for item in run.registered_plan.proposal.authority_locators
+            if item.material_type is material_type
+        ]
+
     def _understand(self, run: ResearchRun, obligation: ResearchObligation) -> dict[str, Any]:
         return self._outcome(
             obligation,
@@ -159,6 +175,12 @@ class ProviderObligationExecutor:
                 ),
                 "jid_present": self._jid_from_text(run.query) is not None,
                 "formal_judgment_citation": self._formal_citation_from_text(run.query),
+                "discovery_mode": run.responsibility.discovery_mode.value,
+                "registered_plan_id": (
+                    run.registered_plan.proposal.plan_id
+                    if run.registered_plan is not None
+                    else None
+                ),
             },
         )
 
@@ -186,7 +208,21 @@ class ProviderObligationExecutor:
         warnings: list[str] = []
         added_sources = 0
         added_evidence = 0
-        citations = _run(self.providers.laws.resolve_citations(run.query, limit=5))
+        plan_locators = self._plan_locators(run, MaterialType.LAW)
+        client_assisted = (
+            run.responsibility.discovery_mode is DiscoveryMode.CLIENT_ASSISTED
+        )
+        lookup_texts = (
+            [item.lookup_text for item in plan_locators]
+            if client_assisted
+            else [run.query]
+        )
+        citations: list[tuple[str, str]] = []
+        for lookup_text in lookup_texts:
+            citations.extend(
+                _run(self.providers.laws.resolve_citations(lookup_text, limit=5))
+            )
+        citations = list(dict.fromkeys(citations))
         if citations:
             for law_name, article_no in citations:
 
@@ -208,12 +244,19 @@ class ProviderObligationExecutor:
                 if result.status != ProviderResultStatus.FOUND:
                     warnings.append(result.error_code.value if result.error_code else result.status.value)
         else:
-            result = _run(self.providers.laws.search(run.query, limit=10))
-            calls.append(self._provider_call(result))
-            warnings.append("LAW_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP")
+            if client_assisted:
+                warnings.append("CLIENT_ASSISTED_LAW_LOCATOR_UNRESOLVED")
+            else:
+                result = _run(self.providers.laws.search(run.query, limit=10))
+                calls.append(self._provider_call(result))
+                warnings.append("LAW_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP")
         limitations = list(run.coverage.limitations)
         if not citations:
-            limitations.append("LAW_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP")
+            limitations.append(
+                "CLIENT_ASSISTED_LAW_LOCATOR_UNRESOLVED"
+                if client_assisted
+                else "LAW_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP"
+            )
         elif added_evidence == 0:
             limitations.append("LAW_OFFICIAL_VERIFICATION_INCOMPLETE")
         coverage = run.coverage.model_copy(
@@ -228,6 +271,11 @@ class ProviderObligationExecutor:
             warnings=warnings,
             added_sources=added_sources,
             added_evidence=added_evidence,
+            metadata={
+                "discovery_mode": run.responsibility.discovery_mode.value,
+                "registered_locator_count": len(plan_locators),
+                "resolved_citation_count": len(citations),
+            },
             updates={"coverage": coverage},
         )
 
@@ -236,6 +284,62 @@ class ProviderObligationExecutor:
         run: ResearchRun,
         obligation: ResearchObligation,
     ) -> dict[str, Any]:
+        if run.responsibility.discovery_mode is DiscoveryMode.CLIENT_ASSISTED:
+            registered_plan = run.registered_plan
+            if registered_plan is None:
+                return self._outcome(
+                    obligation,
+                    warnings=["EXTERNAL_RESEARCH_PLAN_REQUIRED"],
+                    updates={"judgment_recall_incomplete": True},
+                )
+            locators = self._plan_locators(run, MaterialType.JUDGMENT)
+            client_warnings: list[str] = []
+            for rank, locator in enumerate(locators, start=1):
+                lookup_text = locator.lookup_text
+                canonical_jid = OfficialJudgmentProvider.normalize_jid(lookup_text)
+                formal_citation = self._formal_citation_from_text(lookup_text)
+                candidate = ProviderCandidate(
+                    candidate_id=(
+                        f"external-plan:{registered_plan.proposal.plan_id}:"
+                        f"{locator.locator_id}"
+                    ),
+                    provider_id="external_research_plan",
+                    title=locator.citation,
+                    official_identifier=lookup_text,
+                    identity=CandidateIdentity(
+                        canonical_jid=canonical_jid,
+                        provider_document_id=lookup_text,
+                        formal_citation=formal_citation,
+                    ),
+                    candidate_rank=rank,
+                    metadata={
+                        "plan_id": registered_plan.proposal.plan_id,
+                        "locator_id": locator.locator_id,
+                        "purpose": locator.purpose.value,
+                        "candidate_only": True,
+                    },
+                )
+                self.store.save_candidate(
+                    run.run_id,
+                    candidate,
+                    expires_at=run.expires_at,
+                )
+            if locators:
+                client_warnings.append("CLIENT_AUTHORITY_LOCATORS_CANDIDATE_ONLY")
+            else:
+                client_warnings.append("CLIENT_ASSISTED_JUDGMENT_LOCATOR_MISSING")
+            incomplete = not locators
+            return self._outcome(
+                obligation,
+                warnings=client_warnings,
+                added_candidates=len(locators),
+                metadata={
+                    "discovery_mode": DiscoveryMode.CLIENT_ASSISTED.value,
+                    "registered_locator_count": len(locators),
+                    "provider_search_skipped": True,
+                },
+                updates={"judgment_recall_incomplete": incomplete},
+            )
         if (
             self._jid_from_text(run.query) is not None
             or self._formal_citation_from_text(run.query) is not None
@@ -494,31 +598,64 @@ class ProviderObligationExecutor:
         run: ResearchRun,
         obligation: ResearchObligation,
     ) -> dict[str, Any]:
-        identifier = self.providers.constitutional.normalize_identifier(run.query)
         calls: list[dict[str, Any]] = []
         warnings: list[str] = []
         source_count = 0
         evidence_count = 0
-        if identifier:
-            result, source, evidence = self._cached_lookup(
-                run.run_id,
-                f"constitutional:{identifier}",
-                lambda: _run(self.providers.constitutional.exact_lookup(identifier)),
+        plan_locators = self._plan_locators(run, MaterialType.CONSTITUTIONAL)
+        client_assisted = (
+            run.responsibility.discovery_mode is DiscoveryMode.CLIENT_ASSISTED
+        )
+        lookup_texts = (
+            [item.lookup_text for item in plan_locators]
+            if client_assisted
+            else [run.query]
+        )
+        identifiers = list(
+            dict.fromkeys(
+                identifier
+                for text in lookup_texts
+                if (identifier := self.providers.constitutional.normalize_identifier(text))
             )
-            calls.append(self._provider_call(result))
-            if source is not None:
-                source_count = 1
-                for item in evidence:
-                    evidence_count += int(item.eligible_for_claim_support)
-            else:
-                warnings.append(result.error_code.value if result.error_code else result.status.value)
+        )
+        if identifiers:
+            for identifier in identifiers:
+
+                def fetch_constitutional(
+                    identifier: str = identifier,
+                ) -> tuple[ProviderResult, SourceRecord | None, list[EvidenceSpan]]:
+                    return _run(
+                        self.providers.constitutional.exact_lookup(identifier)
+                    )
+
+                result, source, evidence = self._cached_lookup(
+                    run.run_id,
+                    f"constitutional:{identifier}",
+                    fetch_constitutional,
+                )
+                calls.append(self._provider_call(result))
+                if source is not None:
+                    source_count += 1
+                    for item in evidence:
+                        evidence_count += int(item.eligible_for_claim_support)
+                else:
+                    warnings.append(
+                        result.error_code.value if result.error_code else result.status.value
+                    )
         else:
-            result = _run(self.providers.constitutional.search(run.query, limit=10))
-            calls.append(self._provider_call(result))
-            warnings.append("CONSTITUTIONAL_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP")
+            if client_assisted:
+                warnings.append("CLIENT_ASSISTED_CONSTITUTIONAL_LOCATOR_UNRESOLVED")
+            else:
+                result = _run(self.providers.constitutional.search(run.query, limit=10))
+                calls.append(self._provider_call(result))
+                warnings.append("CONSTITUTIONAL_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP")
         limitations = list(run.coverage.limitations)
-        if not identifier:
-            limitations.append("CONSTITUTIONAL_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP")
+        if not identifiers:
+            limitations.append(
+                "CLIENT_ASSISTED_CONSTITUTIONAL_LOCATOR_UNRESOLVED"
+                if client_assisted
+                else "CONSTITUTIONAL_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP"
+            )
         elif evidence_count == 0:
             limitations.append("CONSTITUTIONAL_OFFICIAL_VERIFICATION_INCOMPLETE")
         coverage = run.coverage.model_copy(
@@ -533,6 +670,11 @@ class ProviderObligationExecutor:
             warnings=warnings,
             added_sources=source_count,
             added_evidence=evidence_count,
+            metadata={
+                "discovery_mode": run.responsibility.discovery_mode.value,
+                "registered_locator_count": len(plan_locators),
+                "resolved_identifier_count": len(identifiers),
+            },
             updates={"coverage": coverage},
         )
 

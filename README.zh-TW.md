@@ -12,6 +12,9 @@ ALR-TW v0.6.2 是台灣法律研究安全 harness 的官方網頁相容性修正
 
 > v0.6.2 仍是 `0.x` 預覽版本。答案必須由具資格的人員依官方原文、時點與個案事實複核。
 
+> 目前 `main` 工作樹與套件版本是 `0.7.0.dev0`；最新已發布版本仍是
+> `v0.6.2`。下列 v0.7 內容是開發中介面，不是既有 release 聲明。
+
 ## Agentic RAG 能力
 
 ALR-TW 把法律研究拆成可觀察、可重試且可稽核的 server-owned 流程：
@@ -30,6 +33,58 @@ User query
 v0.6.2 提供 query understanding、outbound/output privacy 分離、法規／裁判／憲法來源規劃、TLR 候選官方升格、partial source 保留、裁判角色分類、explicit claim bindings、deterministic grounding v2、短期 resumable run 與 deterministic finalization。另補強舊式 `hlExportPDF`、`/EXPORTFILE/ExportToPdf.aspx` 裁判頁、TLR 五段 doc ID 的官方識別驗證、搜尋結果 fallback、今日現行法日期語意與 TLR 本地重排。若官方頁面只有相同五段識別碼，會保留 `legacy_five_part_jid`，不猜補版本尾碼。公開版尚未實作系統性反方裁判搜尋。
 
 外部 agent 可以規劃研究與起草答案，但不能自行宣告來源為官方資料、把候選升格成證據，或繞過最終驗證。
+
+## v0.7 開發方向
+
+v0.7 將 ALR-TW 收斂為前端無關的台灣法律研究驗證 runtime。任何 MCP
+client 都可以負責爭點、構成要件與涵攝；ALR-TW 不綁定特定 agent 專案，
+只固定能力協商、研究狀態、官方回查、證據升格與 final decision。
+
+產品關係採單向萃取，而非平行產品部署：
+
+```text
+maintainer private Legal Portal
+  (upstream incubator + production/reference implementation)
+        |
+        | contract-first public-safe extraction only
+        v
+ALR-TW
+  (public contracts + validators + synthetic fixtures)
+        ^
+        | optional JSON/MCP integration
+external reasoning clients
+```
+
+ALR-TW 不是另一套與私人 Legal Portal 平行的完整產品，也不是其資料庫的
+縮小版。私人 runtime 只作上游孵化與內部 reference implementation；
+ALR-TW 不依賴其 repo、路徑、資料、索引、manifest 或 production 參數。
+公開使用者可依 provider-neutral contract 接入自己的資料 provider。
+
+開發中的 `client_assisted` 模式允許前端提交結構化 issue／authority
+locator plan；所有 locator 仍是未受信任候選，不能提交 evidence 或
+`official` 判斷。詳見
+[Agent-neutral interoperability contract](docs/INTEROPERABILITY_CONTRACT.md)。
+
+v0.7 P0 另提供 `alr-tw.civil-law-analysis/v1` 與
+`validate_civil_analysis`：明示 claims、elements、逐要件舉證責任、
+defenses、counter-authority、procedural posture、法律效果及事實／證據
+狀態。這是 structural and trust validation，不是 semantic entailment。
+開發樹新增的 MCP 介面是 `get_legal_research_capabilities`、
+`submit_legal_research_plan` 與 `validate_civil_analysis`；原有 v0.6
+server-owned tools 維持相容。
+
+### 可選外部整合範例
+
+下列專案只是非規範性整合範例，不是 ALR-TW 發布內容：
+
+| 專案 | 可選角色 | 與 ALR-TW 的邊界 |
+|---|---|---|
+| [TLR（Taiwan Legal RAG）](https://github.com/aa0101181514/tw-legal-rag) | 普通裁判的語意候選召回 | 已可由 `hybrid_verified` 模式使用；結果固定為 candidate-only，仍須由 ALR-TW 回查司法院官方全文 |
+
+如果前端已自行呼叫 TLR，該次 run 應使用 `client_assisted` 並提交選定的
+裁判 locator，避免再由 ALR-TW 執行一次相同召回。列為範例不代表外部
+專案成為核心依賴、共同發布物或可信證據來源；各專案仍維持獨立程式碼、
+版本、設定與授權。
 
 ## v0.6.2 的安全模型
 
@@ -78,7 +133,7 @@ alr-tw doctor --live
 
 普通裁判不需要司法院 API token。啟用 live mode 後，搜尋詞與篩選條件會直接送到司法院裁判書查詢網站；不得以未公開案情、個人秘密或受保密義務保護的資料作為搜尋詞。也不要把 TLR API key 或真實查詢寫入 repo。
 
-## v0.6.2 MCP tools
+## v0.6.2 已發布 MCP tools
 
 | Tool | 用途 |
 |---|---|
@@ -167,7 +222,12 @@ alr-tw purge --all --confirm
 }
 ```
 
-建議依序建立 run、按 `next_operation` 推進研究、依 server-owned evidence 起草，再呼叫 `validate_legal_answer`。只有 `validated` 或規則允許的 `qualified` 結果才可呈現；`lookup_legal_source` 不能取代答案層級的驗證。
+建議先協商 capabilities，再建立 run、依 discovery mode 登錄 plan、按
+`next_operation` 推進研究。若產生結構化民事分析，先呼叫
+`validate_civil_analysis`；其結果不授權 final answer。之後只依
+server-owned evidence 起草並呼叫 `validate_legal_answer`。只有 final-answer
+`validated` 或規則允許的 `qualified` 才可呈現；`lookup_legal_source`
+不能取代答案層級的驗證。
 
 ## 驗證
 
@@ -182,9 +242,14 @@ uv build
 
 ## 公開／私有邊界
 
-公開 repo 保留 provider／resolver interfaces、source tier、evidence promotion、citation policy、MCP schemas、privacy、retention、purge、fail-closed rules、synthetic fixtures、tests、CI 與文件。
+公開 repo 保留 provider／resolver interfaces、civil-analysis validator、
+source tier、evidence promotion、citation policy、MCP schemas、privacy、
+retention、purge、fail-closed rules、synthetic fixtures、tests、CI 與文件。
 
-Repo 不包含 production corpus、永久官方全文 cache、真實使用者紀錄、私有 eval、向量 shard、credential、私有 endpoint、內部 ranking／chunking 參數或未匿名化案件資料。Synthetic data 只能用於 demo／測試，不能描述為現行法。
+Repo 不包含 production corpus、永久官方全文 cache、真實使用者紀錄、
+私有 eval、向量 shard、credential、私有 endpoint、private manifests、
+operator state、gold labels、內部 ranking／chunking 參數或未匿名化案件
+資料。Synthetic data 只能用於 demo／測試，不能描述為現行法。
 
 ## 如何接入真實資料
 
@@ -211,6 +276,7 @@ Choose data mode
 - [安全說明](SECURITY.md)
 - [信任模型](docs/TRUST_MODEL.md)
 - [工具契約](docs/TOOL_CONTRACT.md)
+- [Agent-neutral interoperability contract](docs/INTEROPERABILITY_CONTRACT.md)
 - [TLR Provider](docs/TLR_PROVIDER.md)
 - [官方 Providers](docs/OFFICIAL_PROVIDERS.md)
 - [Storage and Purge](docs/STORAGE_AND_PURGE.md)
@@ -219,6 +285,7 @@ Choose data mode
 - [Threat Model](docs/THREAT_MODEL.md)
 - [Release Notes](docs/RELEASE_NOTES.md)
 - [v0.6.2 Release Audit](docs/V062_RELEASE_AUDIT.md)
+- [v0.7 Development Acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)
 - [Changelog](CHANGELOG.md)
 
 ## 法律聲明

@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 from pydantic import SecretStr
 
+from alr_tw._version import __version__
 from alr_tw.contracts.providers import (
     CandidateIdentity,
     ProviderCandidate,
@@ -340,7 +341,7 @@ class TlrSemanticRecallProvider:
         return candidates, sources
 
     def _headers(self) -> dict[str, str]:
-        headers = {"User-Agent": "ALR-TW/0.6.2", "Accept": "application/json"}
+        headers = {"User-Agent": f"ALR-TW/{__version__}", "Accept": "application/json"}
         if self._api_key is not None:
             headers["Authorization"] = f"Bearer {self._api_key.get_secret_value()}"
         return headers

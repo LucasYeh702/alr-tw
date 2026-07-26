@@ -4,10 +4,13 @@
 
 v0.6 高階流程以持久化 `ResearchRun` 與逐步 result 取代 caller 組裝 authority trace：
 
-- `alr-tw.research-run/v1`：狀態、mode、privacy、obligations、coverage、source/evidence ids、TTL；
+- `alr-tw.research-run/v1`：狀態、mode、privacy、obligations、coverage、source/evidence ids、TTL，以及 additive v0.7 responsibility／registered-plan fields；
 - `alr-tw.research-step-result/v1`：本次 obligation、provider calls、warnings、剩餘 obligations；
 - `alr-tw.legal-source-lookup/v1`：精確來源結果，固定 `claim_verified=false`；
-- `alr-tw.answer-validation/v2`：decision、claim support、citations、qualification 或 blockers。
+- `alr-tw.civil-analysis-validation/v1`：analysis decision、server-owned
+  reference findings、legal-context summary、qualifications 與 blockers；固定
+  `authorizes_final_answer=false`；
+- `alr-tw.answer-validation/v3`：decision、claim support、citations、qualification、issue coverage 或 blockers。
 
 Trace 不得記錄 API secret。TLR privacy metadata 不得包含未遮罩的 sensitive input。Blocked validation 的 `answer_text` 必須是 `null`；ephemeral validation 另回 `storage_purged=true`。
 

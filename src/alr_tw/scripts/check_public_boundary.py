@@ -10,12 +10,41 @@ FORBIDDEN_DIR_PARTS = {
     "cache",
     "verified_cache",
     "chroma",
+    "daily_overlay",
+    "gold_labels",
+    "monthly_shards",
+    "operator_attestations",
+    "private_runtime",
+    "production_data",
+    "production_indexes",
+    "ranking_calibration",
+    "reconciliation_state",
+    "vector_store",
 }
 FORBIDDEN_PATH_PREFIXES = (
     "data/legal_public",
     "data/legal_private",
 )
 FORBIDDEN_SUFFIXES = (".sqlite", ".db", ".jsonl.gz", ".rar", ".log")
+FORBIDDEN_FILENAMES = {
+    ".env",
+    "gold_labels.json",
+    "operator_attestation.json",
+    "production_manifest.json",
+    "ranking_calibration.json",
+    "reconciliation_state.json",
+    "rollback_manifest.json",
+}
+PRIVATE_RUNTIME_MODULE = "legal" + "_portal"
+PRIVATE_RUNTIME_PACKAGE = "taiwan" + "-legal-" + "portal"
+PRIVATE_RUNTIME_IMPORT_PATTERN = re.compile(
+    rf"^\s*(?:from|import)\s+{re.escape(PRIVATE_RUNTIME_MODULE)}(?:\.|\s|$)",
+    re.MULTILINE,
+)
+PRIVATE_RUNTIME_DEPENDENCY_PATTERN = re.compile(
+    rf"""["']{re.escape(PRIVATE_RUNTIME_PACKAGE)}(?:[<>=!~;\s"']|$)""",
+    re.IGNORECASE,
+)
 FORBIDDEN_TEXT_PATTERNS = (
     (re.compile(r"\bapi[_-]?key\s*[:=]", re.IGNORECASE), "api_key"),
     (re.compile(r"\btoken\s*[:=]", re.IGNORECASE), "token"),
@@ -105,6 +134,8 @@ def find_public_boundary_violations(root: Path) -> list[str]:
             for prefix in FORBIDDEN_PATH_PREFIXES
         ):
             violations.append(f"forbidden path: {relative}")
+        if path.name in FORBIDDEN_FILENAMES:
+            violations.append(f"forbidden filename: {relative}")
         if path.suffix in FORBIDDEN_SUFFIXES or relative.endswith(FORBIDDEN_SUFFIXES):
             violations.append(f"forbidden file type: {relative}")
         if path.stat().st_size > MAX_TEXT_SCAN_BYTES:
@@ -119,6 +150,13 @@ def find_public_boundary_violations(root: Path) -> list[str]:
             for pattern, label in FORBIDDEN_TEXT_PATTERNS:
                 if pattern.search(text):
                     violations.append(f"forbidden text {label}: {relative}")
+            if PRIVATE_RUNTIME_IMPORT_PATTERN.search(text):
+                violations.append(f"forbidden private runtime import: {relative}")
+            if (
+                path.name == "pyproject.toml"
+                and PRIVATE_RUNTIME_DEPENDENCY_PATTERN.search(text)
+            ):
+                violations.append(f"forbidden private runtime dependency: {relative}")
             for match in JUDGMENT_IDENTIFIER_PATTERN.finditer(text):
                 if not _is_allowed_synthetic_judgment_identifier(match):
                     violations.append(f"forbidden text judgment_identifier: {relative}")

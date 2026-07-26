@@ -29,11 +29,24 @@ FORBIDDEN_DIR_PARTS = {
     "verified_archive",
     "vector_store",
     "chroma",
+    "daily_overlay",
+    "gold_labels",
+    "monthly_shards",
+    "operator_attestations",
+    "private_runtime",
+    "production_data",
+    "production_indexes",
+    "ranking_calibration",
+    "reconciliation_state",
 }
 
 FORBIDDEN_FILENAMES = {
     ".env",
+    "gold_labels.json",
+    "operator_attestation.json",
     "production_manifest.json",
+    "ranking_calibration.json",
+    "reconciliation_state.json",
     "rollback_manifest.json",
 }
 

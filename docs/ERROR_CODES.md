@@ -21,6 +21,43 @@
 | `CALLER_ATTESTED_SOURCE` | Caller metadata 不能自我證明 final eligibility |
 | `RESEARCH_RUN_EXPIRED` | Run TTL 已到期 |
 | `RESEARCH_OBLIGATION_PENDING` | 尚未完成研究義務即要求 final validation |
+| `EXTERNAL_RESEARCH_PLAN_REQUIRED` | `client_assisted` run 尚未登錄研究計畫，不執行研究 |
+| `CLIENT_ASSISTED_DISCOVERY_NOT_ENABLED` | `server_managed` run 不接受外部計畫登錄 |
+| `RESEARCH_PLAN_REGISTRATION_CLOSED` | Run 已開始研究，外部計畫登錄窗口已關閉 |
+| `RESEARCH_PLAN_ALREADY_REGISTERED` | Run 已有 immutable registered plan，不接受替換 |
+| `RESEARCH_PLAN_REQUIRED_LOCATOR_MISSING` | 外部計畫缺少本 run obligation 所需 material locator |
+| `CLIENT_ASSISTED_LAW_LOCATOR_UNRESOLVED` | 外部法規 locator 無法解析成法規名稱＋條號，不改跑關鍵字搜尋 |
+| `CLIENT_ASSISTED_JUDGMENT_LOCATOR_MISSING` | 計畫未提供普通裁判 locator，不改跑關鍵字或 TLR 搜尋 |
+| `CLIENT_ASSISTED_CONSTITUTIONAL_LOCATOR_UNRESOLVED` | 外部憲法 locator 無法正規化，不改跑關鍵字搜尋 |
+| `CLIENT_AUTHORITY_LOCATORS_CANDIDATE_ONLY` | 外部 locator 已登錄為候選，仍須官方 exact lookup |
+| `CLAIM_BINDING_ISSUE_NOT_IN_PLAN` | Final claim binding 引用了計畫中不存在的 issue ID |
+| `CORE_RESEARCH_ISSUE_UNBOUND` | 至少一個需要結論的 core issue 未綁定 final claim |
+| `ANALYSIS_SOURCE_NOT_SERVER_OWNED` | Civil analysis 引用的 source ID 不屬於同一 run |
+| `ANALYSIS_EVIDENCE_NOT_SERVER_OWNED` | Civil analysis 引用的 evidence ID 不屬於同一 run |
+| `ANALYSIS_FACT_NOT_SERVER_OWNED` | Civil analysis 引用的 fact ID 未由 server context 提供 |
+| `ANALYSIS_SOURCE_STALE` | Civil analysis 引用的 source 已過期 |
+| `ANALYSIS_SOURCE_NOT_EVIDENCE_ELIGIBLE` | Civil analysis 引用的 source 未取得 evidence 資格 |
+| `ANALYSIS_EVIDENCE_NOT_ELIGIBLE` | Civil analysis 引用的 evidence 不可支援分析 |
+| `CLAIM_BASIS_SOURCE_REQUIRED` | Civil claim 缺少 normative legal-basis source |
+| `MET_ELEMENT_NORMATIVE_SOURCE_REQUIRED` | `met` element 缺少 normative source |
+| `MET_ELEMENT_FACT_OR_EVIDENCE_REQUIRED` | `met` element 未綁 fact 或 evidence |
+| `MET_ELEMENT_SUPPORT_NOT_ESTABLISHED` | `met` element 綁定的 fact／evidence 未取得 server-owned support |
+| `ELEMENT_BURDEN_RECORD_REQUIRED` | Element 缺少逐要件舉證責任紀錄 |
+| `BURDEN_NORMATIVE_SOURCE_REQUIRED` | 舉證責任配置缺少 normative source |
+| `BURDEN_ALLOCATION_UNRESOLVED` | 舉證責任主體、移轉或證明標準仍有不確定性 |
+| `LEGAL_CONTEXT_NOT_VERIFIED` | Normative source 缺少 server-produced legal context |
+| `LEGAL_CONTEXT_INCOMPLETE` | Temporal／authority／validity provider coverage 不完整 |
+| `LEGAL_TIME_NOT_APPLICABLE` | Normative source 未確認適用於指定法律時點 |
+| `LEGAL_VALIDITY_NOT_CONFIRMED` | Normative source 的法律效力未確認 |
+| `NORMATIVE_AUTHORITY_NOT_BINDING` | 要件未綁至少一個 binding normative authority |
+| `NORMATIVE_AUTHORITY_UNUSABLE` | Normative authority 已被取代或狀態不明 |
+| `COUNTER_AUTHORITY_ABSENCE_NOT_ESTABLISHED` | bounded scope 查無結果，不得推論不存在反面見解 |
+| `COUNTER_AUTHORITY_COVERAGE_INCOMPLETE` | 未執行、未完成或失敗的反面見解搜尋必須揭露 |
+| `PROCEDURAL_POSTURE_UNRESOLVED` | 程序階段尚未確認 |
+| `CITATION_OCCURRENCE_EVIDENCE_NOT_BOUND` | Citation occurrence 指向未綁定該 claim 的 evidence |
+| `CITATION_OCCURRENCE_TEXT_MISMATCH` | Citation offsets 與 answer 實際文字不一致 |
+| `CITATION_OCCURRENCE_SOURCE_MISMATCH` | Citation text 不符合 bound evidence 的 source citation／identifier |
+| `CITATION_OCCURRENCE_OUTSIDE_BOUND_CLAUSE` | Citation 與 claim 不在同一 bounded clause |
 | `RESEARCH_RUN_NOT_FOUND` | Run 不存在、已過期清除或已 purge |
 | `HISTORICAL_LAW_VERSION_UNSUPPORTED` | 無法以本版資料可靠回答指定歷史時點 |
 | `ANSWER_CONTAINS_SENSITIVE_DATA` | Draft 含隱私規則判定的敏感資料 |

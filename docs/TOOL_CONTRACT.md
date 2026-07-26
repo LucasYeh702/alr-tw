@@ -1,10 +1,43 @@
 # ALR-TW Tool Contract
 
+## v0.7 development interoperability tools
+
+| Tool | Required input | Contract |
+|---|---|---|
+| `get_legal_research_capabilities` | none | 回傳 agent-neutral ownership、discovery modes、可驗證材料與限制 |
+| `submit_legal_research_plan` | `run_id`, `operation_id`, `plan` | 登錄 immutable untrusted issue／locator proposal；不能產生 evidence |
+| `validate_civil_analysis` | `run_id`, `operation_id`, `analysis` | 對 `alr-tw.civil-law-analysis/v1` 做 server-owned ID、時點、權威、效力、要件與舉證責任檢查；不授權 final answer |
+
+`research_legal_question.constraints.discovery_mode` 可為
+`server_managed`（預設）或 `client_assisted`。後者必須在執行研究前登錄
+`alr-tw.research-plan-proposal/v1`；前端 locator 只會成為候選，server 仍負責
+official verification、evidence promotion 與 final decision。
+
+`validate_civil_analysis` 只接受 references，不接受 source body、content
+hash、`official=true` 或 client trust attestation。整份 analysis 固定為
+`untrusted_client_proposal`。每個 `met` element 必須有 normative source，
+並綁定同 run 的 server-owned fact 或 eligible evidence；每個 element 必須
+有一筆 burden-of-proof record。
+
+回傳的 `validated`／`qualified`／`blocked` 是 civil-analysis structure and
+trust decision，不是 final-answer decision，且固定：
+
+- `authorizes_final_answer=false`；
+- `semantic_entailment_performed=false`；
+- `validation_scope=structural_and_trust_invariants_only`。
+
+法律時點、authority status 與 legal validity 由
+`alr-tw.legal-context-result/v1` provider contract 提供。公開套件只內建
+explicit-allowlist synthetic fixture provider；live context 未確認時 fail
+closed。
+
+詳見 [Agent-neutral interoperability contract](INTEROPERABILITY_CONTRACT.md)。
+
 ## v0.6 high-level tools
 
 | Tool | Required input | Contract |
 |---|---|---|
-| `research_legal_question` | `query` | 建立 run；optional constraints: `as_of_date`, `research_depth`, `include_counter_authority`, `retention` |
+| `research_legal_question` | `query` | 建立 run；optional constraints: `as_of_date`, `research_depth`, `include_counter_authority`, `discovery_mode`, `retention` |
 | `continue_legal_research` | `run_id`, `operation_id` | 原子執行一個 obligation；相同 operation id 回相同結果 |
 | `get_legal_research_state` | `run_id` | 唯讀；無 provider call、無 TTL extension |
 | `lookup_legal_source` | `text` | 精確來源 lookup；可選 run/operation linkage；`claim_verified=false` |
@@ -30,9 +63,21 @@ All MCP tool results are wrapped in:
 
 ## v0.6.2 answer validation
 
-`claim_bindings` 是 optional array；每筆包含 `claim_id`、`claim_text`、`claim_type`、`importance` 與至少一個同 run 的 `evidence_ids`。允許的 `claim_type` 是 `law_rule`、`court_view`、`disposition`、`fact`、`procedure`、`limitation`。
+`claim_bindings` 是 optional array；每筆包含 `claim_id`、`claim_text`、
+`claim_type`、`importance`、至少一個同 run 的 `evidence_ids`，以及 v0.7
+可選的 `issue_ids` 與 `citation_occurrences`。允許的 `claim_type` 是
+`law_rule`、`court_view`、`disposition`、`fact`、`procedure`、`limitation`。
+
+`citation_occurrences` 可提供 `evidence_id`、citation text 及 answer
+start／end offsets。Server 會核對文字 occurrence、bound evidence、source
+citation／identifier，並要求 citation 與 claim 位於同一 bounded clause。
+這是 additive strict mode；未提供時維持 v0.6 caller 相容。
 
 Server 會核對 evidence 存在、官方 trust status、expiry、claim-support eligibility 與 section role。核心法律 claim 沒有 span-level binding 時回 `CLAIM_CITATION_BINDING_REQUIRED`，不得以 run-wide 最高重疊通過。只傳 `answer_text` 的舊 caller 會取得 `binding_mode=legacy_unbound`。
+
+若 run 已登錄外部研究計畫，所有 `requires_conclusion=true` 的 core issue
+都必須出現在至少一筆 binding 的 `issue_ids`。這只證明明示覆蓋，不代表
+semantic entailment。
 
 答案驗證輸出為 additive `alr-tw.answer-validation/v3`，並揭露：
 
