@@ -7,11 +7,11 @@ import pytest
 from pydantic import ValidationError
 
 from alr_tw.contracts.civil_analysis import (
-    CivilLawAnalysis,
     FindingState,
     LegalEffectType,
 )
 from alr_tw.contracts.interop import DiscoveryMode, ResearchPlanProposal
+from alr_tw.contracts.legal_analysis import LegalAnalysisEnvelope
 from alr_tw.contracts.providers import DataMode
 from alr_tw.contracts.research import ResearchDepth, ResearchState
 from alr_tw.contracts.sources import (
@@ -63,39 +63,45 @@ def _analysis_payload(
         counter_authority["scope_description"] = "僅限合成測試資料的有界查詢"
     return {
         "analysis_id": "analysis-civil",
-        "claims": [
+        "analyses": [
             {
-                "claim_id": "claim-duty",
-                "label": "示範責任請求",
-                "legal_basis_source_ids": ["source-law"],
-                "requested_effects": ["right_constituting"],
+                "profile": "civil_substantive",
+                "scope": "complete",
+                "claims": [
+                    {
+                        "claim_id": "claim-duty",
+                        "label": "示範責任請求",
+                        "legal_basis_source_ids": ["source-law"],
+                        "requested_effects": ["right_constituting"],
+                    }
+                ],
+                "elements": [
+                    {
+                        "element_id": "element-duty",
+                        "claim_id": "claim-duty",
+                        "label": "違反示範義務",
+                        "proposition": "行為人違反示範責任法第7條的示範義務。",
+                        "legal_effect": "right_constituting",
+                        "status": "met",
+                        "normative_source_ids": ["source-law"],
+                        "evidence_ids": [evidence_id],
+                    }
+                ],
+                "burden_of_proof": [
+                    {
+                        "element_id": "element-duty",
+                        "burden_type": "persuasion",
+                        "burden_bearer": "claimant",
+                        "presumption": "none",
+                        "burden_shift": "none",
+                        "standard_of_proof": "ordinary_civil",
+                        "rebuttal_status": "not_applicable",
+                        "normative_source_ids": ["source-law"],
+                    }
+                ],
+                "defenses": [],
             }
         ],
-        "elements": [
-            {
-                "element_id": "element-duty",
-                "claim_id": "claim-duty",
-                "label": "違反示範義務",
-                "proposition": "行為人違反示範責任法第7條的示範義務。",
-                "legal_effect": "right_constituting",
-                "status": "met",
-                "normative_source_ids": ["source-law"],
-                "evidence_ids": [evidence_id],
-            }
-        ],
-        "burden_of_proof": [
-            {
-                "element_id": "element-duty",
-                "burden_type": "persuasion",
-                "burden_bearer": "claimant",
-                "presumption": "none",
-                "burden_shift": "none",
-                "standard_of_proof": "ordinary_civil",
-                "rebuttal_status": "not_applicable",
-                "normative_source_ids": ["source-law"],
-            }
-        ],
-        "defenses": [],
         "facts": [],
         "evidence_assessments": [
             {
@@ -229,14 +235,14 @@ def test_client_cannot_self_certify_counter_authority_absence():
     payload["counter_authority"]["absence_established"] = True
 
     with pytest.raises(ValidationError):
-        CivilLawAnalysis.model_validate(payload)
+        LegalAnalysisEnvelope.model_validate(payload)
 
 
 def test_civil_analysis_validated_then_answer_uses_same_server_evidence(tmp_path: Path):
     service, run_id, evidence, now = _ready_service(tmp_path)
-    analysis = CivilLawAnalysis.model_validate(_analysis_payload())
+    analysis = LegalAnalysisEnvelope.model_validate(_analysis_payload())
 
-    analysis_result = service.validate_civil_analysis(
+    analysis_result = service.validate_legal_analysis(
         run_id,
         "validate-analysis",
         analysis,
@@ -267,11 +273,11 @@ def test_civil_analysis_validated_then_answer_uses_same_server_evidence(tmp_path
 
 def test_not_found_in_scope_is_qualified_never_absence_proof(tmp_path: Path):
     service, run_id, _, now = _ready_service(tmp_path)
-    analysis = CivilLawAnalysis.model_validate(
+    analysis = LegalAnalysisEnvelope.model_validate(
         _analysis_payload(counter_status="not_found_in_scope")
     )
 
-    result = service.validate_civil_analysis(
+    result = service.validate_legal_analysis(
         run_id,
         "validate-qualified",
         analysis,
@@ -284,11 +290,11 @@ def test_not_found_in_scope_is_qualified_never_absence_proof(tmp_path: Path):
 
 def test_caller_supplied_evidence_id_is_blocked(tmp_path: Path):
     service, run_id, _, now = _ready_service(tmp_path)
-    analysis = CivilLawAnalysis.model_validate(
+    analysis = LegalAnalysisEnvelope.model_validate(
         _analysis_payload(evidence_id="caller-evidence")
     )
 
-    result = service.validate_civil_analysis(
+    result = service.validate_legal_analysis(
         run_id,
         "validate-blocked",
         analysis,
@@ -302,11 +308,11 @@ def test_caller_supplied_evidence_id_is_blocked(tmp_path: Path):
 def test_met_element_and_burden_require_normative_support(tmp_path: Path):
     service, run_id, _, now = _ready_service(tmp_path)
     payload = _analysis_payload()
-    payload["elements"][0]["normative_source_ids"] = []
-    payload["burden_of_proof"] = []
-    analysis = CivilLawAnalysis.model_validate(payload)
+    payload["analyses"][0]["elements"][0]["normative_source_ids"] = []
+    payload["analyses"][0]["burden_of_proof"] = []
+    analysis = LegalAnalysisEnvelope.model_validate(payload)
 
-    result = service.validate_civil_analysis(
+    result = service.validate_legal_analysis(
         run_id,
         "validate-missing-norm",
         analysis,
@@ -314,7 +320,7 @@ def test_met_element_and_burden_require_normative_support(tmp_path: Path):
     )
 
     assert result["decision"] == "blocked"
-    assert "MET_ELEMENT_NORMATIVE_SOURCE_REQUIRED" in result["blockers"]
+    assert "DETERMINATE_ELEMENT_NORMATIVE_SOURCE_REQUIRED" in result["blockers"]
     assert "ELEMENT_BURDEN_RECORD_REQUIRED" in result["blockers"]
 
 

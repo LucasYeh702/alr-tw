@@ -10,6 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .legal_analysis import LegalAnalysisProfile
 from .providers import DataMode
 from .sources import MaterialType
 
@@ -243,12 +244,13 @@ class InteroperabilityCapabilities(BaseModel):
     accepted_plan_schema: Literal["alr-tw.research-plan-proposal/v1"] = (
         "alr-tw.research-plan-proposal/v1"
     )
-    accepted_civil_analysis_schema: Literal["alr-tw.civil-law-analysis/v1"] = (
-        "alr-tw.civil-law-analysis/v1"
+    accepted_legal_analysis_schema: Literal["alr-tw.legal-analysis/v1"] = (
+        "alr-tw.legal-analysis/v1"
     )
-    civil_analysis_validation_tool: Literal["validate_civil_analysis"] = (
-        "validate_civil_analysis"
+    legal_analysis_validation_tool: Literal["validate_legal_analysis"] = (
+        "validate_legal_analysis"
     )
+    supported_legal_analysis_profiles: list[LegalAnalysisProfile]
     legal_context_contract: Literal["alr-tw.legal-context-result/v1"] = (
         "alr-tw.legal-context-result/v1"
     )
@@ -259,10 +261,12 @@ class InteroperabilityCapabilities(BaseModel):
     evidence_promotion_owner: Literal["server"] = "server"
     final_decision_owner: Literal["server"] = "server"
     accepts_client_evidence: Literal[False] = False
+    accepts_client_fact_states: Literal[False] = False
     accepts_client_trust_decisions: Literal[False] = False
     client_authority_locators_are_candidate_only: Literal[True] = True
     explicit_issue_binding_coverage: Literal[True] = True
-    civil_analysis_validation_is_structural: Literal[True] = True
+    legal_analysis_validation_is_structural: Literal[True] = True
+    managed_fact_state_store_available: Literal[False] = False
     semantic_entailment_performed: Literal[False] = False
     external_query_transfer_enabled: bool
     limitations: list[str]
@@ -285,10 +289,13 @@ def interoperability_capabilities(data_mode: DataMode) -> InteroperabilityCapabi
             MaterialType.JUDGMENT,
             MaterialType.CONSTITUTIONAL,
         ],
+        supported_legal_analysis_profiles=list(LegalAnalysisProfile),
         external_query_transfer_enabled=data_mode is DataMode.HYBRID_VERIFIED,
         limitations=[
             "client plans are untrusted proposals and cannot create evidence",
-            "civil analysis proposals remain untrusted until server validation",
+            "legal analysis proposals remain untrusted until server validation",
+            "managed research runs do not persist server-owned fact states; use evidence "
+            "references or integrate the validator with a server-owned fact-state provider",
             "client-assisted discovery requires plan registration before research",
             "live legal-context providers are not bundled in the public development build",
             "systematic counter-authority search is not implemented",

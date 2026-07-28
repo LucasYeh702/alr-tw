@@ -1,6 +1,6 @@
 # Evaluation Methodology
 
-This v0.7.0 repository includes a small synthetic test set only.
+This v0.7.1 repository includes a small synthetic test set only.
 
 The evaluation checks:
 

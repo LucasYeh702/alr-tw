@@ -48,7 +48,7 @@ def test_mcp_initialize_returns_server_metadata():
     assert response["result"]["protocolVersion"] == "2024-11-05"
     assert response["result"]["serverInfo"] == {
         "name": "alr-tw",
-        "version": "0.7.0",
+        "version": "0.7.1",
     }
     assert response["result"]["capabilities"] == {"tools": {}}
 
@@ -68,7 +68,7 @@ def test_v060_server_owned_tools_run_to_blocked_without_server_evidence(
         "continue_legal_research",
         "get_legal_research_state",
         "lookup_legal_source",
-        "validate_civil_analysis",
+        "validate_legal_analysis",
         "validate_legal_answer",
         "purge_research_storage",
     } <= names

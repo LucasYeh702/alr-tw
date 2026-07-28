@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import json
 
 import pytest
 from pydantic import ValidationError
@@ -53,8 +54,31 @@ def test_capability_contract_is_agent_neutral_and_preserves_server_ownership():
     assert capabilities.evidence_promotion_owner == "server"
     assert capabilities.final_decision_owner == "server"
     assert capabilities.accepts_client_evidence is False
+    assert capabilities.accepts_client_fact_states is False
     assert capabilities.accepts_client_trust_decisions is False
     assert capabilities.client_authority_locators_are_candidate_only is True
+    assert capabilities.accepted_legal_analysis_schema == "alr-tw.legal-analysis/v1"
+    assert capabilities.legal_analysis_validation_tool == "validate_legal_analysis"
+    assert {profile.value for profile in capabilities.supported_legal_analysis_profiles} == {
+        "civil_substantive",
+        "civil_procedure",
+        "criminal_substantive",
+        "criminal_procedure",
+        "administrative",
+        "constitutional_review",
+    }
+    assert capabilities.managed_fact_state_store_available is False
+    assert "legal analysis proposals remain untrusted until server validation" in (
+        capabilities.limitations
+    )
+    assert all(
+        "civil analysis proposals" not in limitation
+        and "cross-domain legal analysis proposals" not in limitation
+        for limitation in capabilities.limitations
+    )
+    assert json.loads(json.dumps(capabilities.model_dump()))[
+        "supported_legal_analysis_profiles"
+    ] == [profile.value for profile in capabilities.supported_legal_analysis_profiles]
 
 
 def test_responsibility_contract_rejects_client_owned_trust_decisions():

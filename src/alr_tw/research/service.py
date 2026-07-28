@@ -9,7 +9,7 @@ from typing import Any, Protocol
 import unicodedata
 from uuid import uuid4
 
-from alr_tw.contracts.civil_analysis import CivilLawAnalysis
+from alr_tw.contracts.legal_analysis import LegalAnalysisEnvelope
 from alr_tw.contracts.interop import (
     DiscoveryMode,
     RegisteredResearchPlan,
@@ -37,8 +37,8 @@ from alr_tw.contracts.sources import (
 )
 from alr_tw.storage.sqlite_store import SqliteStore
 from alr_tw.providers.synthetic import SyntheticLegalContextProvider
-from alr_tw.verification.civil_analysis import (
-    validate_civil_analysis as run_civil_analysis_validation,
+from alr_tw.verification.legal_analysis import (
+    validate_legal_analysis as run_legal_analysis_validation,
 )
 from alr_tw.verification.claim_support import (
     AnswerClaim,
@@ -642,15 +642,15 @@ class ResearchService:
             self.store.complete_operation(run_id, operation_id, result)
             return result
 
-    def validate_civil_analysis(
+    def validate_legal_analysis(
         self,
         run_id: str,
         operation_id: str,
-        analysis: CivilLawAnalysis,
+        analysis: LegalAnalysisEnvelope,
         *,
         now: datetime | None = None,
     ) -> dict[str, Any]:
-        """Validate an untrusted civil analysis against this run's server-owned state."""
+        """Validate an untrusted multi-branch analysis against server-owned state."""
 
         with self._lock:
             run = self._required_run(run_id)
@@ -671,13 +671,10 @@ class ResearchService:
             evidence = self.store.list_evidence(run_id)
             legal_context = self.legal_context_provider.assess(
                 sources,
-                as_of_date=(
-                    run.as_of_date
-                    or timestamp.astimezone(TAIWAN_TIME).date()
-                ),
+                as_of_date=run.as_of_date or timestamp.astimezone(TAIWAN_TIME).date(),
                 assessed_at=timestamp,
             )
-            validation = run_civil_analysis_validation(
+            validation = run_legal_analysis_validation(
                 analysis,
                 server_sources=sources,
                 server_evidence=evidence,

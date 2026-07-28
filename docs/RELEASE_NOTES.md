@@ -1,48 +1,38 @@
-# ALR-TW v0.7.0 版本說明
+# ALR-TW v0.7.1 版本說明
 
-v0.7.0 將 ALR-TW 更新為前端無關、provider-neutral 的台灣法律研究驗證
-harness。以下只列本版新增與調整的能力。
+v0.7.1 統一台灣大陸法系的結構化法律分析接口。
 
-## 研究流程與 MCP
+## 統一法律分析
 
-- 新增能力協商工具 `get_legal_research_capabilities`；
-- 新增研究計畫與法源 locator 契約，支援 `server_managed` 與
-  `client_assisted` discovery mode；
-- 新增 `submit_legal_research_plan`，外部計畫、locator 與信任判斷維持
-  untrusted client proposal；
-- 新增 `validate_civil_analysis`，將外部民事法律分析交由 server 驗證；
-- `claim_bindings` 支援 issue-level coverage，核心爭點可與最終主張明確關聯；
-- 既有 server-owned research tools 維持相容。
+- 新增單一 `alr-tw.legal-analysis/v1` 的 `LegalAnalysisEnvelope`；
+- `analyses` 可同時承載六個不可重複的分析分支：
+  - `civil_substantive`（民法）；
+  - `civil_procedure`（民事程序）；
+  - `criminal_substantive`（刑法）；
+  - `criminal_procedure`（刑事程序）；
+  - `administrative`（行政法）；
+  - `constitutional_review`（憲法審查）；
+- 行政法分支內以 `legality`／`remedy` 分軌表達合法性與救濟；
+- 民法分支提供 claims、elements、defenses、逐要件舉證責任與法律效果
+  分類；
+- 各分支支援 `complete` 與 `issue_limited` 範圍，並檢查核心面向；
+- 確定的 `met`／`not_met` 判斷必須綁定由伺服器管理的 fact 或可採用的
+  evidence，規範判斷必須綁定 normative source。
 
-## 台灣大陸法系法律分析契約
+## MCP 與能力協商
 
-- 新增 `CivilLawAnalysis` envelope，統一描述 claims、elements、defenses、
-  counter-authority 與 procedural posture；
-- 新增法律效果分類：`right_constituting`、`right_impeding`、
-  `right_extinguishing`、`defense`、`liability_reduction`、
-  `remedy_calculation`；
-- 新增逐要件舉證責任欄位，涵蓋 burden bearer、presumption、burden shift、
-  standard of proof 與 rebuttal status；
-- 新增 fact／evidence 狀態：`alleged`、`admitted`、`disputed`、`supported`、
-  `proven`、`contradicted`、`inadmissible`、`excluded`；
-- 新增 provider-neutral temporal、authority 與 legal-validity context 契約；
-- `met` element 必須綁定 server-owned normative source 與 fact 或 eligible
-  evidence。
+- 使用單一 `validate_legal_analysis` MCP tool；
+- `get_legal_research_capabilities` 回傳統一 schema、tool 名稱及六個
+  supported profiles；
+- 移除預覽期的平行民法信封與獨立民法驗證工具。
 
-## 官方來源與候選召回
+## 安全邊界
 
-- TLR 維持 clean-room candidate-only adapter；候選仍須回查司法院官方全文，
-  不得直接成為正式引用；
-- 官方法規、普通裁判與憲法法庭 provider 維持獨立的來源與角色驗證；
-- 司法院舊式裁判頁、五段 legacy JID、搜尋 fallback 與現行法日期語意處理
-  納入統一研究流程；
-- source、evidence、claim、issue、authority 與 legal context 的信任判斷均由
-  server 端計算，外部 client 不得自行升格或宣告 final decision。
-
-## 相容性與資料邊界
-
-- `validated`、`qualified`、`blocked` final decision 維持 fail-closed 規則；
-- blocked 結果不回傳可呈現的 answer body；
-- synthetic、official-only、hybrid-verified 三種資料模式維持；
-- provider-neutral contract 允許使用者接入自有法規、裁判與其他合規資料來源；
-- 公開套件不內含 LLM、production corpus、私有索引或使用者資料。
+- 分析提案固定為 `untrusted_client_proposal`；
+- source、evidence、fact、法律時點、authority 與 validity 仍由
+  伺服器管理的研究內容核定；
+- 受管理的 `ResearchService` 不接受呼叫端自我認證的 fact state；
+- `issue_limited`、未解決議題與反向權威資料涵蓋不足會明示
+  限制；
+- 分析驗證固定
+  `authorizes_final_answer=false`、`semantic_entailment_performed=false`。

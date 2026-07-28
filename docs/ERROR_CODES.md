@@ -1,6 +1,6 @@
 # ALR-TW Error Codes
 
-## v0.7.0 provider and research codes
+## v0.7.1 provider and research codes
 
 | Code | Meaning |
 |---|---|
@@ -32,16 +32,23 @@
 | `CLIENT_AUTHORITY_LOCATORS_CANDIDATE_ONLY` | 外部 locator 已登錄為候選，仍須官方 exact lookup |
 | `CLAIM_BINDING_ISSUE_NOT_IN_PLAN` | Final claim binding 引用了計畫中不存在的 issue ID |
 | `CORE_RESEARCH_ISSUE_UNBOUND` | 至少一個需要結論的 core issue 未綁定 final claim |
-| `ANALYSIS_SOURCE_NOT_SERVER_OWNED` | Civil analysis 引用的 source ID 不屬於同一 run |
-| `ANALYSIS_EVIDENCE_NOT_SERVER_OWNED` | Civil analysis 引用的 evidence ID 不屬於同一 run |
-| `ANALYSIS_FACT_NOT_SERVER_OWNED` | Civil analysis 引用的 fact ID 未由 server context 提供 |
-| `ANALYSIS_SOURCE_STALE` | Civil analysis 引用的 source 已過期 |
-| `ANALYSIS_SOURCE_NOT_EVIDENCE_ELIGIBLE` | Civil analysis 引用的 source 未取得 evidence 資格 |
-| `ANALYSIS_EVIDENCE_NOT_ELIGIBLE` | Civil analysis 引用的 evidence 不可支援分析 |
-| `CLAIM_BASIS_SOURCE_REQUIRED` | Civil claim 缺少 normative legal-basis source |
-| `MET_ELEMENT_NORMATIVE_SOURCE_REQUIRED` | `met` element 缺少 normative source |
-| `MET_ELEMENT_FACT_OR_EVIDENCE_REQUIRED` | `met` element 未綁 fact 或 evidence |
-| `MET_ELEMENT_SUPPORT_NOT_ESTABLISHED` | `met` element 綁定的 fact／evidence 未取得 server-owned support |
+| `ANALYSIS_SOURCE_NOT_SERVER_OWNED` | Analysis 引用的 source ID 不屬於同一 run |
+| `ANALYSIS_EVIDENCE_NOT_SERVER_OWNED` | Analysis 引用的 evidence ID 不屬於同一 run |
+| `ANALYSIS_FACT_NOT_SERVER_OWNED` | Analysis 引用的 fact ID 未由 server context 提供 |
+| `ANALYSIS_SOURCE_STALE` | Analysis 引用的 source 已過期 |
+| `ANALYSIS_SOURCE_NOT_EVIDENCE_ELIGIBLE` | Analysis 引用的 source 未取得 evidence 資格 |
+| `ANALYSIS_EVIDENCE_NOT_ELIGIBLE` | Analysis 引用的 evidence 不可支援分析 |
+| `DOMAIN_ANALYSIS_SCOPE_LIMITED` | 分支只涵蓋選定 issues，不得宣稱完整分析 |
+| `DOMAIN_PROFILE_CORE_DIMENSION_MISSING` | `complete` 分支缺少必要核心 dimension |
+| `DOMAIN_ISSUE_NORMATIVE_SOURCE_REQUIRED` | 領域 issue 缺少 normative source |
+| `DOMAIN_ISSUE_UNRESOLVED` | 領域 issue 仍為 `uncertain`，必須揭露 |
+| `CIVIL_CLAIM_LEGAL_BASIS_REQUIRED` | 民法 claim 缺少 normative legal-basis source |
+| `DETERMINATE_ELEMENT_NORMATIVE_SOURCE_REQUIRED` | 確定的民法 element 缺少 normative source |
+| `DETERMINATE_DEFENSE_NORMATIVE_SOURCE_REQUIRED` | 確定的民法 defense 缺少 normative source |
+| `DETERMINATE_ANALYSIS_FACT_OR_EVIDENCE_REQUIRED` | `met`／`not_met` 判斷未綁定 fact 或 evidence |
+| `DETERMINATE_ANALYSIS_SUPPORT_NOT_ESTABLISHED` | 確定判斷的 fact／evidence 未取得 server-owned support |
+| `CIVIL_ELEMENT_UNRESOLVED` | 民法 element 仍為 `uncertain`，必須揭露 |
+| `CIVIL_DEFENSE_UNRESOLVED` | 民法 defense 仍為 `uncertain`，必須揭露 |
 | `ELEMENT_BURDEN_RECORD_REQUIRED` | Element 缺少逐要件舉證責任紀錄 |
 | `BURDEN_NORMATIVE_SOURCE_REQUIRED` | 舉證責任配置缺少 normative source |
 | `BURDEN_ALLOCATION_UNRESOLVED` | 舉證責任主體、移轉或證明標準仍有不確定性 |

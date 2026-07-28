@@ -1,26 +1,35 @@
 # ALR-TW Tool Contract
 
-## v0.7.0 interoperability tools
+## v0.7.1 interoperability tools
 
 | Tool | Required input | Contract |
 |---|---|---|
 | `get_legal_research_capabilities` | none | 回傳 agent-neutral ownership、discovery modes、可驗證材料與限制 |
 | `submit_legal_research_plan` | `run_id`, `operation_id`, `plan` | 登錄 immutable untrusted issue／locator proposal；不能產生 evidence |
-| `validate_civil_analysis` | `run_id`, `operation_id`, `analysis` | 對 `alr-tw.civil-law-analysis/v1` 做 server-owned ID、時點、權威、效力、要件與舉證責任檢查；不授權 final answer |
+| `validate_legal_analysis` | `run_id`, `operation_id`, `analysis` | 對 `alr-tw.legal-analysis/v1` 的六種可併用分支做 scope、民法要件／舉證責任、核心 dimensions、server-owned references 與 legal-context 檢查；不授權 final answer |
 
 `research_legal_question.constraints.discovery_mode` 可為
 `server_managed`（預設）或 `client_assisted`。後者必須在執行研究前登錄
 `alr-tw.research-plan-proposal/v1`；前端 locator 只會成為候選，server 仍負責
 official verification、evidence promotion 與 final decision。
 
-`validate_civil_analysis` 只接受 references，不接受 source body、content
+`validate_legal_analysis` 只接受 references，不接受 source body、content
 hash、`official=true` 或 client trust attestation。整份 analysis 固定為
-`untrusted_client_proposal`。每個 `met` element 必須有 normative source，
-並綁定同 run 的 server-owned fact 或 eligible evidence；每個 element 必須
-有一筆 burden-of-proof record。
+`untrusted_client_proposal`，並支援 `civil_substantive`、
+`civil_procedure`、`criminal_substantive`、`criminal_procedure`、
+`administrative` 與 `constitutional_review` 六個可併用分支。行政法分支
+再以 `legality`／`remedy` tracks 分流。`complete` 必須涵蓋分支核心 dimensions；
+`issue_limited` 固定附帶 scope qualification。每個議題都要有 normative
+source，確定的 `met`／`not_met` 結論另須 fact 或 eligible evidence；民法
+每個 element 必須有一筆 burden-of-proof record。
+公開的 stateless validator 可由部署者傳入 server-owned `server_fact_states`；
+內建 managed `ResearchService` 不保存 fact records，capabilities 會回報
+`managed_fact_state_store_available=false`，因此 MCP caller 不能用自己提交
+的 fact status 取得信任。未接自有 fact provider 時應使用 eligible evidence
+IDs。
 
-回傳的 `validated`／`qualified`／`blocked` 是 civil-analysis structure and
-trust decision，不是 final-answer decision，且固定：
+analysis tool 回傳的 `validated`／`qualified`／`blocked` 都只是
+structure and trust decision，不是 final-answer decision，且固定：
 
 - `authorizes_final_answer=false`；
 - `semantic_entailment_performed=false`；
@@ -33,7 +42,7 @@ closed。
 
 詳見 [Agent-neutral interoperability contract](INTEROPERABILITY_CONTRACT.md)。
 
-## v0.7.0 server-managed tools
+## v0.7.1 server-managed tools
 
 | Tool | Required input | Contract |
 |---|---|---|
@@ -61,10 +70,10 @@ All MCP tool results are wrapped in:
 }
 ```
 
-## v0.7.0 answer validation
+## v0.7.1 answer validation
 
 `claim_bindings` 是 optional array；每筆包含 `claim_id`、`claim_text`、
-`claim_type`、`importance`、至少一個同 run 的 `evidence_ids`，以及 v0.7.0
+`claim_type`、`importance`、至少一個同 run 的 `evidence_ids`，以及 v0.7.1
 可選的 `issue_ids` 與 `citation_occurrences`。允許的 `claim_type` 是
 `law_rule`、`court_view`、`disposition`、`fact`、`procedure`、`limitation`。
 

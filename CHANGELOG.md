@@ -2,6 +2,32 @@
 
 本專案遵循語意化版本精神；`0.x` 仍屬公開預覽，介面可能調整。
 
+## 0.7.1 - 2026-07-27
+
+### Added
+
+- `alr-tw.legal-analysis/v1` 與 `LegalAnalysisEnvelope`；
+- 民法、民事程序、刑法、刑事程序、行政法與憲法審查六種可併用分支；
+- 行政法分支內的合法性與救濟 discriminated tracks；
+- profile-specific issue taxonomy、`complete`／`issue_limited` scope 與核心
+  dimension coverage；
+- `validate_legal_analysis` MCP tool；
+- interoperability capabilities 的跨領域 schema、tool 與 supported profiles。
+
+### Safety
+
+- 跨領域 analysis 固定為 `untrusted_client_proposal`；
+- 所有 normative source、fact 與 evidence ID 必須由同一 research run 的
+  server-owned context 確認；
+- 確定的 `met`／`not_met` 結論若無 server-owned support 會 fail closed；
+- `issue_limited`、未解決議題與 counter-authority 缺口會明示 qualification；
+- analysis validation 不執行 semantic entailment，也不授權 final answer。
+
+### Changed
+
+- 法律分析統一為 `alr-tw.legal-analysis/v1` 與
+  `validate_legal_analysis`；移除預覽期的平行民法信封與獨立驗證工具。
+
 ## 0.7.0 - 2026-07-26
 
 ### Added
@@ -11,13 +37,12 @@
 - `server_managed`／`client_assisted` discovery ownership；
 - provider-neutral legal issue、authority locator 與 immutable registered-plan contracts；
 - `claim_bindings.issue_ids` 與 explicit core-issue coverage；
-- public `CivilLawAnalysis` envelope，涵蓋 claims、elements、六種法律效果、
-  逐要件舉證責任、defenses、fact/evidence states、counter-authority 與
-  procedural posture；
+- 結構化民法 claims、elements、六種法律效果、逐要件舉證責任、defenses、
+  fact/evidence states、counter-authority 與 procedural posture；
 - provider-neutral temporal／authority／legal-validity contracts 與
   synthetic-only context provider；
-- `validate_civil_analysis` MCP tool 與 validated／qualified／blocked
-  synthetic end-to-end fixtures；
+- 結構化 analysis 的 validated／qualified／blocked synthetic end-to-end
+  fixtures；
 - public-boundary lint 對未公開 runtime dependency、production state、
   calibration 與 gold-label artifacts 的阻擋。
 

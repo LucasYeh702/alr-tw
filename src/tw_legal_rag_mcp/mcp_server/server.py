@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from alr_tw import __version__
 from alr_tw.config import Settings, parse_retention
-from alr_tw.contracts.civil_analysis import CivilLawAnalysis
+from alr_tw.contracts.legal_analysis import LegalAnalysisEnvelope
 from alr_tw.contracts.interop import (
     DiscoveryMode,
     ResearchPlanProposal,
@@ -89,7 +89,7 @@ SERVER_OWNED_TOOLS = {
     "continue_legal_research",
     "get_legal_research_state",
     "lookup_legal_source",
-    "validate_civil_analysis",
+    "validate_legal_analysis",
     "validate_legal_answer",
     "purge_research_storage",
 }
@@ -388,7 +388,7 @@ def tool_definitions() -> list[dict[str, Any]]:
         },
         {
             "name": "get_claim_grounding_policy",
-            "description": "Return the current public claim-grounding contract used by ALR-TW v0.7.0.",
+            "description": "Return the current public claim-grounding contract used by ALR-TW v0.7.1.",
             "inputSchema": {
                 "type": "object",
                 "properties": {},
@@ -615,8 +615,8 @@ def _research_plan_schema() -> dict[str, Any]:
     }
 
 
-def _civil_analysis_schema() -> dict[str, Any]:
-    return CivilLawAnalysis.model_json_schema()
+def _legal_analysis_schema() -> dict[str, Any]:
+    return LegalAnalysisEnvelope.model_json_schema()
 
 
 def _server_owned_tool_definitions() -> list[dict[str, Any]]:
@@ -722,18 +722,18 @@ def _server_owned_tool_definitions() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "validate_civil_analysis",
+            "name": "validate_legal_analysis",
             "description": (
-                "Validate an untrusted civil-law analysis envelope against server-owned "
-                "source, evidence, temporal, authority, and legal-validity context. "
-                "This structural check does not authorize a final answer."
+                "Validate an untrusted multi-branch legal analysis envelope against "
+                "server-owned source, evidence, temporal, authority, and legal-validity "
+                "context. This structural check does not authorize a final answer."
             ),
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "run_id": {"type": "string"},
                     "operation_id": {"type": "string"},
-                    "analysis": _civil_analysis_schema(),
+                    "analysis": _legal_analysis_schema(),
                     "request_id": {"type": "string"},
                 },
                 "required": ["run_id", "operation_id", "analysis"],
@@ -1051,7 +1051,7 @@ def _call_server_owned_tool(
             run_id=run_value,
             operation_id=operation_value,
         )
-    if name == "validate_civil_analysis":
+    if name == "validate_legal_analysis":
         _reject_unexpected_keys(
             arguments,
             {"run_id", "operation_id", "analysis", "request_id"},
@@ -1059,11 +1059,11 @@ def _call_server_owned_tool(
         raw_analysis = arguments.get("analysis")
         if not isinstance(raw_analysis, dict):
             raise ValueError("analysis must be an object")
-        analysis = CivilLawAnalysis.model_validate(raw_analysis)
-        return service.validate_civil_analysis(
+        legal_analysis = LegalAnalysisEnvelope.model_validate(raw_analysis)
+        return service.validate_legal_analysis(
             _required_string(arguments, "run_id"),
             _required_string(arguments, "operation_id"),
-            analysis,
+            legal_analysis,
         )
     if name == "validate_legal_answer":
         _reject_unexpected_keys(

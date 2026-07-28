@@ -1,6 +1,10 @@
-# ALR-TW v0.7.0 Acceptance
+# ALR-TW v0.7.1 Acceptance
 
-ALR-TW v0.7.0 可宣稱為「台灣法律 Agentic RAG / MCP research safety harness 公開預覽」。它提供 server-owned research state、agent-neutral interoperability、官方來源 providers、TLR candidate-only recall、evidence promotion、civil-law structural validation、claim validation、short-lived storage 與 purge。
+ALR-TW v0.7.1 可宣稱為「台灣法律 Agentic RAG / MCP research safety
+harness 公開預覽」。它提供 server-owned research state、agent-neutral
+interoperability、官方來源 providers、TLR candidate-only recall、evidence
+promotion、六種可併用法律分析分支的結構／信任驗證、claim validation、
+short-lived storage 與 purge。
 
 ## 必須成立
 
@@ -10,9 +14,11 @@ ALR-TW v0.7.0 可宣稱為「台灣法律 Agentic RAG / MCP research safety harn
 - TLR query 先經 privacy gate，結果不能作 final citation；
 - 官方內容固定 snapshot 且有 hash、verified/expiry timestamps；
 - 法規、普通裁判、憲法裁判的材料與 section roles 不混用；
+- 多分支 analysis 只驗證結構、scope 與 server-owned references，不宣稱
+  semantic entailment 或實體涵攝正確；
 - blocked 不包含 answer body；
 - CLI/MCP purge 同一實作；
-- v0.7.0 contract、legacy regression、build 與 stdio smoke 通過；
+- v0.7.1 contract、legacy regression、build 與 stdio smoke 通過；
 - 公開邊界掃描無秘密、真實資料或 local-sensitive artifacts。
 
 ## 可接受的 qualified 狀態

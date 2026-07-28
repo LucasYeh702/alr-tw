@@ -10,7 +10,8 @@ from tw_legal_rag_mcp.mcp_server.server import tool_definitions
 def test_agentic_harness_release_acceptance_artifacts_exist():
     required_paths = [
         "docs/AGENTIC_HARNESS_ACCEPTANCE.md",
-        "docs/V070_INTEROPERABILITY_ACCEPTANCE.md",
+        "docs/V071_DOMAIN_ANALYSIS_ACCEPTANCE.md",
+        "docs/V071_RELEASE_AUDIT.md",
         "docs/AGENTIC_WORKFLOW.md",
         "docs/TRUST_MODEL.md",
         "docs/TLR_CANDIDATE_MODE.md",
@@ -76,22 +77,18 @@ def test_agentic_harness_name_is_backed_by_graph_tools_and_scenarios():
 
 
 def test_acceptance_doc_states_current_claim_boundary():
-    text = Path("docs/V070_INTEROPERABILITY_ACCEPTANCE.md").read_text(encoding="utf-8")
+    text = Path("docs/V071_DOMAIN_ANALYSIS_ACCEPTANCE.md").read_text(encoding="utf-8")
 
     assert f"v{alr_tw.__version__}" in text
-    assert "server-owned research state" in text
-    assert "TLR candidate-only recall" in text
-    assert "外部 agent 不能注入正式證據" in text
-    assert "blocked 不包含 answer body" in text
-    assert "不宣稱" in text
+    assert "server-owned" in text
+    assert "untrusted_client_proposal" in text
+    assert "caller 不能" in text
+    assert "不可宣稱" in text
     assert "完整台灣法律資料庫" in text
     assert "production SLA" in text
-    assert "agent-neutral" in text
-    assert "untrusted_client_proposal" in text
-    assert "provider-neutral" in text
-    assert "non-public deployment paths" in text
-    assert "validate_civil_analysis" in text
-    assert "not production legal correctness" in text
+    assert "civil_substantive" in text
+    assert "validate_legal_analysis" in text
+    assert "semantic_entailment_performed=false" in text
 
 
 def test_v070_optional_external_integrations_are_documented_consistently():
@@ -109,4 +106,5 @@ def test_v070_optional_external_integrations_are_documented_consistently():
 
     interop_text = Path("docs/INTEROPERABILITY_CONTRACT.md").read_text(encoding="utf-8")
     assert "client_assisted" in interop_text
-    assert "validate_civil_analysis" in interop_text
+    assert "civil_substantive" in interop_text
+    assert "validate_legal_analysis" in interop_text

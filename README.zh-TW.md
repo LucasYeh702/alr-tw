@@ -2,7 +2,7 @@
 
 繁體中文 | [English](README.en.md)
 
-ALR-TW v0.7.0 是台灣法律研究安全 harness 的 agent-neutral public preview。外部 agent／LLM 可透過 MCP 建立研究 run、提出爭點與法源 locator；來源取得、研究義務、證據升格、答案驗證與清除則由 server 掌控。架構採台灣大陸法系角度：現行法規與法律時點優先，普通裁判依審級及段落角色處理，憲法法庭多數理由、協同意見與不同意見分離。
+ALR-TW v0.7.1 是台灣法律研究安全 harness 的 agent-neutral public preview。外部 agent／LLM 可透過 MCP 建立研究 run、提出爭點與法源 locator；來源取得、研究義務、證據升格、答案驗證與清除則由 server 掌控。架構採台灣大陸法系角度：現行法規與法律時點優先，普通裁判依審級及段落角色處理，憲法法庭多數理由、協同意見與不同意見分離。
 
 本專案已整合並在 `hybrid_verified` 模式使用 [TLR（Taiwan Legal RAG）](https://github.com/aa0101181514/tw-legal-rag)尋找普通裁判候選，再由 ALR-TW 回查司法院官方全文；TLR 結果本身不是正式引用證據。
 
@@ -10,9 +10,9 @@ ALR-TW v0.7.0 是台灣法律研究安全 harness 的 agent-neutral public previ
 
 本 repo 不包含 LLM，也不包含 agent 實作。規劃、工具選擇與自然語言推理由外部呼叫端提供；ALR-TW 只負責可稽核工具與確定性閘門。Repo 內的示範 ranking 參數僅供測試，不是 production ranking 設定。
 
-> v0.7.0 仍是 `0.x` public preview。答案必須由具資格的人員依官方原文、時點與個案事實複核。
+> v0.7.1 仍是 `0.x` public preview。答案必須由具資格的人員依官方原文、時點與個案事實複核。
 
-> 目前 `main` 工作樹與套件版本是 `0.7.0`；`v0.7.0` 是 public preview，
+> 目前 `main` 工作樹與套件版本是 `0.7.1`；`v0.7.1` 是 public preview，
 > 仍不代表完整 production 法律判斷能力。
 
 ## Agentic RAG 能力
@@ -30,7 +30,15 @@ User query
   -> validated | qualified | blocked
 ```
 
-v0.7.0 提供 query understanding、outbound/output privacy 分離、法規／裁判／憲法來源規劃、TLR 候選官方升格、partial source 保留、裁判角色分類、explicit claim bindings、deterministic grounding v2、短期 resumable run、agent-neutral interoperability 與 deterministic finalization。另支援舊式 `hlExportPDF`、`/EXPORTFILE/ExportToPdf.aspx` 裁判頁、TLR 五段 doc ID 的官方識別驗證、搜尋結果 fallback、今日現行法日期語意與 TLR 本地重排。若官方頁面只有相同五段識別碼，會保留 `legacy_five_part_jid`，不猜補版本尾碼。公開版尚未實作系統性反方裁判搜尋。
+v0.7.1 提供 query understanding、outbound/output privacy 分離、法規／裁判／
+憲法來源規劃、TLR 候選官方升格、partial source 保留、裁判角色分類、
+explicit claim bindings、deterministic grounding v2、短期 resumable run、
+agent-neutral interoperability 與 deterministic finalization。單一法律分析
+信封包含民法、民事程序、刑法、刑事程序、行政法與憲法審查六種可併用
+分支；行政法分支內再區分合法性與救濟軌。這不是
+semantic entailment（語義蘊含），也不取代專業法律判斷。
+公開版仍未實作系統性反方裁判搜尋，不會把未搜尋或 bounded scope 查無結果
+改寫成「不存在反面見解」。
 
 外部 agent 可以規劃研究與起草答案，但不能自行宣告來源為官方資料、把候選升格成證據，或繞過最終驗證。
 
@@ -46,7 +54,7 @@ v0.7.0 提供 query understanding、outbound/output privacy 分離、法規／�
 ALR-TW 執行一次相同召回。列為範例不代表外部專案成為核心依賴、
 共同發布物或可信證據來源；各專案仍維持獨立程式碼、版本、設定與授權。
 
-## v0.7.0 的安全模型
+## v0.7.1 的安全模型
 
 ```text
 外部 agent 提問／起草
@@ -93,18 +101,24 @@ alr-tw doctor --live
 
 普通裁判不需要司法院 API token。啟用 live mode 後，搜尋詞與篩選條件會直接送到司法院裁判書查詢網站；不得以未公開案情、個人秘密或受保密義務保護的資料作為搜尋詞。也不要把 TLR API key 或真實查詢寫入 repo。
 
-## v0.7.0 已發布 MCP tools
+## v0.7.1 MCP tools
 
 | Tool | 用途 |
 |---|---|
+| `get_legal_research_capabilities` | 回傳資料模式、可用 profiles 與固定信任責任 |
 | `research_legal_question` | 建立研究 run，不生成答案 |
+| `submit_legal_research_plan` | 登錄 client-assisted 的 untrusted 爭點與 locator |
 | `continue_legal_research` | 以 idempotent `operation_id` 執行一個下一步 |
 | `get_legal_research_state` | 唯讀讀取 run 狀態 |
 | `lookup_legal_source` | 精確查詢法規、憲法字號、JID／正式裁判字號 |
+| `validate_legal_analysis` | 驗證單一信封內六種可併用分支、民法逐要件舉證責任、references 與 legal context |
 | `validate_legal_answer` | 只用該 run 的 server-owned evidence 驗證草稿 |
 | `purge_research_storage` | 清除單一 run 或全部 managed storage |
 
 舊版 synthetic／trace tools 暫時保留相容性。新整合應使用上述 server-owned research flow。
+內建 managed `ResearchService` 不保存 server-owned fact records；capabilities
+會回報 `managed_fact_state_store_available=false`。未接自有 fact-state
+provider 時應綁 eligible evidence ID，caller 自提 fact status 會被阻擋。
 
 支援 MCP protocol `2025-11-25`、`2025-06-18`、`2025-03-26`、`2024-11-05`。
 
@@ -137,7 +151,7 @@ alr-tw doctor --live
 
 精確查到來源不等於答案已驗證。Final answer 仍必須通過 `validate_legal_answer`。
 
-v0.7.0 的核心法律主張必須以 `claim_bindings` 綁定同一 run 的 evidence ID。只傳 `answer_text` 的舊 caller 會標示 `binding_mode=legacy_unbound`，未綁定核心主張不得進入 `validated`。驗證方法為 `deterministic_grounding_v2`，包含中文 2–4 gram、否定、例外、法條／數字 anchor 與角色規則；這不是 semantic entailment（語義蘊含）。
+v0.7.1 的核心法律主張必須以 `claim_bindings` 綁定同一 run 的 evidence ID。只傳 `answer_text` 的舊 caller 會標示 `binding_mode=legacy_unbound`，未綁定核心主張不得進入 `validated`。驗證方法為 `deterministic_grounding_v2`，包含中文 2–4 gram、否定、例外、法條／數字 anchor 與角色規則；這不是 semantic entailment（語義蘊含）。
 
 ## Claim Grounding 與 Trust Gate
 
@@ -199,9 +213,10 @@ uv build
 
 ## 公開／私有邊界
 
-公開 repo 保留 provider／resolver interfaces、civil-analysis validator、
-source tier、evidence promotion、citation policy、MCP schemas、privacy、
-retention、purge、fail-closed rules、synthetic fixtures、tests、CI 與文件。
+公開 repo 保留 provider／resolver interfaces、統一多分支 analysis
+validator、source tier、evidence promotion、citation policy、MCP schemas、
+privacy、retention、purge、fail-closed rules、synthetic fixtures、tests、CI
+與文件。
 
 Repo 不包含 production corpus、永久官方全文 cache、真實使用者紀錄、
 私有 eval、向量 shard、credential、私有 endpoint、private manifests、
@@ -241,8 +256,8 @@ Choose data mode
 - [Error Codes](docs/ERROR_CODES.md)
 - [Threat Model](docs/THREAT_MODEL.md)
 - [Release Notes](docs/RELEASE_NOTES.md)
-- [v0.7.0 Interoperability Acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)
-- [v0.7.0 Release Audit](docs/V070_RELEASE_AUDIT.md)
+- [v0.7.1 Domain Analysis Acceptance](docs/V071_DOMAIN_ANALYSIS_ACCEPTANCE.md)
+- [v0.7.1 Release Audit](docs/V071_RELEASE_AUDIT.md)
 - [Changelog](CHANGELOG.md)
 
 ## 法律聲明

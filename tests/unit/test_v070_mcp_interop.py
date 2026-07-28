@@ -54,7 +54,7 @@ def test_mcp_exposes_agent_neutral_capabilities_and_plan_registration(tmp_path: 
 
     assert "get_legal_research_capabilities" in names
     assert "submit_legal_research_plan" in names
-    assert "validate_civil_analysis" in names
+    assert "validate_legal_analysis" in names
 
     capabilities = _call(
         session,
@@ -64,10 +64,20 @@ def test_mcp_exposes_agent_neutral_capabilities_and_plan_registration(tmp_path: 
     )
     assert capabilities["interface_family"] == "agent_neutral_legal_research"
     assert capabilities["accepts_client_evidence"] is False
-    assert capabilities["accepted_civil_analysis_schema"] == (
-        "alr-tw.civil-law-analysis/v1"
-    )
-    assert capabilities["civil_analysis_validation_tool"] == "validate_civil_analysis"
+    assert capabilities["accepts_client_fact_states"] is False
+    assert "accepted_civil_analysis_schema" not in capabilities
+    assert "civil_analysis_validation_tool" not in capabilities
+    assert capabilities["accepted_legal_analysis_schema"] == "alr-tw.legal-analysis/v1"
+    assert capabilities["legal_analysis_validation_tool"] == "validate_legal_analysis"
+    assert set(capabilities["supported_legal_analysis_profiles"]) == {
+        "civil_substantive",
+        "civil_procedure",
+        "criminal_substantive",
+        "criminal_procedure",
+        "administrative",
+        "constitutional_review",
+    }
+    assert capabilities["managed_fact_state_store_available"] is False
 
     created = _call(
         session,
@@ -137,29 +147,34 @@ def test_mcp_rejects_client_evidence_inside_research_plan(tmp_path: Path):
     assert response["error"]["code"] == -32602
 
 
-def test_mcp_rejects_source_bodies_inside_civil_analysis(tmp_path: Path):
+def test_mcp_rejects_source_bodies_inside_unified_analysis(tmp_path: Path):
     session = McpSession(
         ready=True,
         research_service=ResearchService(SqliteStore(tmp_path / "cache")),
     )
     analysis = {
         "analysis_id": "analysis-mcp",
-        "claims": [
+        "analyses": [
             {
-                "claim_id": "claim-1",
-                "label": "示範請求",
-                "legal_basis_source_ids": ["source-1"],
-                "requested_effects": ["right_constituting"],
-            }
-        ],
-        "elements": [
-            {
-                "element_id": "element-1",
-                "claim_id": "claim-1",
-                "label": "示範要件",
-                "proposition": "是否符合示範要件？",
-                "legal_effect": "right_constituting",
-                "status": "uncertain",
+                "profile": "civil_substantive",
+                "claims": [
+                    {
+                        "claim_id": "claim-1",
+                        "label": "示範請求",
+                        "legal_basis_source_ids": ["source-1"],
+                        "requested_effects": ["right_constituting"],
+                    }
+                ],
+                "elements": [
+                    {
+                        "element_id": "element-1",
+                        "claim_id": "claim-1",
+                        "label": "示範要件",
+                        "proposition": "是否符合示範要件？",
+                        "legal_effect": "right_constituting",
+                        "status": "uncertain",
+                    }
+                ],
             }
         ],
         "counter_authority": {"status": "not_searched"},
@@ -182,7 +197,7 @@ def test_mcp_rejects_source_bodies_inside_civil_analysis(tmp_path: Path):
             "id": 3,
             "method": "tools/call",
             "params": {
-                "name": "validate_civil_analysis",
+                "name": "validate_legal_analysis",
                 "arguments": {
                     "run_id": "run-does-not-matter",
                     "operation_id": "unsafe-analysis",

@@ -2,7 +2,7 @@
 
 [繁體中文](README.zh-TW.md) | [English](README.en.md)
 
-ALR-TW v0.7.0 是台灣法律研究安全 harness 的 agent-neutral public preview。它讓外部 agent／LLM 透過 MCP 建立研究 run、提出爭點與法源 locator，但把資料來源、研究義務、證據升格、答案驗證與清除權限留在 server 端。設計採台灣大陸法系視角：法規時點優先，普通裁判依審級與案件角色處理，憲法法庭多數意見與個別意見分離。
+ALR-TW v0.7.1 是台灣法律研究安全 harness 的 agent-neutral public preview。它讓外部 agent／LLM 透過 MCP 建立研究 run、提出爭點與法源 locator，但把資料來源、研究義務、證據升格、答案驗證與清除權限留在 server 端。設計採台灣大陸法系視角：法規時點優先，普通裁判依審級與案件角色處理，憲法法庭多數意見與個別意見分離。
 
 本專案已整合並在 `hybrid_verified` 模式使用 [TLR（Taiwan Legal RAG）](https://github.com/aa0101181514/tw-legal-rag)進行普通裁判候選召回，再由 ALR-TW 回到司法院官方來源驗證。TLR 不會被直接當成正式引用來源。
 
@@ -10,9 +10,9 @@ ALR-TW v0.7.0 是台灣法律研究安全 harness 的 agent-neutral public previ
 
 本 repo 不包含 LLM，也不包含 agent 實作。規劃、工具選擇與自然語言推理由外部呼叫端提供；ALR-TW 只負責可稽核工具與確定性閘門。Repo 內的示範 ranking 參數僅供測試，不是 production ranking 設定。
 
-> v0.7.0 仍是 `0.x` public preview。任何答案仍須由具資格的人員依官方原文、時點與個案事實複核。
+> v0.7.1 仍是 `0.x` public preview。任何答案仍須由具資格的人員依官方原文、時點與個案事實複核。
 
-> 目前 `main` 工作樹與套件版本是 `0.7.0`；`v0.7.0` 是 public preview，
+> 目前 `main` 工作樹與套件版本是 `0.7.1`；`v0.7.1` 是 public preview，
 > 仍不代表完整 production 法律判斷能力。
 
 ## Agentic RAG 能力
@@ -30,7 +30,7 @@ User query
   -> validated | qualified | blocked
 ```
 
-v0.7.0 提供的主要能力包括：
+v0.7.1 提供的主要能力包括：
 
 - query understanding：正規化問題、辨識法律引用及研究限制；
 - privacy screen：在查詢可能送往 TLR 前先檢查敏感資訊；
@@ -40,6 +40,9 @@ v0.7.0 提供的主要能力包括：
 - official verification：回查官方識別碼、官方 URL 與內容，形成不可由 caller 偽造的 evidence snapshot；
 - legal-time checks：保存來源取得、驗證、到期與法規版本狀態；
 - role-aware analysis：區分法院理由、主文、當事人主張、案件事實及個別意見；
+- unified legal analysis：以單一 `LegalAnalysisEnvelope` 與
+  `validate_legal_analysis` 支援民法、民事程序、刑法、刑事程序、行政法
+  與憲法審查六個可併用分支；行政法分支內再區分合法性與救濟軌；
 - counter-authority coverage：誠實揭露公開版尚未實作系統性反方裁判搜尋，不會把未搜尋標成已完成；
 - deterministic grounding v2：以 explicit claim-to-evidence bindings、中文 2–4 gram、否定、例外、法條／數字 anchor 與角色規則逐項檢查；這不是 semantic entailment（語義蘊含）；
 - resumable run：研究義務、候選、證據及 tool events 可在短期 SQLite 中恢復；
@@ -122,18 +125,25 @@ alr-tw doctor --live
 
 秘密不會顯示在 `doctor` 輸出，也不應寫入 `.env.example`、trace 或 SQLite。
 
-## v0.7.0 已發布 MCP tools
+## v0.7.1 MCP tools
 
 | Tool | 用途 |
 |---|---|
+| `get_legal_research_capabilities` | 回傳目前資料模式、可用 profiles 與固定的信任責任 |
 | `research_legal_question` | 建立 server-owned research run，不生成答案 |
+| `submit_legal_research_plan` | 登錄 client-assisted 的 untrusted 爭點與 locator 計畫 |
 | `continue_legal_research` | 以 `operation_id` 執行一個下一步 obligation |
 | `get_legal_research_state` | 唯讀取得狀態，不做網路請求、不延長 TTL |
 | `lookup_legal_source` | 精確查詢法規條文、憲法字號、JID 或正式裁判字號 |
+| `validate_legal_analysis` | 驗證單一信封內六種可併用分支、民法逐要件舉證責任、server-owned references 與 legal context |
 | `validate_legal_answer` | 只用該 run 的 server-owned evidence 驗證草稿 |
 | `purge_research_storage` | 同步刪除單一 run 或全部 managed storage |
 
 舊版 synthetic／trace tools 暫時保留相容性，但新整合應優先使用上述研究服務。
+內建 managed `ResearchService` 不保存 server-owned fact records；capabilities
+會回報 `managed_fact_state_store_available=false`。未接自有 fact-state provider
+時，analysis 應綁 eligible evidence ID，不能用 caller 自提的 fact status
+取得信任。
 
 支援的 MCP protocol versions：`2025-11-25`、`2025-06-18`、`2025-03-26`、`2024-11-05`。不支援的版本會在 initialize 階段拒絕。
 
@@ -271,7 +281,7 @@ demo／測試，不能被描述為現行法。正式部署者必須自行確認�
 
 - provider 與 resolver interfaces；
 - source tier、evidence promotion 與 citation policy；
-- civil-analysis 與 legal-context provider contracts；
+- 統一多分支 legal-analysis 與 legal-context provider contracts；
 - server-owned research state、MCP schemas 與 error codes；
 - privacy、retention、purge 與 fail-closed 規則；
 - synthetic fixtures、tests、CI 與公開文件。
@@ -283,7 +293,7 @@ chunking 參數、gold labels 及未匿名化案件資料。
 
 ## 如何接入真實資料
 
-v0.7.0 已提供官方 live providers 與 TLR clean-room adapter。建議部署順序如下：
+v0.7.1 已提供官方 live providers 與 TLR clean-room adapter。建議部署順序如下：
 
 ```text
 Choose data mode
@@ -312,9 +322,15 @@ Choose data mode
 
 憲法法庭資料應保留主文、理由與個別意見的角色差異。協同意見與不同意見可作研究材料，但不能在沒有標示的情況下作為多數意見或裁判拘束內容。
 
-## v0.7.0 發布說明
+## v0.7.1 發布說明
 
-v0.7.0 在既有安全邊界上整合官方網頁回查、TLR candidate-only 召回、前端無關研究契約、民事法律分析結構驗證、逐要件舉證責任與 provider-neutral legal context。舊式 `hlExportPDF`、`/EXPORTFILE/ExportToPdf.aspx`、TLR 五段 doc ID、官方搜尋 fallback、現行法日期語意與本地候選重排仍受支援；官方頁若只明示相同五段識別碼，會保留為 `legacy_five_part_jid`，不猜補版本尾碼。本版仍不宣稱完整語義蘊含、系統性反方裁判搜尋、完整歷史法版本或完整台灣法律資料庫。
+v0.7.1 在既有安全邊界上整合官方網頁回查、TLR candidate-only 召回、
+前端無關研究契約，以及民法、民事程序、刑法、刑事程序、行政法與
+憲法審查的統一多分支結構驗證。所有 analysis 都是
+`untrusted_client_proposal`；`validated` 只表示結構、來源與信任條件通過，
+不代表語義涵攝正確，也不授權 final answer。舊式裁判頁、TLR 五段 doc ID、
+官方搜尋 fallback、現行法日期語意與本地候選重排仍受支援。本版仍不宣稱
+完整語義蘊含、系統性反方裁判搜尋、完整歷史法版本或完整台灣法律資料庫。
 
 ## 文件
 
@@ -330,8 +346,8 @@ v0.7.0 在既有安全邊界上整合官方網頁回查、TLR candidate-only 召
 - [Error Codes](docs/ERROR_CODES.md)
 - [Threat Model](docs/THREAT_MODEL.md)
 - [Release Notes](docs/RELEASE_NOTES.md)
-- [v0.7.0 Interoperability Acceptance](docs/V070_INTEROPERABILITY_ACCEPTANCE.md)
-- [v0.7.0 Release Audit](docs/V070_RELEASE_AUDIT.md)
+- [v0.7.1 Domain Analysis Acceptance](docs/V071_DOMAIN_ANALYSIS_ACCEPTANCE.md)
+- [v0.7.1 Release Audit](docs/V071_RELEASE_AUDIT.md)
 - [Security](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 

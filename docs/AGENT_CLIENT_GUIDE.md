@@ -5,7 +5,7 @@ LLM and no agent implementation. The external MCP client supplies the agent
 role; the harness records tool calls, validates citations, computes the trust
 gate, and returns a canonical trace.
 
-## v0.7.0 agent-neutral research flow
+## v0.7.1 agent-neutral research flow
 
 New clients should first call `get_legal_research_capabilities`.
 
@@ -22,9 +22,11 @@ source verification:
 1. Create the run with `research_legal_question`.
 2. Submit an `alr-tw.research-plan-proposal/v1`.
 3. Continue server-owned obligations until `ready_for_draft`.
-4. If the client produces a structured civil analysis, submit
-   `alr-tw.civil-law-analysis/v1` to `validate_civil_analysis`. Treat
-   `qualified` as a mandatory disclosure and discard `blocked`; even
+4. Submit `alr-tw.legal-analysis/v1` to `validate_legal_analysis` when a
+   structured analysis is needed. One envelope may combine civil substantive,
+   civil procedure, substantive criminal, criminal procedure, administrative,
+   and constitutional-review branches.
+   Treat `qualified` as a mandatory disclosure and discard `blocked`; even
    `validated` does not authorize an answer.
 5. Draft externally from server-owned evidence.
 6. Call `validate_legal_answer` with evidence IDs and, when a plan is
@@ -36,10 +38,12 @@ Do not call TLR or an official judgment search again after selecting
 `client_assisted` with complete locators. See
 [Interoperability Contract](INTEROPERABILITY_CONTRACT.md).
 
-The civil-analysis envelope accepts IDs only. A client must not place source
-bodies, content hashes, official attestations, private case data, or provider
-credentials inside it. Fact and evidence status labels remain proposals until
-matched to server-owned run context.
+Analysis envelopes accept IDs only. A client must not place source bodies,
+content hashes, official attestations, private case data, or provider
+credentials inside them. Fact and evidence status labels remain proposals
+until matched to server-owned run context. Cross-domain profiles validate
+structure and trust references only; they do not perform substantive legal
+subsumption.
 
 ## MCP Client Config
 

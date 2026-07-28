@@ -1,19 +1,19 @@
 # Architecture Contract
 
-## v0.7.0 agent-neutral contract
+## v0.7.1 agent-neutral contract
 
 ALR-TW is an independently implemented, public-safe contract and validator
 runtime. It is agent-neutral and provider-neutral; no non-public deployment
 artifact, corpus, index, manifest, or operational state is a package dependency.
 
-The v0.7.0 contract adds an optional untrusted planning boundary:
+The v0.7.1 contract adds an optional untrusted planning boundary:
 
 ```text
 external issue / authority-locator proposal
   -> immutable registered plan (candidate-only)
   -> server-owned obligations and official verification
   -> server-owned evidence
-  -> optional CivilLawAnalysis structural/trust validation
+  -> optional unified multi-branch analysis structural/trust validation
   -> claim + issue binding
   -> final validation
 ```
@@ -23,13 +23,13 @@ evidence, verification status, source tier, content hash, or final decision.
 Core code and schemas must remain independent of any named agent frontend. See
 [Interoperability Contract](INTEROPERABILITY_CONTRACT.md).
 
-`CivilLawAnalysis`, `LegalContextProvider`, and
-`validate_civil_analysis` are public P0 interfaces. They validate server-owned
-references, legal-effect taxonomy, per-element burden records, temporal
-applicability, authority status, and legal validity. They do not duplicate
-citation support or privacy logic and do not perform semantic entailment.
+`LegalAnalysisEnvelope`, `LegalContextProvider`, and `validate_legal_analysis`
+are public interfaces. They validate server-owned references, branch coverage, legal-effect
+taxonomy, per-element burden records, temporal applicability, authority status,
+and legal validity. They do not duplicate citation support or privacy logic and
+do not perform semantic entailment.
 
-## v0.7.0 server-owned contract
+## v0.7.1 server-owned contract
 
 新整合應以 `alr_tw.contracts` 的 provider-neutral models、`ResearchService`、`ProviderObligationExecutor` 與 `SqliteStore` 為主。外部 agent 只能建立／推進 run 與提交 draft；不得提交 evidence span 讓 final validation 採信。
 
@@ -41,7 +41,7 @@ ResearchRun -> ordered obligations -> ProviderResult
 
 `ProviderCandidate` 永遠不是 `EvidenceSpan`。官方即時內容只有在 provider 完成 origin、schema、content 與 freshness 檢查並由 server 儲存後，才能成為 `evidence_eligible`。Source identifier、hash、role 與 timestamp 不可由 MCP caller 自我認證。
 
-早期的 `tw_legal_rag_mcp.contracts` 仍為 legacy synthetic contract，相容期間不得與 v0.7.0 server-owned records 混作同一 authority store。
+早期的 `tw_legal_rag_mcp.contracts` 仍為 legacy synthetic contract，相容期間不得與 v0.7.1 server-owned records 混作同一 authority store。
 
 本文件說明使用者接入自己的法規、裁判、憲法法庭資料或其他合規資料源時，建議保留的資料流介面、來源驗證邊界與 trust gate 規則。本 repo 只示範可替換介面，不提供部署環境專屬的資料、索引、快取、切片策略、調校後的 production ranking 權重或私有評測集。
 
@@ -78,9 +78,9 @@ source_manifest
 | `Retriever` | `src/tw_legal_rag_mcp/contracts.py` | Retriever protocol for query-to-candidate recall. |
 | `CitationVerifier` | `src/tw_legal_rag_mcp/contracts.py` | Verifier protocol for source policy and final-citation eligibility checks. |
 | `run_synthetic_contract_pipeline` | `src/tw_legal_rag_mcp/contracts.py` | Synthetic end-to-end contract demonstration without production data. |
-| `CivilLawAnalysis` | `src/alr_tw/contracts/civil_analysis.py` | Untrusted civil-law claims, elements, burdens, defenses, facts/evidence states, counter-authority, and procedure. |
+| `LegalAnalysisEnvelope` | `src/alr_tw/contracts/legal_analysis.py` | One untrusted envelope containing up to six composable civil, criminal, administrative, and constitutional branches. |
 | `LegalContextProvider` | `src/alr_tw/contracts/legal_context.py` | Provider-neutral temporal, authority, and legal-validity port. |
-| `validate_civil_analysis` | `src/alr_tw/verification/civil_analysis.py` | Fail-closed structural and server-owned-reference validator; never a final-answer authorization. |
+| `validate_legal_analysis` | `src/alr_tw/verification/legal_analysis.py` | Fail-closed branch-scope, civil burden, core-dimension, reference, and legal-context validator; never substantive legal reasoning or final-answer authorization. |
 
 ## Trust Invariants
 

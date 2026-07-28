@@ -28,4 +28,4 @@
 
 規則式 privacy gate 不是完整 DLP；外部 provider 可保存日誌；官方 HTML/API 可能變動；即時查詢不等於完整 corpus；filesystem／backup 可能保留刪除痕跡；deterministic 法律角色與 claim checks 不能取代律師複核。
 
-Legacy verified-cache helpers may check field presence, but field presence is not byte verification. A production promotion pipeline must resolve the official original and recompute bytes/hash as defined in [ARCHITECTURE_CONTRACT.md](ARCHITECTURE_CONTRACT.md); the v0.7.0 MCP boundary instead accepts only server-owned provider/resolver results.
+Legacy verified-cache helpers may check field presence, but field presence is not byte verification. A production promotion pipeline must resolve the official original and recompute bytes/hash as defined in [ARCHITECTURE_CONTRACT.md](ARCHITECTURE_CONTRACT.md); the v0.7.1 MCP boundary instead accepts only server-owned provider/resolver results.

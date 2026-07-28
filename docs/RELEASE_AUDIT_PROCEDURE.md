@@ -1,4 +1,4 @@
-# v0.7.0 公開版發布審核規程
+# v0.7.1 公開版發布審核規程
 
 原則：fail closed。程式 regression、公開邊界、build artifact 或 live dependency 狀態必須分開記錄；外部服務暫時不可用不應被掩飾，也不應直接誤判為程式 regression。
 
@@ -22,12 +22,15 @@ uv run mypy src
 uv run pytest -q
 ```
 
-至少覆蓋：v0.7.0 contract、legacy tool regression、caller-attested source rejection、candidate-only blocking、role mismatch、historical-law block、source expiry、privacy downgrade、idempotency、TTL、WAL/SHM/temp purge。
+至少覆蓋：v0.7.1 六種 domain profiles、complete／issue-limited scope、
+server-owned analysis references、legacy tool regression、caller-attested
+source rejection、candidate-only blocking、role mismatch、historical-law
+block、source expiry、privacy downgrade、idempotency、TTL、WAL/SHM/temp purge。
 
 ## C. Packaging 與 base-install smoke
 
 ```bash
-VERSION=0.7.0
+VERSION=0.7.1
 uv build
 python -m zipfile -l "dist/alr_tw-${VERSION}-py3-none-any.whl"
 ```
@@ -47,7 +50,9 @@ python -m zipfile -l "dist/alr_tw-${VERSION}-py3-none-any.whl"
 - current protocol `2025-11-25`；
 - legacy supported protocol `2024-11-05`；
 - unsupported protocol fail closed；
-- tools/list 包含 v0.7.0 server-managed 與 interoperability MCP tools；
+- tools/list 包含 v0.7.1 server-managed 與 interoperability MCP tools；
+- capabilities 與 tools/list 包含 `alr-tw.legal-analysis/v1`、六種 profiles
+  與 `validate_legal_analysis`；
 - synthetic run 可推進到 ready-for-draft，沒有 evidence 時 final validation blocked 且 answer body 為 null；
 - MCP purge 與 CLI purge parity。
 

@@ -1,4 +1,4 @@
-"""Public civil-law analysis envelope proposed by an external reasoning client."""
+"""Shared analysis primitives and civil-substantive branch models."""
 
 from __future__ import annotations
 
@@ -213,94 +213,7 @@ class ProceduralPosture(BaseModel):
     fact_ids: list[str] = Field(default_factory=list, max_length=32)
 
 
-class CivilLawAnalysis(BaseModel):
-    """Untrusted analysis proposal; it contains references, never source bodies."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    schema_version: Literal["alr-tw.civil-law-analysis/v1"] = (
-        "alr-tw.civil-law-analysis/v1"
-    )
-    analysis_id: str = Field(pattern=_IDENTIFIER_PATTERN)
-    trust_status: Literal["untrusted_client_proposal"] = "untrusted_client_proposal"
-    claims: list[CivilClaim] = Field(min_length=1, max_length=32)
-    elements: list[CivilElement] = Field(min_length=1, max_length=128)
-    burden_of_proof: list[ElementBurdenOfProof] = Field(default_factory=list, max_length=128)
-    defenses: list[CivilDefense] = Field(default_factory=list, max_length=64)
-    facts: list[FactAssessment] = Field(default_factory=list, max_length=128)
-    evidence_assessments: list[EvidenceAssessment] = Field(default_factory=list, max_length=128)
-    counter_authority: CounterAuthorityAssessment
-    procedural_posture: ProceduralPosture
-    limitations: list[str] = Field(default_factory=list, max_length=32)
-
-    @model_validator(mode="after")
-    def validate_internal_references(self) -> CivilLawAnalysis:
-        claim_ids = [claim.claim_id for claim in self.claims]
-        element_ids = [element.element_id for element in self.elements]
-        defense_ids = [defense.defense_id for defense in self.defenses]
-        fact_ids = [fact.fact_id for fact in self.facts]
-        evidence_ids = [item.evidence_id for item in self.evidence_assessments]
-        for label, values in (
-            ("claim_id", claim_ids),
-            ("element_id", element_ids),
-            ("defense_id", defense_ids),
-            ("fact_id", fact_ids),
-            ("evidence_id", evidence_ids),
-        ):
-            if len(values) != len(set(values)):
-                raise ValueError(f"civil analysis {label} values must be unique")
-
-        known_claim_ids = set(claim_ids)
-        if any(element.claim_id not in known_claim_ids for element in self.elements):
-            raise ValueError("civil analysis element references an unknown claim_id")
-        if any(defense.claim_id not in known_claim_ids for defense in self.defenses):
-            raise ValueError("civil analysis defense references an unknown claim_id")
-
-        burden_element_ids = [item.element_id for item in self.burden_of_proof]
-        if len(burden_element_ids) != len(set(burden_element_ids)):
-            raise ValueError("civil analysis permits at most one burden record per element")
-        if any(element_id not in set(element_ids) for element_id in burden_element_ids):
-            raise ValueError("civil analysis burden record references an unknown element_id")
-        return self
-
-
 class AnalysisValidationSeverity(str, Enum):
     BLOCKER = "blocker"
     QUALIFICATION = "qualification"
     INFO = "info"
-
-
-class CivilAnalysisDecision(str, Enum):
-    VALIDATED = "validated"
-    QUALIFIED = "qualified"
-    BLOCKED = "blocked"
-
-
-class CivilAnalysisValidationFinding(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    code: str = Field(min_length=1)
-    severity: AnalysisValidationSeverity
-    path: str = Field(min_length=1)
-    message: str = Field(min_length=1)
-
-
-class CivilAnalysisValidationResult(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    schema_version: Literal["alr-tw.civil-analysis-validation/v1"] = (
-        "alr-tw.civil-analysis-validation/v1"
-    )
-    analysis_id: str
-    decision: CivilAnalysisDecision
-    eligible_for_answer_validation: bool
-    authorizes_final_answer: Literal[False] = False
-    trust_status: Literal["untrusted_client_proposal"] = "untrusted_client_proposal"
-    validation_scope: Literal["structural_and_trust_invariants_only"] = (
-        "structural_and_trust_invariants_only"
-    )
-    semantic_entailment_performed: Literal[False] = False
-    findings: list[CivilAnalysisValidationFinding] = Field(default_factory=list)
-    blockers: list[str] = Field(default_factory=list)
-    qualifications: list[str] = Field(default_factory=list)
-    coverage: dict[str, int] = Field(default_factory=dict)

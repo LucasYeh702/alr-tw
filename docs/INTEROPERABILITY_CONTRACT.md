@@ -1,6 +1,6 @@
 # ALR-TW Agent-Neutral Interoperability Contract
 
-本文件定義 v0.7.0 的前端無關接口。任何能呼叫 MCP tool 的法律
+本文件定義 v0.7.1 的前端無關接口。任何能呼叫 MCP tool 的法律
 agent、prompt skill、workflow engine 或人工控制程式都可以使用同一套契約；
 核心程式不依賴特定前端專案、模型或提示詞。
 
@@ -45,7 +45,7 @@ same run.
 
 ### `server_managed`
 
-This is the v0.7.0-compatible default. ALR-TW plans and executes its bounded
+This is the v0.7.1-compatible default. ALR-TW plans and executes its bounded
 official/TLR discovery obligations. No external research plan is required.
 
 ### `client_assisted`
@@ -134,41 +134,43 @@ For judgments, ALR-TW converts the locator into an untrusted typed candidate,
 then performs the same Judicial Yuan identity and full-text verification used
 for every other candidate.
 
-## Civil-law analysis proposal
+## Unified legal analysis proposal
 
-`alr-tw.civil-law-analysis/v1` is an optional public envelope for a client to
-propose:
+`alr-tw.legal-analysis/v1` is a multi-branch envelope accepted by
+`validate_legal_analysis`. Its `analyses` list may contain these profiles once
+each:
 
-- claims and constitutive elements;
-- the legal effect of each element or defense:
-  `right_constituting`, `right_impeding`, `right_extinguishing`, `defense`,
-  `liability_reduction`, or `remedy_calculation`;
-- element-level burden type, bearer, presumption, shift, standard of proof,
-  rebuttal status, and normative-source IDs;
-- facts and evidence states from `alleged` through `proven`,
-  `contradicted`, `inadmissible`, and `excluded`;
-- defenses, bounded counter-authority coverage, and procedural posture.
+| Profile | Structural focus |
+|---|---|
+| `civil_substantive` | claims, elements, defenses, legal effects and element-level burdens |
+| `civil_procedure` | jurisdiction, party capacity, standing, claim subject, procedural prerequisites, burden, res judicata, appeal and provisional relief |
+| `criminal_substantive` | offense elements, unlawfulness, culpability, intent or negligence, attempt, participation, concurrence, sentencing |
+| `criminal_procedure` | proceeding stage, prosecution prerequisites, coercive measures, admissibility, probative weight, confession, hearsay, burden and remedies |
+| `administrative` | `legality` and `remedy` tracks covering action legality and administrative remedies |
+| `constitutional_review` | admissibility, protected right, interference, legal reservation, legitimate aim, proportionality, equality, due process and judgment effect |
 
-The entire envelope remains `untrusted_client_proposal`. It contains only
-references, never source bodies, official attestations, or content hashes.
-`validate_civil_analysis` resolves every source, evidence, and fact ID against
-server-owned run state. A `met` element requires a server-owned normative
-source plus an eligible fact or evidence reference.
+Each branch declares `complete` or `issue_limited` scope. A `complete` proposal
+must include the branch's core dimensions; `issue_limited` always returns a
+qualification. Civil claims, elements and burdens preserve the civil-law legal
+effect and burden taxonomy. Every normative assessment requires a server-owned
+normative source. A determinate `met` or `not_met` assessment also requires a
+server-owned fact or eligible evidence reference. Unknown, stale, non-binding,
+temporally inapplicable, or legally invalid references fail closed.
 
-Temporal applicability, authority status, and legal validity come from the
-provider-neutral `alr-tw.legal-context-result/v1` port. The public package
-ships an explicit-allowlist synthetic fixture provider only. Unknown,
-incomplete, stale, non-binding, or legally invalid normative context fails
-closed.
+The stateless validator accepts an optional `server_fact_states` mapping from a
+server-owned fact provider. The bundled managed `ResearchService` does not
+persist such fact records and reports
+`managed_fact_state_store_available=false`; its MCP path therefore rejects
+client-supplied fact IDs. Managed-run clients should bind eligible evidence IDs
+unless their deployment integrates the validator with its own server-owned fact
+store. Client fact labels can never populate this mapping.
 
-`not_found_in_scope` counter-authority status can only produce a qualification;
-the schema fixes `absence_established=false`. It never means that no opposing
-view exists.
-
-Civil-analysis validation checks structure and trust invariants. It does not
-perform semantic entailment, decide whether difficult legal concepts are
-satisfied, or authorize a final answer. Final answer validation remains a
-separate server-owned gate.
+The branch names are checklists for interoperable structure, not codified
+legal conclusions. The validator does not determine evidence admissibility or
+probative weight, criminal-law three-stage reasoning, administrative
+discretion, constitutional proportionality, or any other substantive
+subsumption. It always returns `authorizes_final_answer=false` and
+`semantic_entailment_performed=false`.
 
 ## Final issue coverage
 
@@ -201,7 +203,7 @@ get_legal_research_capabilities
   -> research_legal_question(discovery_mode=...)
   -> [client_assisted only] submit_legal_research_plan
   -> continue_legal_research until ready_for_draft
-  -> [civil-analysis clients] validate_civil_analysis
+  -> [optional structured analysis] validate_legal_analysis
   -> external client drafts and binds claims to evidence + issues
   -> validate_legal_answer
   -> render only validated / qualified; discard blocked draft

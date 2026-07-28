@@ -1,6 +1,6 @@
 # ALR-TW Trust Model
 
-## v0.7.0 evidence promotion
+## v0.7.1 evidence promotion
 
 Final validation 只讀取該 run 在 server-side SQLite 中已連結、未到期且 `trust_status=evidence_eligible` 的 evidence。MCP caller 即使提交看似完整的 official URL、hash 或 verified time，也只能視為 caller-attested metadata，不能升格為正式證據。
 
@@ -21,7 +21,7 @@ ALR-TW separates source discovery from final citation authority.
 | `synthetic` | Demo and test fixture | No |
 | `unknown` | Missing or unsupported source tier | No |
 
-Legacy Python contracts may expose metadata validation helpers, but the v0.7.0
+Legacy Python contracts may expose metadata validation helpers, but the v0.7.1
 MCP boundary does not trust caller-supplied metadata. Byte-level verification
 must happen in a server-owned provider or governed resolver.
 
