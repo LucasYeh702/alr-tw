@@ -1,6 +1,6 @@
 # Public / Private Boundary
 
-## v0.7.1 public boundary
+## v0.8.0 public boundary
 
 ALR-TW is an independent, public-safe provider-neutral harness. The public
 package contains provider contracts, stateless validators, deterministic trust
@@ -23,8 +23,9 @@ data, local indexes, caches, logs, credentials, or private workflow data.
 | Trust gate | yes |
 | Synthetic fixtures | yes |
 | Trace schema | yes |
-| Civil-law analysis schema and stateless validator | yes |
+| Unified `LegalAnalysisEnvelope` and stateless validator | yes |
 | Temporal / authority / validity provider contract | yes |
+| Research sufficiency, Coverage v2, finalization and snapshot receipt contracts | yes |
 | Production corpus | no |
 | SQLite shards | no |
 | Chroma DB | no |

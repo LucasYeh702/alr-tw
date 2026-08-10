@@ -22,7 +22,7 @@ from alr_tw.contracts.research import (
     ResearchObligationKind,
     ResearchRun,
 )
-from alr_tw.contracts.sources import EvidenceSpan, MaterialType, SourceRecord
+from alr_tw.contracts.sources import EvidenceSpan, MaterialType, SourceRecord, TrustStatus
 from alr_tw.providers.official import (
     OfficialConstitutionalProvider,
     OfficialJudgmentProvider,
@@ -34,6 +34,13 @@ from alr_tw.research.judgment_identity import (
     direct_judgment_identity,
     rank_and_dedupe_judgment_identities,
     resolve_judgment_candidate,
+)
+from alr_tw.research.counter_authority import (
+    CounterAuthorityStatus,
+    CounterAuthorityVerification,
+    CounterAuthorityProgress,
+    build_counter_authority_plan,
+    execute_bounded_counter_authority,
 )
 from alr_tw.storage.sqlite_store import SqliteStore
 
@@ -683,22 +690,308 @@ class ProviderObligationExecutor:
         run: ResearchRun,
         obligation: ResearchObligation,
     ) -> dict[str, Any]:
-        limitation = "COUNTER_AUTHORITY_SEARCH_NOT_IMPLEMENTED"
-        coverage = run.coverage.model_copy(
-            update={
-                "counter_authority_checked": False,
-                "limitations": sorted(set(run.coverage.limitations + [limitation])),
-            }
+        calls: list[dict[str, Any]] = []
+        warnings: list[str] = []
+        if not hasattr(self.providers.judgments, "search"):
+            limitation = "COUNTER_AUTHORITY_SEARCH_UNSUPPORTED"
+            coverage = run.coverage.model_copy(
+                update={
+                    "counter_authority_checked": False,
+                    "limitations": sorted(set(run.coverage.limitations + [limitation])),
+                }
+            )
+            return self._outcome(
+                obligation,
+                warnings=[limitation],
+                metadata={
+                    "status": CounterAuthorityStatus.UNSUPPORTED.value,
+                    "reason_codes": [limitation],
+                    "provider_call_count": 0,
+                    "candidate_count": 0,
+                    "attempted_count": 0,
+                    "verified_count": 0,
+                    "absence_claim_allowed": False,
+                    "global_consensus_claim_allowed": False,
+                },
+                updates={"coverage": coverage},
+            )
+
+        issue_proposals: list[tuple[str, str]] = []
+        registered_locators: list[str] = []
+        if run.registered_plan is not None:
+            issue_proposals = [
+                (item.issue_id, item.proposition)
+                for item in run.registered_plan.proposal.issues
+                if item.category.value == "counter_authority"
+            ]
+            registered_locators = [
+                item.lookup_text
+                for item in run.registered_plan.proposal.authority_locators
+                if item.material_type is MaterialType.JUDGMENT
+                and item.purpose.value == "counter_authority"
+            ]
+        plan = build_counter_authority_plan(
+            run.query,
+            issue_proposals=issue_proposals,
+            registered_locators=registered_locators,
+            as_of_date=run.as_of_date.isoformat() if run.as_of_date else None,
+            provider_id=self.providers.judgments.provider_id,
         )
+        resume: CounterAuthorityProgress | None = None
+        if obligation.counter_authority_progress is not None:
+            try:
+                resume = CounterAuthorityProgress.model_validate(
+                    obligation.counter_authority_progress
+                )
+            except Exception as exc:
+                limitation = "COUNTER_AUTHORITY_PROGRESS_INVALID"
+                coverage = run.coverage.model_copy(
+                    update={
+                        "counter_authority_checked": False,
+                        "limitations": sorted(
+                            set(run.coverage.limitations + [limitation])
+                        ),
+                    }
+                )
+                return self._outcome(
+                    obligation,
+                    warnings=[f"{limitation}:{type(exc).__name__}"],
+                    metadata={
+                        "status": CounterAuthorityStatus.BLOCKED.value,
+                        "reason_codes": [limitation],
+                        "provider_call_count": 0,
+                        "candidate_count": 0,
+                        "attempted_count": 0,
+                        "verified_count": 0,
+                    },
+                    updates={"coverage": coverage},
+                )
+
+        def search(query: str, limit: int) -> ProviderResult:
+            result = _run(self.providers.judgments.search(query, limit=limit))
+            calls.append(self._provider_call(result))
+            return result
+
+        existing_verified: dict[str, tuple[SourceRecord, tuple[EvidenceSpan, ...]]] = {}
+        existing_evidence = self.store.list_evidence(run.run_id)
+        for source in self.store.list_sources(run.run_id):
+            if source.trust_status not in {
+                TrustStatus.OFFICIAL_VERIFIED,
+                TrustStatus.EVIDENCE_ELIGIBLE,
+            }:
+                continue
+            spans = tuple(item for item in existing_evidence if item.source_id == source.source_id)
+            identifier = source.official_identifier or ""
+            normalized = OfficialJudgmentProvider.normalize_jid(identifier)
+            if normalized:
+                existing_verified[f"jid:{normalized}"] = (source, spans)
+            elif identifier:
+                existing_verified[f"raw:{identifier}"] = (source, spans)
+
+        def verify(candidate: ProviderCandidate) -> CounterAuthorityVerification:
+            identity = resolve_judgment_candidate(candidate)
+            if identity is None:
+                result = ProviderResult(
+                    status=ProviderResultStatus.ERROR,
+                    provider_id=self.providers.judgments.provider_id,
+                    error_code=ProviderErrorCode.INVALID_IDENTIFIER,
+                    message="COUNTER_AUTHORITY_CANDIDATE_IDENTITY_UNRESOLVED",
+                    coverage_complete=False,
+                )
+                calls.append(self._provider_call(result))
+                return CounterAuthorityVerification(
+                    candidate_id=candidate.candidate_id,
+                    result=result,
+                )
+            identifier = identity.lookup_identifier
+
+            # A prior official-verification obligation may already have
+            # promoted this exact judgment in the same run.  Reuse that
+            # server-owned source/evidence rather than issuing a duplicate
+            # detail request; the candidate still remains untrusted until the
+            # existing official identity is matched.
+            normalized_identifier = OfficialJudgmentProvider.normalize_jid(identifier)
+            existing_key = (
+                f"jid:{normalized_identifier}"
+                if normalized_identifier
+                else f"raw:{identifier}"
+            )
+            reused = existing_verified.get(existing_key)
+            if reused is not None:
+                existing_source, existing_evidence = reused
+                result = ProviderResult(
+                    status=ProviderResultStatus.FOUND,
+                    provider_id=self.providers.judgments.provider_id,
+                    source_ids=[existing_source.source_id],
+                    evidence_ids=[item.evidence_id for item in existing_evidence],
+                    coverage_complete=True,
+                    metadata={"reused_official_verification": True},
+                )
+                calls.append(self._provider_call(result))
+                return CounterAuthorityVerification(
+                    candidate_id=candidate.candidate_id,
+                    result=result,
+                    source=existing_source,
+                    evidence=existing_evidence,
+                )
+
+            def fetch_judgment(
+                identifier: str = identifier,
+            ) -> tuple[ProviderResult, SourceRecord | None, list[EvidenceSpan]]:
+                return _run(self.providers.judgments.exact_lookup(identifier))
+
+            cache_key = (
+                f"judgment:{identifier}"
+                if OfficialJudgmentProvider.normalize_jid(identifier)
+                else f"judgment-formal:{_compact_identifier(identifier)}"
+            )
+            result, source, evidence = self._cached_lookup(
+                run.run_id,
+                cache_key,
+                fetch_judgment,
+            )
+            calls.append(self._provider_call(result))
+            if (
+                source is not None
+                and source.trust_status
+                in {TrustStatus.OFFICIAL_VERIFIED, TrustStatus.EVIDENCE_ELIGIBLE}
+            ):
+                existing_verified[existing_key] = (source, tuple(evidence))
+            return CounterAuthorityVerification(
+                candidate_id=candidate.candidate_id,
+                result=result,
+                source=source,
+                evidence=tuple(evidence),
+            )
+
+        def verification_cost(candidate: ProviderCandidate) -> bool:
+            """Return whether verifying this candidate needs a new exact fetch.
+
+            Existing server-owned official material in this run is reusable and
+            must not consume the bounded exact-lookup budget.  Unresolved or
+            otherwise unknown identities conservatively consume the budget.
+            """
+
+            identity = resolve_judgment_candidate(candidate)
+            if identity is None:
+                return True
+            identifier = identity.lookup_identifier
+            normalized_identifier = OfficialJudgmentProvider.normalize_jid(identifier)
+            existing_key = (
+                f"jid:{normalized_identifier}"
+                if normalized_identifier
+                else f"raw:{identifier}"
+            )
+            return existing_key not in existing_verified
+
+        def save_candidate(candidate: ProviderCandidate) -> None:
+            self.store.save_candidate(run.run_id, candidate, expires_at=run.expires_at)
+
+        # The bounded runner owns query ordering/deduplication.  Candidate
+        # persistence happens before exact promotion and remains untrusted.
+        original_search = search
+
+        def search_and_store(query: str, limit: int) -> ProviderResult:
+            result = original_search(query, limit)
+            for candidate in result.candidates[:limit]:
+                save_candidate(candidate)
+            return result
+
+        counter_result, verifications = execute_bounded_counter_authority(
+            plan,
+            search=search_and_store,
+            verify=verify,
+            verification_cost=verification_cost,
+            resume=resume,
+        )
+        # Preserve provider/error diagnostics for the coverage receipt while
+        # keeping ordinary unverified candidates from being misclassified as
+        # transport errors by the service-level reason splitter.
+        warnings.extend(
+            reason
+            for reason in counter_result.reason_codes
+            if any(
+                marker in reason.upper()
+                for marker in (
+                    "ERROR",
+                    "TIMEOUT",
+                    "UNAVAILABLE",
+                    "BLOCKED",
+                    "PARTIAL",
+                    "RETRY",
+                    "NOT_FOUND_IN_SCOPE",
+                    "INCOMPLETE",
+                    "TRUNCATED",
+                )
+            )
+        )
+        if counter_result.status is CounterAuthorityStatus.NOT_FOUND_IN_SCOPE:
+            warnings.append("COUNTER_AUTHORITY_NOT_FOUND_IN_SCOPE")
+        elif counter_result.status is CounterAuthorityStatus.PARTIAL:
+            warnings.append("COUNTER_AUTHORITY_PARTIAL")
+        elif counter_result.status is CounterAuthorityStatus.RETRY_REQUIRED:
+            warnings.append("COUNTER_AUTHORITY_RETRY_REQUIRED")
+        elif counter_result.status is CounterAuthorityStatus.BLOCKED:
+            warnings.append("COUNTER_AUTHORITY_BLOCKED")
+
+        # v0.8 has no server-owned semantic opposition classifier.  Even an
+        # officially verified judgment remains relation-unclassified, so only
+        # a clean scoped miss completes the counter-authority obligation.
+        completed = counter_result.status is CounterAuthorityStatus.NOT_FOUND_IN_SCOPE
+        limitations = list(run.coverage.limitations)
+        if not completed:
+            limitations.extend(counter_result.reason_codes)
+        coverage_updates: dict[str, Any] = {
+            "counter_authority_checked": completed,
+            "limitations": sorted(set(limitations)),
+        }
+        # Coverage v2 fields are additive.  Keeping these updates in the
+        # executor makes the result useful to direct callers while older
+        # CoverageState payloads remain compatible during rolling upgrades.
+        coverage_fields = getattr(type(run.coverage), "model_fields", {})
+        if "bounded_query_scope" in coverage_fields:
+            coverage_updates["bounded_query_scope"] = (
+                f"provider={','.join(counter_result.plan.scope.provider_ids)};"
+                f"material={','.join(item.value for item in counter_result.plan.scope.material_types)};"
+                f"max_queries={counter_result.plan.scope.max_queries};"
+                f"max_candidates={counter_result.plan.scope.max_candidates_per_query};"
+                f"max_verifications={counter_result.plan.scope.max_verifications}"
+            )
+        if "bounded_time_scope" in coverage_fields:
+            coverage_updates["bounded_time_scope"] = counter_result.plan.scope.time_scope
+        coverage = run.coverage.model_copy(update=coverage_updates)
         return self._outcome(
             obligation,
-            warnings=[limitation],
+            calls=calls,
+            warnings=sorted(set(warnings)),
             metadata={
-                "provider_call_count": 0,
-                "candidate_count": 0,
-                "attempted_count": 0,
-                "verified_count": 0,
+                "schema_version": "alr-tw.counter-authority-result/v1",
+                "status": counter_result.status.value,
+                "reason_codes": list(counter_result.reason_codes),
+                "plan_id": counter_result.plan.plan_id,
+                "plan": counter_result.plan.model_dump(mode="json"),
+                "progress": counter_result.progress.model_dump(mode="json"),
+                "scope": counter_result.plan.scope.model_dump(mode="json"),
+                "provider_call_count": len(calls),
+                "candidate_count": counter_result.candidate_count,
+                "attempted_count": len(counter_result.progress.queries),
+                "verified_count": counter_result.verified_count,
+                "verified_source_ids": list(counter_result.verified_source_ids),
+                "verified_evidence_ids": list(counter_result.verified_evidence_ids),
+                "verification_attempts": counter_result.verification_attempts,
+                "verification_budget": counter_result.plan.scope.max_verifications,
+                "verification_budget_exhausted": (
+                    counter_result.verification_budget_exhausted
+                ),
+                "relation_status": counter_result.relation_status.value,
+                "absence_claim_allowed": counter_result.absence_claim_allowed,
+                "global_consensus_claim_allowed": (
+                    counter_result.global_consensus_claim_allowed
+                ),
+                "verified_candidate_count": len(verifications),
             },
+            added_sources=len(counter_result.verified_source_ids),
+            added_evidence=len(counter_result.verified_evidence_ids),
             updates={"coverage": coverage},
         )
 

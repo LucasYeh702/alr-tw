@@ -2,7 +2,7 @@
 
 [繁體中文](README.zh-TW.md) | English
 
-ALR-TW v0.7.1 is the agent-neutral public preview of the Taiwan-law research safety harness. An external agent or LLM may create and advance a research run over MCP and propose issues or authority locators, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
+ALR-TW v0.8.0 is the agent-neutral public preview of the Taiwan-law research safety harness. An external agent or LLM may create and advance a research run over MCP and propose issues or authority locators, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
 
 In `hybrid_verified` mode, this project uses [TLR (Taiwan Legal RAG)](https://github.com/aa0101181514/tw-legal-rag) to recall ordinary-judgment candidates, then asks ALR-TW to verify them against Judicial Yuan official full text. TLR results are not final citation evidence by themselves.
 
@@ -10,9 +10,9 @@ This project is neither legal advice nor a complete Taiwan legal database.
 
 This repository does not ship an LLM or agent implementation. Planning, tool selection, and natural-language reasoning come from the external caller; ALR-TW supplies auditable tools and deterministic gates. The demo ranking parameters are illustrative test settings, not production ranking configuration.
 
-> v0.7.1 remains a `0.x` public preview. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
+> v0.8.0 remains a `0.x` public preview. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
 
-> The current `main` working tree and package version are `0.7.1`; `v0.7.1` is
+> The current `main` working tree and package version are `0.8.0`; `v0.8.0` is
 > a public preview and does not claim complete production legal reasoning.
 
 ## Agentic RAG capabilities
@@ -30,7 +30,7 @@ User query
   -> validated | qualified | blocked
 ```
 
-The v0.7.1 surface provides legacy `hlExportPDF` and
+The v0.8.0 surface provides legacy `hlExportPDF` and
 `/EXPORTFILE/ExportToPdf.aspx` compatibility, official identity verification
 for five-part TLR document IDs, agent-neutral interoperability, and one unified
 legal-analysis envelope with composable branches for civil substantive law,
@@ -38,6 +38,36 @@ civil procedure, substantive criminal law, criminal procedure, administrative
 law, and constitutional review. The administrative branch contains separate
 legality and remedy tracks.
 These checks validate structure and trust references, not semantic entailment.
+The v0.8.0 surface also includes a provider-neutral applicability resolver for
+explicit special/general, superior/inferior, and successor/version metadata;
+authority and judgment-lineage contracts for court level, procedural posture,
+appeal/review edges, and bounded negative-treatment results; and public-law
+contracts plus a provider SDK for administrative rules, interpretations,
+appeals, legislative materials, procedure/remedy stages, and server metadata
+binding. These interfaces fail closed when provider-owned relationships cannot
+be confirmed and do not infer legal effects from source text.
+
+`ready_for_draft` means workflow completion only; it is not a sufficiency claim.
+The server computes `research_sufficiency` (`sufficient`, `qualified`,
+`insufficient`, or `retry_required`) and `answer_mode` (`ordinary`,
+`conditional`, or `refusal_only`) and exposes the server-owned finalization
+contract. Synthetic fixtures are for demos and contract tests only and cannot
+support a legal answer. Counter-authority remains bounded lexical candidate
+discovery followed by official verification; there is no semantic opposition
+classifier and no basis for global absence or consensus claims.
+
+### Snapshot receipts and bundled-runtime limits
+
+The provider-neutral snapshot receipt is a public provider contract and
+consistency check; it does not mean that the bundled providers issue receipts.
+In v0.8.0 the bundled `ResearchService` does not inject or persist live-provider
+snapshot-generation receipts. Its live finalization output is therefore at most
+`conditional` or `qualified` (normally with `SNAPSHOT_RECEIPT_MISSING_LEGACY`),
+not `ordinary`. `ordinary` is reserved for deployments using a receipt-aware
+provider adapter that binds server-owned receipts to the same run. Finalization
+only authorizes entering the drafting phase (`safe_to_draft`); it never
+authorizes presentation. Only `validate_legal_answer` can return a presentable
+`validated` or `qualified` result.
 
 An external agent may plan research and draft an answer, but it cannot declare a source official, promote a candidate into evidence, or bypass final validation.
 
@@ -61,7 +91,7 @@ versions, configuration, and licensing.
 External agent asks and drafts
   -> server-owned research obligations
   -> official providers + optional TLR candidate recall
-  -> server-owned source and evidence snapshots
+  -> server-owned source/evidence (optional provider snapshot receipt)
   -> claim, role, time, privacy, and citation validation
   -> validated | qualified | blocked
 ```
@@ -107,7 +137,7 @@ Ordinary-judgment lookup does not require a Judicial Yuan API token. In a live m
 
 Secrets are redacted from `doctor` output and must not be committed, traced, or persisted in SQLite.
 
-## v0.7.1 MCP tools
+## v0.8.0 MCP tools
 
 | Tool | Purpose |
 |---|---|
@@ -116,6 +146,7 @@ Secrets are redacted from `doctor` output and must not be committed, traced, or 
 | `submit_legal_research_plan` | Register an untrusted client-assisted issue and locator plan |
 | `continue_legal_research` | Execute exactly one next obligation using an idempotent `operation_id` |
 | `get_legal_research_state` | Read run state without network activity or TTL extension |
+| `get_legal_research_finalization` | Return server-owned research sufficiency, Coverage v2, snapshot receipts, and answer posture |
 | `lookup_legal_source` | Exact lookup for a law article, Constitutional identifier, JID, or formal judgment citation |
 | `validate_legal_analysis` | Validate six composable branches, civil element-level burdens, server-owned references, and legal context |
 | `validate_legal_answer` | Validate a draft only against evidence owned by that run |
@@ -240,7 +271,7 @@ Choose data mode
   -> run alr-tw doctor --live
   -> retrieve candidate sources
   -> resolve official identifier and content
-  -> create server-owned evidence snapshot
+  -> create server-owned evidence (bind a receipt only when the adapter issues one)
   -> validate draft claims and citations
   -> present or fail closed
 ```
@@ -249,6 +280,11 @@ Choose data mode
 - Ordinary judgments: ALR-TW does not use a Judicial Yuan API. It parses the public judgment search page to obtain a JID, then downloads the official detail page. Search failure, site blocking, parse failure, and confirmed absence remain distinct states.
 - TLR: [TLR](https://github.com/aa0101181514/tw-legal-rag) improves ordinary-judgment candidate recall only. A hit must be resolved against the Judicial Yuan official source. `mcp-taiwan-legal-db` is a public behavioral reference, not a dependency; the provider, transport, parser, and evidence pipeline are independent implementations.
 - Constitutional materials: holdings, majority reasons, concurrences, and dissents retain separate roles. An individual opinion cannot be presented as majority reasoning.
+
+Applicability, authority/lineage, and public-law contracts are provider-neutral
+structural interfaces. Deployments supply their own providers; candidate records
+remain separate from server-owned evidence, and no contract performs semantic
+entailment or semantic opposition classification.
 
 ## Documentation
 
@@ -265,8 +301,7 @@ Choose data mode
 - [Error Codes](docs/ERROR_CODES.md)
 - [Threat Model](docs/THREAT_MODEL.md)
 - [Release Notes](docs/RELEASE_NOTES.md)
-- [v0.7.1 Domain Analysis Acceptance](docs/V071_DOMAIN_ANALYSIS_ACCEPTANCE.md)
-- [v0.7.1 Release Audit](docs/V071_RELEASE_AUDIT.md)
+- [Agentic Harness Acceptance](docs/AGENTIC_HARNESS_ACCEPTANCE.md)
 - [Changelog](CHANGELOG.md)
 
 ## Legal notice

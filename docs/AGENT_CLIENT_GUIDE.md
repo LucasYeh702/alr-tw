@@ -5,7 +5,7 @@ LLM and no agent implementation. The external MCP client supplies the agent
 role; the harness records tool calls, validates citations, computes the trust
 gate, and returns a canonical trace.
 
-## v0.7.1 agent-neutral research flow
+## v0.8.0 agent-neutral research flow
 
 New clients should first call `get_legal_research_capabilities`.
 
@@ -21,8 +21,11 @@ source verification:
 
 1. Create the run with `research_legal_question`.
 2. Submit an `alr-tw.research-plan-proposal/v1`.
-3. Continue server-owned obligations until `ready_for_draft`.
-4. Submit `alr-tw.legal-analysis/v1` to `validate_legal_analysis` when a
+3. Continue server-owned obligations until `ready_for_draft`; this is workflow
+   completion only, not a claim of research sufficiency.
+4. Call `get_legal_research_finalization` to read server-owned Coverage v2,
+   `research_sufficiency`, `answer_mode`, snapshot receipts, blockers, and
+   qualifications. Submit `alr-tw.legal-analysis/v1` to `validate_legal_analysis` when a
    structured analysis is needed. One envelope may combine civil substantive,
    civil procedure, substantive criminal, criminal procedure, administrative,
    and constitutional-review branches.
@@ -31,7 +34,18 @@ source verification:
 5. Draft externally from server-owned evidence.
 6. Call `validate_legal_answer` with evidence IDs and, when a plan is
    registered, the corresponding issue IDs.
-7. Render only final-answer `validated` or `qualified`.
+7. Treat finalization as a pre-draft posture only. Render only a
+   `validated` or `qualified` result returned by `validate_legal_answer`; a
+   `refusal_only` finalization must not render a draft.
+
+The snapshot receipt is a provider-neutral contract, not a promise that the
+built-in providers issue one. The bundled `ResearchService` does not currently
+inject or persist live-provider generation receipts, so its live finalization
+is at most `conditional` or `qualified` (normally with
+`SNAPSHOT_RECEIPT_MISSING_LEGACY`). `ordinary` is reserved for a deployment
+with a receipt-aware provider adapter and a server-owned receipt binding for
+the same run. A finalization result may expose `safe_to_draft`; it never
+authorizes presentation.
 
 Do not call a full second recall workflow after selecting `server_managed`.
 Do not call TLR or an official judgment search again after selecting
@@ -44,6 +58,18 @@ credentials inside them. Fact and evidence status labels remain proposals
 until matched to server-owned run context. Cross-domain profiles validate
 structure and trust references only; they do not perform substantive legal
 subsumption.
+
+Synthetic records are demonstration fixtures and cannot support a legal answer.
+Counter-authority results are bounded lexical candidate discovery followed by
+official verification; they do not establish semantic opposition, global
+absence, or practice-wide consensus.
+
+The v0.8.0 public contracts also expose structural applicability resolution,
+authority/judgment lineage, and public-law provider adapters. Use the
+provider-neutral interfaces for explicit source relationships, court/procedure
+metadata, administrative rules or legislative materials. These records remain
+provider-supplied and server-bound; they do not perform semantic entailment or
+authorize a final answer.
 
 ## MCP Client Config
 

@@ -1,6 +1,6 @@
 # Data Policy
 
-本文件定義 ALR-TW v0.7.1 公開預覽的資料流、保存與來源信任邊界。
+本文件定義 ALR-TW v0.8.0 公開預覽的資料流、保存與來源信任邊界。
 
 ## 資料模式與外部傳輸
 
@@ -27,7 +27,9 @@
 
 ## Managed storage
 
-短期 SQLite 可保存 research run、obligation、idempotent operation result、source snapshot、evidence span、candidate 與 TTL cache metadata。預設 retention `24h`、上限 `7d`；`ephemeral` run 在 final validation 後同步清除。
+短期 SQLite 可保存 research run、obligation、idempotent operation result、server-owned source/evidence、candidate 與 TTL cache metadata；provider-neutral snapshot receipt 參照只有在 receipt-aware adapter 提供時才會存在。預設 retention `24h`、上限 `7d`；`ephemeral` run 在 final validation 後同步清除。
+
+內建 runtime 尚未簽發 live-provider receipt，因此服務輸出最多為 `conditional`／`qualified`；`ordinary` 僅保留給 receipt-aware adapter 完成同一 run 的 server-owned binding。
 
 不得持久化 TLR API key 或帳號密碼。普通裁判網站路徑不需要 API token。Trace 與 doctor 只回傳非敏感設定狀態，不回秘密值。
 

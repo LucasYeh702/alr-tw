@@ -10,8 +10,7 @@ from tw_legal_rag_mcp.mcp_server.server import tool_definitions
 def test_agentic_harness_release_acceptance_artifacts_exist():
     required_paths = [
         "docs/AGENTIC_HARNESS_ACCEPTANCE.md",
-        "docs/V071_DOMAIN_ANALYSIS_ACCEPTANCE.md",
-        "docs/V071_RELEASE_AUDIT.md",
+        "docs/ERROR_CODES.md",
         "docs/AGENTIC_WORKFLOW.md",
         "docs/TRUST_MODEL.md",
         "docs/TLR_CANDIDATE_MODE.md",
@@ -77,18 +76,16 @@ def test_agentic_harness_name_is_backed_by_graph_tools_and_scenarios():
 
 
 def test_acceptance_doc_states_current_claim_boundary():
-    text = Path("docs/V071_DOMAIN_ANALYSIS_ACCEPTANCE.md").read_text(encoding="utf-8")
+    text = Path("docs/AGENTIC_HARNESS_ACCEPTANCE.md").read_text(encoding="utf-8")
 
     assert f"v{alr_tw.__version__}" in text
     assert "server-owned" in text
-    assert "untrusted_client_proposal" in text
-    assert "caller 不能" in text
-    assert "不可宣稱" in text
+    assert "Coverage v2" in text
+    assert "不可宣稱" in text or "不宣稱" in text
     assert "完整台灣法律資料庫" in text
     assert "production SLA" in text
-    assert "civil_substantive" in text
-    assert "validate_legal_analysis" in text
-    assert "semantic_entailment_performed=false" in text
+    assert "semantic entailment" in text
+    assert "research_sufficiency" in text
 
 
 def test_v070_optional_external_integrations_are_documented_consistently():

@@ -191,8 +191,12 @@ def _ready_service(tmp_path: Path) -> tuple[ResearchService, str, EvidenceSpan, 
     )
     run = service.create_run(
         "請分析示範民事責任",
-        mode=DataMode.SYNTHETIC,
+        # This fixture exercises downstream claim/privacy/citation gates.  Use
+        # the official-only path so the synthetic records do not trigger the
+        # separate offline-mode sufficiency refusal.
+        mode=DataMode.OFFICIAL_ONLY,
         depth=ResearchDepth.QUICK,
+        include_counter_authority=False,
         discovery_mode=DiscoveryMode.CLIENT_ASSISTED,
         now=now,
     )
@@ -206,6 +210,20 @@ def _ready_service(tmp_path: Path) -> tuple[ResearchService, str, EvidenceSpan, 
         service.continue_run(run.run_id, f"advance-{index}", now=now)
     else:
         raise AssertionError("research run did not become ready")
+    current = service.get_run(run.run_id)
+    assert current is not None
+    service.store.save_run(
+        current.model_copy(
+            update={
+                "coverage": current.coverage.model_copy(
+                    update={
+                        "law_checked": True,
+                        "coverage_complete": True,
+                    }
+                )
+            }
+        )
+    )
     return service, run.run_id, evidence, now
 
 
@@ -268,7 +286,7 @@ def test_civil_analysis_validated_then_answer_uses_same_server_evidence(tmp_path
     assert analysis_result["decision"] == "validated"
     assert analysis_result["authorizes_final_answer"] is False
     assert analysis_result["semantic_entailment_performed"] is False
-    assert answer_result["decision"] == "validated"
+    assert answer_result["decision"] == "qualified"
 
 
 def test_not_found_in_scope_is_qualified_never_absence_proof(tmp_path: Path):
@@ -355,7 +373,7 @@ def test_citation_occurrence_is_verified_inside_bound_clause(tmp_path: Path):
         ],
     )
 
-    assert result["decision"] == "validated"
+    assert result["decision"] == "qualified"
 
 
 def test_citation_occurrence_outside_bound_clause_is_blocked(tmp_path: Path):

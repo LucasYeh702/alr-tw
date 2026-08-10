@@ -1,6 +1,6 @@
 # ALR-TW Tool Contract
 
-## v0.7.1 interoperability tools
+## v0.8.0 interoperability tools
 
 | Tool | Required input | Contract |
 |---|---|---|
@@ -40,15 +40,30 @@ structure and trust decision，不是 final-answer decision，且固定：
 explicit-allowlist synthetic fixture provider；live context 未確認時 fail
 closed。
 
+## v0.8.0 provider-neutral applicability and source contracts
+
+除 MCP research tools 外，公開套件提供可替換的 provider contracts／facades：
+
+| Contract | Location | Scope |
+|---|---|---|
+| `ApplicabilityResolver`／`validate_applicability_resolution` | `src/alr_tw/contracts/applicability.py`、`src/alr_tw/verification/applicability.py` | 以獨立 server-owned `server_source_ids` catalog binding 與 metadata 結構化解析特別／普通、上位／下位與新／舊來源；缺少 binding 或無法唯一確認時 fail closed，不執行 semantic entailment |
+| `AuthorityLineageContract`／`validate_server_authority_lineage` | `src/alr_tw/contracts/authority_lineage.py`、`src/alr_tw/verification/authority_lineage.py` | 保存法院層級、程序姿態、上訴／審查鏈與 bounded negative-treatment；不產生 semantic opposition 或 consensus 結論 |
+| `PublicLawProviderAdapter`／`GenericPublicLawProviderAdapter` | `src/alr_tw/contracts/public_law.py`、`src/alr_tw/providers/sdk.py` | 行政規則、行政解釋、訴願、立法資料及程序／救濟階段的 provider-neutral adapter；server metadata 缺失或不一致時禁止升格 |
+
+這些介面由部署者接入自己的 provider；公開 repo 不附真實 corpus、index 或
+production 參數。candidate、server-owned source 與 evidence 的信任層級仍由既有
+verification／finalization gates 決定。
+
 詳見 [Agent-neutral interoperability contract](INTEROPERABILITY_CONTRACT.md)。
 
-## v0.7.1 server-managed tools
+## v0.8.0 server-managed tools
 
 | Tool | Required input | Contract |
 |---|---|---|
 | `research_legal_question` | `query` | 建立 run；optional constraints: `as_of_date`, `research_depth`, `include_counter_authority`, `discovery_mode`, `retention` |
 | `continue_legal_research` | `run_id`, `operation_id` | 原子執行一個 obligation；相同 operation id 回相同結果 |
 | `get_legal_research_state` | `run_id` | 唯讀；無 provider call、無 TTL extension |
+| `get_legal_research_finalization` | `run_id` | 回傳 server-owned `research_sufficiency`、Coverage v2、可選 provider snapshot receipts、answer mode、blockers 與 qualifications；這是 pre-draft／`safe_to_draft` 姿態，不授權呈現答案；structured refusal 由答案驗證拒答路徑回傳 |
 | `lookup_legal_source` | `text` | 精確來源 lookup；可選 run/operation linkage；`claim_verified=false` |
 | `validate_legal_answer` | `run_id`, `answer_text`, `operation_id` | 只用 server-owned evidence；核心主張應提供 optional `claim_bindings`；回 `validated`, `qualified`, `blocked` |
 | `purge_research_storage` | `scope`, `confirm` | `scope=run` 需 `run_id`；同步清除 managed records |
@@ -70,10 +85,10 @@ All MCP tool results are wrapped in:
 }
 ```
 
-## v0.7.1 answer validation
+## v0.8.0 answer validation
 
 `claim_bindings` 是 optional array；每筆包含 `claim_id`、`claim_text`、
-`claim_type`、`importance`、至少一個同 run 的 `evidence_ids`，以及 v0.7.1
+`claim_type`、`importance`、至少一個同 run 的 `evidence_ids`，以及 v0.8.0
 可選的 `issue_ids` 與 `citation_occurrences`。允許的 `claim_type` 是
 `law_rule`、`court_view`、`disposition`、`fact`、`procedure`、`limitation`。
 
@@ -88,13 +103,27 @@ Server 會核對 evidence 存在、官方 trust status、expiry、claim-support 
 都必須出現在至少一筆 binding 的 `issue_ids`。這只證明明示覆蓋，不代表
 semantic entailment。
 
-答案驗證輸出為 additive `alr-tw.answer-validation/v3`，並揭露：
+答案驗證輸出為 additive `alr-tw.answer-validation/v4`，並揭露：
 
 - `verification_method=deterministic_grounding_v2`；
 - `semantic_entailment_performed=false`；
 - `privacy`（local answer-output policy，不使用 outbound 180 字門檻）；
 - `coverage_summary`；
 - `binding_mode`。
+
+`get_legal_research_finalization` 的結果是 server-owned
+`alr-tw.finalization/v1`。`ready_for_draft` 只表示 workflow completion；
+finalization 會依 sufficiency、Coverage v2、required evidence、counter
+authority scope、snapshot consistency 與 privacy 結果計算答案姿態。`ordinary`
+必須是 sufficient 且具完整必要證據；`conditional` 必須帶不可省略的
+qualification；`refusal_only` 只允許答案驗證拒答路徑回 structured refusal，不回草稿。synthetic
+fixture 不能支撐法律答案，counter `not_found_in_scope` 不能證明全球不存在
+反面見解或實務一致。
+
+Snapshot receipt 是 provider-neutral contract，不表示 bundled provider 已簽發
+receipt。v0.8.0 內建 `ResearchService` 尚未注入或持久化 live-provider generation
+receipt，因此 built-in live output 最多為 `conditional`／`qualified`；`ordinary`
+只保留給 receipt-aware provider adapter 完成同一 run 的 server-owned binding。
 
 ## Tools
 

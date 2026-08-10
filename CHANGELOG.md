@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.8.0 - 2026-08-08
+
+### Added
+
+- 新增研究充分性與 Coverage v2：區分流程完成、研究充分性及答案模式，並保存 bounded scope、provider scope、原因碼與 snapshot receipt 參照。
+- 新增 server-owned `get_legal_research_finalization` 與 structured refusal 契約，統一由伺服器決定 ordinary、conditional 或 refusal-only 姿態。
+- 新增 bounded counter-authority candidate discovery 與官方驗證契約；未分類反方關係不得升格為全球不存在或實務一致。
+- 新增 provider-neutral applicability resolver，支援由 server-owned metadata
+  表達特別法／普通法、上位法／下位法與新舊法時點關係；解析與驗證要求獨立的
+  server-owned source catalog binding，無法唯一確認時 fail closed。
+- 新增 authority／judgment-lineage contracts，保存法院層級、程序姿態、上訴／
+  審查鏈與 bounded negative-treatment 結果，且不執行 semantic opposition classification。
+- 新增行政規則、行政解釋、訴願與立法資料的 public-law contracts，以及可替換的
+  provider SDK／adapter 介面；資料由部署者自備，candidate 與 evidence 仍分離。
+
+### Changed
+
+- `ready_for_draft` 現僅表示 workflow completion；最終答案須同時通過 research sufficiency 與 finalization gate。
+- 新增 provider-neutral snapshot consistency 與 absence-claim gate；synthetic fixture 僅供 demo／契約測試。
+- 既有研究工具與 payload 維持 additive 相容；舊紀錄回讀後由伺服器重新計算充分性。
+- provider-neutral snapshot receipt 是公開契約；內建 runtime 尚未簽發或持久化 live-provider receipt，服務輸出最多為 `conditional`／`qualified`，`ordinary` 保留給 receipt-aware adapter。
+
 本專案遵循語意化版本精神；`0.x` 仍屬公開預覽，介面可能調整。
 
 ## 0.7.1 - 2026-07-27

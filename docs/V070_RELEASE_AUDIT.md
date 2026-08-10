@@ -1,5 +1,7 @@
 # ALR-TW v0.7.0 Release Audit
 
+> Archived historical release record. It does not describe the current v0.8.0 capability surface.
+
 Release decision: **ACCEPTED FOR v0.7.0 PUBLIC PREVIEW**
 
 This audit records the local release checks for the agent-neutral public-safe

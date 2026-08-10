@@ -268,11 +268,11 @@ def test_current_public_tree_has_no_domain_guard_false_positives():
 def test_public_readmes_share_current_safety_claims():
     for relative in ("README.md", "README.zh-TW.md"):
         text = (REPO_ROOT / relative).read_text(encoding="utf-8")
-        assert "v0.7.1" in text
+        assert "v0.8.0" in text
         assert "本 repo 不包含 LLM，也不包含 agent 實作。" in text
         assert "TLR" in text and "candidate" in text
         assert "blocked" in text and "answer body" in text
-        assert "未實作系統性反方裁判搜尋" in text
+        assert "semantic opposition" in text or "尚無 semantic opposition classifier" in text
 
 
 def test_current_public_docs_use_latest_release_identity():
@@ -300,10 +300,8 @@ def test_current_public_docs_use_latest_release_identity():
         "docs/TOOL_CONTRACT.md",
         "docs/TRACE_SCHEMA.md",
         "docs/TRUST_MODEL.md",
-        "docs/V071_DOMAIN_ANALYSIS_ACCEPTANCE.md",
-        "docs/V071_RELEASE_AUDIT.md",
     )
     for relative in current_docs:
         text = (REPO_ROOT / relative).read_text(encoding="utf-8")
-        assert "v0.7.1" in text, relative
+        assert "v0.8.0" in text, relative
         assert "v0.6" not in text, relative

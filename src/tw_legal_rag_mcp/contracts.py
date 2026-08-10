@@ -128,7 +128,7 @@ class SyntheticOfficialAdapter:
         manifest = SourceManifest(
             provider="Synthetic Official Source",
             dataset_name="synthetic-civil-law-demo",
-            dataset_version="v0.7.1",
+            dataset_version="v0.8.0",
             source_url="https://example.test/synthetic-official/civil-law-demo",
             license_name="Synthetic demo fixture",
             attribution_text="Synthetic demo data generated for this reference repository.",

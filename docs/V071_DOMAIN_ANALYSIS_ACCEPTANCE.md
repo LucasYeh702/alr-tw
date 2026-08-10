@@ -1,5 +1,7 @@
 # ALR-TW v0.7.1 統一法律分析驗收契約
 
+> Archived historical acceptance record. It does not describe the current v0.8.0 capability surface.
+
 本文件界定 v0.7.1 可以公開宣稱的法律分析能力與不得擴張的邊界。
 
 ## 可宣稱能力

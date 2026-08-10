@@ -250,6 +250,15 @@ class InteroperabilityCapabilities(BaseModel):
     legal_analysis_validation_tool: Literal["validate_legal_analysis"] = (
         "validate_legal_analysis"
     )
+    finalization_contract: Literal["alr-tw.finalization/v1"] = (
+        "alr-tw.finalization/v1"
+    )
+    finalization_tool: Literal["get_legal_research_finalization"] = (
+        "get_legal_research_finalization"
+    )
+    structured_refusal_contract: Literal["alr-tw.structured-refusal/v1"] = (
+        "alr-tw.structured-refusal/v1"
+    )
     supported_legal_analysis_profiles: list[LegalAnalysisProfile]
     legal_context_contract: Literal["alr-tw.legal-context-result/v1"] = (
         "alr-tw.legal-context-result/v1"
@@ -298,7 +307,8 @@ def interoperability_capabilities(data_mode: DataMode) -> InteroperabilityCapabi
             "references or integrate the validator with a server-owned fact-state provider",
             "client-assisted discovery requires plan registration before research",
             "live legal-context providers are not bundled in the public development build",
-            "systematic counter-authority search is not implemented",
+            "counter-authority uses bounded lexical candidate discovery and official verification; "
+            "semantic opposition classification and systematic/global coverage are not provided",
             "complete historical law versions are not implemented",
             "semantic entailment and substantive legal correctness are not performed",
         ],

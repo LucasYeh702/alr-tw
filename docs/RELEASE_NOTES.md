@@ -1,38 +1,23 @@
-# ALR-TW v0.7.1 版本說明
+# ALR-TW v0.8.0 版本說明
 
-v0.7.1 統一台灣大陸法系的結構化法律分析接口。
+## 新增
 
-## 統一法律分析
+- 研究充分性與 Coverage v2：分離 `workflow_complete`、`research_sufficiency` 與 `answer_mode`，並保留 bounded query/time scope、provider scope、reason codes 與 snapshot receipt 參照。
+- server-owned `get_legal_research_finalization` 工具與 finalization contract，提供 `ordinary`、`conditional`、`refusal_only` 三種答案姿態、blockers、qualifications 與 safe next actions；答案驗證拒答路徑維持 structured refusal。
+- provider-neutral snapshot receipt／consistency contract，避免在同一研究 run 混用無法核對的資料世代。
+- 明確區分 provider-neutral receipt 契約與內建 runtime：v0.8.0 內建 `ResearchService` 尚未簽發或持久化 live-provider receipt，因此服務輸出最多為 `conditional`／`qualified`；`ordinary` 保留給 receipt-aware provider adapter 的同 run server-owned binding。Finalization 只表達 `safe_to_draft`，不授權呈現答案；只有 `validate_legal_answer` 的 `validated`／`qualified` 結果可展示。
+- bounded counter-authority candidate discovery（最多 4 個 lexical queries、最多 5 件新官方全文回查）與官方驗證結果；`not_found_in_scope` 不表示全球不存在反面見解。
+- provider-neutral applicability resolver：以 server-owned metadata 表達特別法／普通法、
+  上位法／下位法及新舊法時點關係；解析與驗證需獨立的 server-owned
+  `server_source_ids` catalog binding，無法唯一確認時 fail closed。
+- authority／judgment-lineage contracts：保存法院層級、程序姿態、上訴／審查鏈與
+  bounded negative-treatment provider 結果，不執行 semantic opposition classification。
+- public-law contracts 與 provider SDK／adapter 介面：涵蓋行政規則、行政解釋、訴願、
+  立法資料、程序／救濟階段及 server metadata binding，資料由部署者自備。
 
-- 新增單一 `alr-tw.legal-analysis/v1` 的 `LegalAnalysisEnvelope`；
-- `analyses` 可同時承載六個不可重複的分析分支：
-  - `civil_substantive`（民法）；
-  - `civil_procedure`（民事程序）；
-  - `criminal_substantive`（刑法）；
-  - `criminal_procedure`（刑事程序）；
-  - `administrative`（行政法）；
-  - `constitutional_review`（憲法審查）；
-- 行政法分支內以 `legality`／`remedy` 分軌表達合法性與救濟；
-- 民法分支提供 claims、elements、defenses、逐要件舉證責任與法律效果
-  分類；
-- 各分支支援 `complete` 與 `issue_limited` 範圍，並檢查核心面向；
-- 確定的 `met`／`not_met` 判斷必須綁定由伺服器管理的 fact 或可採用的
-  evidence，規範判斷必須綁定 normative source。
+## 變更
 
-## MCP 與能力協商
-
-- 使用單一 `validate_legal_analysis` MCP tool；
-- `get_legal_research_capabilities` 回傳統一 schema、tool 名稱及六個
-  supported profiles；
-- 移除預覽期的平行民法信封與獨立民法驗證工具。
-
-## 安全邊界
-
-- 分析提案固定為 `untrusted_client_proposal`；
-- source、evidence、fact、法律時點、authority 與 validity 仍由
-  伺服器管理的研究內容核定；
-- 受管理的 `ResearchService` 不接受呼叫端自我認證的 fact state；
-- `issue_limited`、未解決議題與反向權威資料涵蓋不足會明示
-  限制；
-- 分析驗證固定
-  `authorizes_final_answer=false`、`semantic_entailment_performed=false`。
+- `ready_for_draft` 僅代表研究流程已到可起草階段，不再代表研究充分或可直接回答。
+- 最終答案必須依 server-owned research sufficiency、Coverage v2 與 finalization gate 決定；必要證據不足時改以結構化拒答或條件式回答。
+- counter-authority 目前僅作 bounded lexical candidate discovery（最多 4 queries）加官方逐筆驗證（最多 5 件新全文），尚無 semantic opposition classifier，不授權實務一致或全球不存在反面見解的主張。
+- 舊版研究工具與 payload 維持 additive 相容；舊紀錄可讀回並由伺服器重新計算充分性。

@@ -2,7 +2,7 @@
 
 繁體中文 | [English](README.en.md)
 
-ALR-TW v0.7.1 是台灣法律研究安全 harness 的 agent-neutral public preview。外部 agent／LLM 可透過 MCP 建立研究 run、提出爭點與法源 locator；來源取得、研究義務、證據升格、答案驗證與清除則由 server 掌控。架構採台灣大陸法系角度：現行法規與法律時點優先，普通裁判依審級及段落角色處理，憲法法庭多數理由、協同意見與不同意見分離。
+ALR-TW v0.8.0 是台灣法律研究安全 harness 的 agent-neutral public preview。外部 agent／LLM 可透過 MCP 建立研究 run、提出爭點與法源 locator；來源取得、研究義務、證據升格、答案驗證與清除則由 server 掌控。架構採台灣大陸法系角度：現行法規與法律時點優先，普通裁判依審級及段落角色處理，憲法法庭多數理由、協同意見與不同意見分離。
 
 本專案已整合並在 `hybrid_verified` 模式使用 [TLR（Taiwan Legal RAG）](https://github.com/aa0101181514/tw-legal-rag)尋找普通裁判候選，再由 ALR-TW 回查司法院官方全文；TLR 結果本身不是正式引用證據。
 
@@ -10,9 +10,9 @@ ALR-TW v0.7.1 是台灣法律研究安全 harness 的 agent-neutral public previ
 
 本 repo 不包含 LLM，也不包含 agent 實作。規劃、工具選擇與自然語言推理由外部呼叫端提供；ALR-TW 只負責可稽核工具與確定性閘門。Repo 內的示範 ranking 參數僅供測試，不是 production ranking 設定。
 
-> v0.7.1 仍是 `0.x` public preview。答案必須由具資格的人員依官方原文、時點與個案事實複核。
+> v0.8.0 仍是 `0.x` public preview。答案必須由具資格的人員依官方原文、時點與個案事實複核。
 
-> 目前 `main` 工作樹與套件版本是 `0.7.1`；`v0.7.1` 是 public preview，
+> 目前 `main` 工作樹與套件版本是 `0.8.0`；`v0.8.0` 是 public preview，
 > 仍不代表完整 production 法律判斷能力。
 
 ## Agentic RAG 能力
@@ -30,15 +30,43 @@ User query
   -> validated | qualified | blocked
 ```
 
-v0.7.1 提供 query understanding、outbound/output privacy 分離、法規／裁判／
+v0.8.0 提供 query understanding、outbound/output privacy 分離、法規／裁判／
 憲法來源規劃、TLR 候選官方升格、partial source 保留、裁判角色分類、
 explicit claim bindings、deterministic grounding v2、短期 resumable run、
 agent-neutral interoperability 與 deterministic finalization。單一法律分析
 信封包含民法、民事程序、刑法、刑事程序、行政法與憲法審查六種可併用
 分支；行政法分支內再區分合法性與救濟軌。這不是
 semantic entailment（語義蘊含），也不取代專業法律判斷。
-公開版仍未實作系統性反方裁判搜尋，不會把未搜尋或 bounded scope 查無結果
-改寫成「不存在反面見解」。
+applicability resolver 依 server-owned provider metadata 結構化處理特別法／
+普通法、上位法／下位法及新舊法時點關係；無法唯一確認時 fail closed，
+不宣稱能從法條文字自行完成語義涵攝。authority／lineage contracts 保存
+法院層級、程序姿態、上訴／審查鏈與 bounded negative-treatment 結果；
+`not_found_in_scope` 不得升格為全球不存在或實務一致。public-law contracts
+與 provider SDK 介面涵蓋行政規則、行政解釋、訴願、立法資料、程序／救濟
+階段及 server metadata binding；資料 provider 由部署者自備，candidate 與
+evidence 仍分離。
+公開版目前以最多 4 個 bounded lexical candidate queries、最多 5 件新官方全文回查處理
+反方候選；尚無 semantic opposition classifier，不會把未搜尋或 bounded scope
+查無結果改寫成「不存在反面見解」或實務一致。
+
+`ready_for_draft` 只代表 workflow completion，不代表研究充分。server 會以
+`research_sufficiency`（`sufficient`、`qualified`、`insufficient`、
+`retry_required`）、`answer_mode`（`ordinary`、`conditional`、`refusal_only`）
+與 finalization contract 決定答案姿態。synthetic fixture 僅供 demo／契約測試，
+不能支撐法律答案；counter-authority 目前是 bounded lexical candidate discovery
+（最多 4 queries）加官方逐筆驗證（最多 5 件新全文），尚無 semantic opposition classifier。
+
+### Snapshot receipt 與內建 runtime 限制
+
+Provider-neutral snapshot receipt 是公開的 provider 契約與一致性檢查介面，
+不表示本套內建 provider 已簽發 receipt。v0.8.0 內建 `ResearchService` 尚未把
+live provider 的 snapshot generation receipt 注入或持久化；因此內建服務的
+`get_legal_research_finalization`／`get_legal_research_state` 輸出最多是
+`conditional`／`qualified`（通常帶 `SNAPSHOT_RECEIPT_MISSING_LEGACY`），不應宣稱
+`ordinary`。`ordinary` 僅保留給接入 receipt-aware provider adapter、並將同一
+run 的 server-owned receipts 綁定完成的部署。Finalization 只授權進入起草
+（`safe_to_draft`），不授權呈現答案；只有 `validate_legal_answer` 的
+`validated`／`qualified` 結果可展示。
 
 外部 agent 可以規劃研究與起草答案，但不能自行宣告來源為官方資料、把候選升格成證據，或繞過最終驗證。
 
@@ -54,13 +82,13 @@ semantic entailment（語義蘊含），也不取代專業法律判斷。
 ALR-TW 執行一次相同召回。列為範例不代表外部專案成為核心依賴、
 共同發布物或可信證據來源；各專案仍維持獨立程式碼、版本、設定與授權。
 
-## v0.7.1 的安全模型
+## v0.8.0 的安全模型
 
 ```text
 外部 agent 提問／起草
   -> server-owned research obligations
   -> official providers + optional TLR candidate recall
-  -> server-owned evidence snapshots
+  -> server-owned evidence (optional provider snapshot receipt)
   -> claim / role / time / privacy / citation validation
   -> validated | qualified | blocked
 ```
@@ -101,7 +129,7 @@ alr-tw doctor --live
 
 普通裁判不需要司法院 API token。啟用 live mode 後，搜尋詞與篩選條件會直接送到司法院裁判書查詢網站；不得以未公開案情、個人秘密或受保密義務保護的資料作為搜尋詞。也不要把 TLR API key 或真實查詢寫入 repo。
 
-## v0.7.1 MCP tools
+## v0.8.0 MCP tools
 
 | Tool | 用途 |
 |---|---|
@@ -110,6 +138,7 @@ alr-tw doctor --live
 | `submit_legal_research_plan` | 登錄 client-assisted 的 untrusted 爭點與 locator |
 | `continue_legal_research` | 以 idempotent `operation_id` 執行一個下一步 |
 | `get_legal_research_state` | 唯讀讀取 run 狀態 |
+| `get_legal_research_finalization` | 取得 server-owned 研究充分性、Coverage v2、snapshot receipt 與答案姿態 |
 | `lookup_legal_source` | 精確查詢法規、憲法字號、JID／正式裁判字號 |
 | `validate_legal_analysis` | 驗證單一信封內六種可併用分支、民法逐要件舉證責任、references 與 legal context |
 | `validate_legal_answer` | 只用該 run 的 server-owned evidence 驗證草稿 |
@@ -151,7 +180,7 @@ provider 時應綁 eligible evidence ID，caller 自提 fact status 會被阻擋
 
 精確查到來源不等於答案已驗證。Final answer 仍必須通過 `validate_legal_answer`。
 
-v0.7.1 的核心法律主張必須以 `claim_bindings` 綁定同一 run 的 evidence ID。只傳 `answer_text` 的舊 caller 會標示 `binding_mode=legacy_unbound`，未綁定核心主張不得進入 `validated`。驗證方法為 `deterministic_grounding_v2`，包含中文 2–4 gram、否定、例外、法條／數字 anchor 與角色規則；這不是 semantic entailment（語義蘊含）。
+v0.8.0 的核心法律主張必須以 `claim_bindings` 綁定同一 run 的 evidence ID。只傳 `answer_text` 的舊 caller 會標示 `binding_mode=legacy_unbound`，未綁定核心主張不得進入 `validated`。驗證方法為 `deterministic_grounding_v2`，包含中文 2–4 gram、否定、例外、法條／數字 anchor 與角色規則；這不是 semantic entailment（語義蘊含）。
 
 ## Claim Grounding 與 Trust Gate
 
@@ -197,8 +226,11 @@ alr-tw purge --all --confirm
 ```
 
 建議建立 run、按 `next_operation` 推進研究，只依 server-owned evidence
-起草並呼叫 `validate_legal_answer`。只有 final-answer `validated` 或規則
-允許的 `qualified` 才可呈現；`lookup_legal_source` 不能取代答案層級的驗證。
+起草前先呼叫 `get_legal_research_finalization` 讀取 Coverage v2、
+`research_sufficiency` 與 `answer_mode`，再呼叫 `validate_legal_answer`。
+finalization 只提供起草前姿態；仍須由 `validate_legal_answer` 回傳 final-answer
+`validated` 或 `qualified` 才可呈現，`refusal_only` 不得輸出草稿；
+`lookup_legal_source` 不能取代答案層級的驗證。
 
 ## 驗證
 
@@ -231,7 +263,7 @@ Choose data mode
   -> run alr-tw doctor --live
   -> retrieve candidate sources
   -> resolve official identifier and content
-  -> create server-owned evidence snapshot
+  -> create server-owned evidence (bind a receipt only when the adapter issues one)
   -> validate draft claims and citations
   -> present or fail closed
 ```
@@ -240,6 +272,12 @@ Choose data mode
 - 普通裁判：不使用司法院 API；直接解析裁判書搜尋頁取得 JID，再從官方全文頁下載內容。搜尋失敗、網站阻擋、解析失敗與查無資料不得混為同一狀態。
 - TLR：[TLR](https://github.com/aa0101181514/tw-legal-rag)只提高普通裁判 candidate recall；命中後仍須回司法院官方來源驗證。`mcp-taiwan-legal-db` 只是公開行為參考，不是 dependency，相關 provider、transport、parser 與 evidence pipeline 均為獨立實作。
 - 憲法材料：保留主文、理由、協同意見與不同意見的角色差異，個別意見不能冒充多數理由。
+
+v0.8.0 同時提供 provider-neutral applicability、authority／lineage、公法材料
+與 provider SDK contracts。這些介面只處理 server-owned metadata、來源角色、
+時點、程序及 bounded 關係，不從來源文字推導法律效果，也不執行 semantic
+opposition／entailment；部署者仍須自行提供資料 provider，並由 ALR-TW 驗證
+source／evidence binding。
 
 ## 重要文件
 
@@ -256,8 +294,7 @@ Choose data mode
 - [Error Codes](docs/ERROR_CODES.md)
 - [Threat Model](docs/THREAT_MODEL.md)
 - [Release Notes](docs/RELEASE_NOTES.md)
-- [v0.7.1 Domain Analysis Acceptance](docs/V071_DOMAIN_ANALYSIS_ACCEPTANCE.md)
-- [v0.7.1 Release Audit](docs/V071_RELEASE_AUDIT.md)
+- [Agentic Harness Acceptance](docs/AGENTIC_HARNESS_ACCEPTANCE.md)
 - [Changelog](CHANGELOG.md)
 
 ## 法律聲明

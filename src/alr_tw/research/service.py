@@ -10,6 +10,12 @@ import unicodedata
 from uuid import uuid4
 
 from alr_tw.contracts.legal_analysis import LegalAnalysisEnvelope
+from alr_tw.contracts.finalization import (
+    FinalizationBlocker,
+    FinalizationContract,
+    build_finalization_from_run,
+    build_structured_refusal,
+)
 from alr_tw.contracts.interop import (
     DiscoveryMode,
     RegisteredResearchPlan,
@@ -22,11 +28,14 @@ from alr_tw.contracts.research import (
     CoverageState,
     PrivacyStatus,
     ResearchDepth,
+    ResearchBlocker,
     ResearchObligation,
     ResearchObligationKind,
     ResearchObligationStatus,
     ResearchRun,
     ResearchState,
+    AnswerMode,
+    evaluate_research_sufficiency,
 )
 from alr_tw.contracts.sources import (
     EvidenceSectionType,
@@ -37,6 +46,7 @@ from alr_tw.contracts.sources import (
 )
 from alr_tw.storage.sqlite_store import SqliteStore
 from alr_tw.providers.synthetic import SyntheticLegalContextProvider
+from alr_tw.research.counter_authority import CounterAuthorityProgress
 from alr_tw.verification.legal_analysis import (
     validate_legal_analysis as run_legal_analysis_validation,
 )
@@ -119,6 +129,179 @@ def _coverage_qualification(run: ResearchRun) -> str:
     if not qualifications:
         qualifications.append("本次結論受限於已揭露的檢索與法源涵蓋範圍。")
     return "".join(qualifications)
+
+
+def _outcome_reason_codes(outcome: dict[str, Any]) -> tuple[list[str], list[str], list[str]]:
+    """Split an executor outcome into auditable coverage reason buckets."""
+
+    warnings = [str(value) for value in outcome.get("warnings", []) if value]
+    # Some executor warnings document a deliberate handoff rather than a
+    # degraded provider result.  Keep this allowlist narrow: unknown warning
+    # codes remain errors until explicitly classified by the provider contract.
+    informational_codes = {
+        "EXACT_JUDGMENT_IDENTIFIER_WILL_USE_OFFICIAL_PROVIDER",
+    }
+    metadata = outcome.get("metadata")
+    if (
+        isinstance(metadata, dict)
+        and metadata.get("status") == "not_found_in_scope"
+    ):
+        # A clean bounded miss is a successful scoped outcome.  It must not
+        # become a generic partial/error gap merely because the audit reason
+        # is present in the provider metadata.
+        informational_codes.add("COUNTER_AUTHORITY_NOT_FOUND_IN_SCOPE")
+    codes = [code for code in warnings if code.upper() not in informational_codes]
+    error_code = outcome.get("error_code")
+    if error_code:
+        codes.append(str(error_code))
+    for call in outcome.get("provider_calls", []):
+        if not isinstance(call, dict):
+            continue
+        call_error = call.get("error_code")
+        if call_error:
+            codes.append(str(call_error))
+
+    partial: list[str] = []
+    errors: list[str] = []
+    timeouts: list[str] = []
+    for raw_code in codes:
+        code = raw_code.upper()
+        if "TIMEOUT" in code or "TIMED_OUT" in code:
+            timeouts.append(raw_code)
+        elif code == "TLR_UNAVAILABLE":
+            # TLR is an optional recall enhancer.  Its outage is a bounded
+            # degradation; official recall/verification remains authoritative.
+            partial.append(raw_code)
+        elif any(
+            marker in code
+            for marker in (
+                "INCOMPLETE",
+                "NOT_IMPLEMENTED",
+                "REQUIRE_EXACT_LOOKUP",
+                "TRUNCATED",
+                "PARTIAL",
+                "MISSING",
+                "UNRESOLVED",
+                "DEGRADED",
+                "SYNTHETIC_MODE",
+                "UNSUPPORTED",
+                "CANDIDATE_ONLY",
+                "NOT_FOUND_IN_SCOPE",
+            )
+        ):
+            partial.append(raw_code)
+        elif raw_code:
+            errors.append(raw_code)
+    return sorted(set(partial)), sorted(set(errors)), sorted(set(timeouts))
+
+
+def _is_retryable_outcome_code(code: str) -> bool:
+    normalized = code.upper()
+    return any(
+        marker in normalized
+        for marker in (
+            "TIMEOUT",
+            "TIMED_OUT",
+            "UNAVAILABLE",
+            "TEMPORARY",
+            "RATE_LIMIT",
+            "RETRY",
+        )
+    )
+
+
+def _is_retryable_derived_code(code: str) -> bool:
+    normalized = code.upper()
+    return _is_retryable_outcome_code(normalized) or any(
+        marker in normalized for marker in ("INCOMPLETE", "DEGRADED")
+    )
+
+
+def _retryable_outcome_codes(outcome: dict[str, Any]) -> list[str]:
+    """Return only explicitly transient provider diagnostics."""
+
+    partial, errors, timeouts = _outcome_reason_codes(outcome)
+    return sorted(
+        {
+            code
+            for code in (*partial, *errors, *timeouts)
+            if _is_retryable_outcome_code(code)
+        }
+    )
+
+
+def _filter_optional_tlr_retry_codes(
+    outcome: dict[str, Any],
+    codes: list[str],
+    *,
+    recall_complete: bool = False,
+) -> list[str]:
+    """Do not block recall when optional TLR failed after official candidates.
+
+    TLR improves recall in hybrid mode but is not itself an authority.  Its
+    outage degrades the recall scope; a separate required-provider failure
+    remains retryable.  The provider is not re-run after its server-owned
+    hybrid-to-official downgrade, so it must not strand the obligation.
+    """
+
+    if outcome.get("obligation") != ResearchObligationKind.JUDGMENT_RECALL.value:
+        return codes
+    provider_error_codes = {
+        str(call.get("error_code"))
+        for call in outcome.get("provider_calls", [])
+        if isinstance(call, dict)
+        and call.get("status") == "error"
+        and call.get("error_code")
+    }
+    if recall_complete:
+        # A candidate from either recall provider is enough to continue to
+        # official exact verification.  Search-provider failures are then a
+        # bounded recall limitation, not a reason to strand this obligation.
+        return [code for code in codes if code not in provider_error_codes]
+    tlr_codes = {
+        code
+        for code in provider_error_codes
+        if code == "TLR_UNAVAILABLE"
+        or code.startswith("TLR_")
+    }
+    tlr_codes.add("TLR_UNAVAILABLE")
+    return [code for code in codes if code not in tlr_codes]
+
+
+def _nonblocking_recall_codes(
+    outcome: dict[str, Any],
+    *,
+    recall_complete: bool,
+) -> set[str]:
+    if (
+        not recall_complete
+        or outcome.get("obligation") != ResearchObligationKind.JUDGMENT_RECALL.value
+    ):
+        return set()
+    return {
+        str(call.get("error_code"))
+        for call in outcome.get("provider_calls", [])
+        if isinstance(call, dict)
+        and call.get("status") == "error"
+        and call.get("error_code")
+    }
+
+
+def _required_coverage_complete(run: ResearchRun) -> bool:
+    required_kinds = {
+        item.kind
+        for item in run.obligations
+        if item.required and item.kind is not ResearchObligationKind.FINAL_ANSWER_VALIDATION
+    }
+    checks = {
+        ResearchObligationKind.LAW_RESEARCH: run.coverage.law_checked,
+        ResearchObligationKind.JUDGMENT_RECALL: run.coverage.judgment_checked,
+        ResearchObligationKind.JUDGMENT_OFFICIAL_VERIFICATION: run.coverage.judgment_checked,
+        ResearchObligationKind.CONSTITUTIONAL_RESEARCH: run.coverage.constitutional_checked,
+        ResearchObligationKind.COUNTER_AUTHORITY: run.coverage.counter_authority_checked,
+        ResearchObligationKind.LEGAL_TIME_CONTEXT: run.coverage.time_context_checked,
+    }
+    return all(checks.get(kind, True) for kind in required_kinds)
 
 
 def _issue_coverage(
@@ -416,21 +599,270 @@ class ResearchService:
     def get_run(self, run_id: str) -> ResearchRun | None:
         return self.store.get_run(run_id)
 
-    def get_state(self, run_id: str) -> dict[str, Any]:
+    def _run_with_server_refs(self, run: ResearchRun) -> ResearchRun:
+        """Refresh source/evidence references strictly from this run's store."""
+
+        return run.model_copy(
+            update={
+                "source_ids": sorted(item.source_id for item in self.store.list_sources(run.run_id)),
+                "evidence_ids": sorted(item.evidence_id for item in self.store.list_evidence(run.run_id)),
+            }
+        )
+
+    def _run_with_eligible_refs(
+        self,
+        run: ResearchRun,
+        *,
+        now: datetime,
+    ) -> ResearchRun:
+        """Project currently eligible evidence for a finalization decision.
+
+        The persisted run retains every server-linked source/evidence ID for
+        audit and possible revalidation.  This ephemeral projection is the
+        only view used by sufficiency/finalization: a source must still be
+        ``EVIDENCE_ELIGIBLE`` and unexpired, and an evidence span must be
+        claim-support eligible and linked to one of those sources.
+        """
+
+        sources = self.store.list_sources(run.run_id)
+        evidence = self.store.list_evidence(run.run_id)
+        eligible_sources = {
+            item.source_id: item
+            for item in sources
+            if item.trust_status is TrustStatus.EVIDENCE_ELIGIBLE
+            and item.expires_at > now
+        }
+        eligible_evidence = [
+            item
+            for item in evidence
+            if item.eligible_for_claim_support
+            and item.source_id in eligible_sources
+        ]
+        dropped_evidence = set(run.evidence_ids) - {
+            item.evidence_id for item in eligible_evidence
+        }
+        dropped_sources = set(run.source_ids) - set(eligible_sources)
+        coverage = run.coverage
+        limitations = list(coverage.limitations)
+        if dropped_evidence or dropped_sources:
+            if "SERVER_EVIDENCE_STALE_OR_INELIGIBLE" not in limitations:
+                limitations.append("SERVER_EVIDENCE_STALE_OR_INELIGIBLE")
+            coverage = coverage.model_copy(update={"limitations": limitations})
+
+        blockers = list(run.blockers)
+        if run.evidence_ids and not eligible_evidence:
+            if not any(item.code == "SERVER_EVIDENCE_UNAVAILABLE" for item in blockers):
+                blockers.append(
+                    ResearchBlocker(
+                        code="SERVER_EVIDENCE_UNAVAILABLE",
+                        message=(
+                            "研究仍保留 server evidence 參照，但目前沒有同時具備 "
+                            "EVIDENCE_ELIGIBLE、未過期且正確連結的 evidence。"
+                        ),
+                    )
+                )
+        return run.model_copy(
+            update={
+                "source_ids": sorted(eligible_sources),
+                "evidence_ids": sorted(item.evidence_id for item in eligible_evidence),
+                "coverage": coverage,
+                "blockers": blockers,
+            }
+        )
+
+    def _assessed_finalization_runs(
+        self,
+        run: ResearchRun,
+        *,
+        now: datetime,
+    ) -> tuple[ResearchRun, ResearchRun]:
+        """Return (full server run, eligible assessed projection)."""
+
+        full_run = self._run_with_server_refs(run)
+        eligible_run = self._run_with_eligible_refs(full_run, now=now)
+        assessed = self._refresh_sufficiency(eligible_run)
+        return full_run, assessed
+
+    @staticmethod
+    def _finalization_summary(contract: FinalizationContract) -> dict[str, Any]:
+        """Compact get_state view; full contract is available through its tool."""
+
+        return {
+            "schema_version": contract.schema_version,
+            "workflow_complete": contract.workflow_complete,
+            "research_sufficiency": contract.research_sufficiency.value,
+            "answer_mode": contract.answer_mode.value,
+            "required_qualification": list(contract.required_qualification),
+            "blocker_codes": [item.code for item in contract.blockers],
+            "pending_support": list(contract.pending_support),
+            "pending_lookups": list(contract.pending_lookups),
+            "snapshot_consistency": (
+                contract.snapshot_consistency.status.value
+                if contract.snapshot_consistency is not None
+                else "unknown"
+            ),
+        }
+
+    @staticmethod
+    def _refusal_contract(
+        contract: FinalizationContract,
+        *,
+        extra_blocker: FinalizationBlocker | None = None,
+    ) -> FinalizationContract:
+        """Create a validated refusal envelope without trusting loose dicts.
+
+        ``BaseModel.model_copy(update=...)`` deliberately skips validation in
+        Pydantic.  Refusal paths therefore rebuild through ``model_validate``
+        so every blocker is a server-owned ``FinalizationBlocker`` rather than
+        an untyped caller-shaped mapping.
+        """
+
+        payload = contract.model_dump(mode="python")
+        blockers = [
+            item.model_dump(mode="python")
+            for item in contract.blockers
+        ]
+        if extra_blocker is not None and not any(
+            item.get("code") == extra_blocker.code for item in blockers
+        ):
+            blockers.append(extra_blocker.model_dump(mode="python"))
+        payload.update(
+            {
+                "answer_mode": AnswerMode.REFUSAL_ONLY,
+                "answer_draft": None,
+                "blockers": blockers,
+                "retryable": contract.retryable
+                or (extra_blocker.retryable if extra_blocker is not None else False),
+            }
+        )
+        return FinalizationContract.model_validate(payload)
+
+    @staticmethod
+    def _terminal_refusal(
+        run: ResearchRun,
+        contract: FinalizationContract,
+    ) -> bool:
+        return (
+            not contract.retryable
+            and run.state
+            in {
+                ResearchState.READY_FOR_DRAFT,
+                ResearchState.VALIDATING,
+                ResearchState.BLOCKED,
+            }
+        )
+
+    def _persist_refusal_decision(
+        self,
+        run: ResearchRun,
+        contract: FinalizationContract,
+        *,
+        timestamp: datetime,
+    ) -> ResearchRun:
+        """Persist a fail-closed answer decision using legal state transitions.
+
+        A final answer attempt must not silently mutate a still-running
+        research workflow.  Only a non-retryable refusal at
+        ``READY_FOR_DRAFT`` (or an already validating/blocked run) is terminal;
+        pending/retryable runs remain resumable and keep the final-answer
+        obligation pending.  Every branch still saves the server-owned run so
+        operation replay and state inspection observe the same server facts.
+        """
+
+        terminal = self._terminal_refusal(run, contract)
+        persisted = run.model_copy(update={"updated_at": timestamp})
+        if terminal and persisted.state is ResearchState.READY_FOR_DRAFT:
+            persisted = transition_run(
+                persisted,
+                ResearchState.VALIDATING,
+                updated_at=timestamp,
+            )
+        if terminal and persisted.state is ResearchState.VALIDATING:
+            persisted = transition_run(
+                persisted,
+                ResearchState.BLOCKED,
+                updated_at=timestamp,
+            )
+        if terminal:
+            obligations = [
+                item.model_copy(update={"status": ResearchObligationStatus.COMPLETED})
+                if item.kind is ResearchObligationKind.FINAL_ANSWER_VALIDATION
+                else item
+                for item in persisted.obligations
+            ]
+            persisted = persisted.model_copy(update={"obligations": obligations})
+        self.store.save_run(persisted)
+        return persisted
+
+    def get_finalization_contract(
+        self,
+        run_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Return a server-built finalization contract for one research run."""
+
+        with self._lock:
+            run = self._required_run(run_id)
+            timestamp = now or datetime.now(UTC)
+            if run.expires_at <= timestamp:
+                raise ValueError("RESEARCH_RUN_EXPIRED")
+            full_run, assessed = self._assessed_finalization_runs(run, now=timestamp)
+            refreshed = full_run.model_copy(
+                update={
+                    "workflow_complete": assessed.workflow_complete,
+                    "research_sufficiency": assessed.research_sufficiency,
+                    "answer_mode": assessed.answer_mode,
+                }
+            )
+            if refreshed != run:
+                self.store.save_run(refreshed)
+            contract = build_finalization_from_run(assessed, now=timestamp)
+            return contract.model_dump(mode="json")
+
+    def get_state(
+        self,
+        run_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
         run = self._required_run(run_id)
-        registered_plan = run.registered_plan
+        # Optional clock injection keeps state projections deterministic for
+        # expiry-bound tests and provider adapters without weakening the
+        # normal wall-clock freshness gate.
+        timestamp = now or datetime.now(UTC)
+        full_run, assessed = self._assessed_finalization_runs(run, now=timestamp)
+        registered_plan = full_run.registered_plan
+        assessment = evaluate_research_sufficiency(assessed)
+        assessed_run = full_run.model_copy(
+            update={
+                "workflow_complete": assessment.workflow_complete,
+                "research_sufficiency": assessment.research_sufficiency,
+                "answer_mode": assessment.answer_mode,
+            }
+        )
+        contract = build_finalization_from_run(assessed, now=timestamp)
         return {
             "schema_version": "alr-tw.research-state/v1",
-            "run": run.model_dump(mode="json"),
+            "run": assessed_run.model_dump(mode="json"),
             "source_count": len(self.store.list_sources(run_id)),
             "evidence_count": len(self.store.list_evidence(run_id)),
-            "ready_for_draft": run.state == ResearchState.READY_FOR_DRAFT,
+            "ready_for_draft": full_run.state == ResearchState.READY_FOR_DRAFT,
+            "workflow_complete": assessment.workflow_complete,
+            "research_sufficiency": assessment.research_sufficiency.value,
+            # This is the final answer posture after snapshot/counter/evidence
+            # gates.  Keep the pure sufficiency result separate so clients do
+            # not see contradictory ``ordinary``/``conditional`` values.
+            "answer_mode": contract.answer_mode.value,
+            "research_answer_mode": assessment.answer_mode.value,
+            "sufficiency_reasons": assessment.reason_codes,
+            "finalization": self._finalization_summary(contract),
             "awaiting_external_plan": (
-                run.responsibility.discovery_mode is DiscoveryMode.CLIENT_ASSISTED
+                full_run.responsibility.discovery_mode is DiscoveryMode.CLIENT_ASSISTED
                 and registered_plan is None
             ),
             "interoperability": {
-                "responsibility": run.responsibility.model_dump(mode="json"),
+                "responsibility": full_run.responsibility.model_dump(mode="json"),
                 "registered_plan": (
                     {
                         "plan_id": registered_plan.proposal.plan_id,
@@ -559,6 +991,7 @@ class ResearchService:
                 "evidence_ids": sorted(item.evidence_id for item in self.store.list_evidence(run_id)),
             }
         )
+        run = self._refresh_sufficiency(run)
         self.store.save_run(run)
         return result
 
@@ -603,16 +1036,112 @@ class ResearchService:
             obligation = pending[0]
             if run.state == ResearchState.PLANNING:
                 run = transition_run(run, ResearchState.RESEARCHING, updated_at=timestamp)
+            was_semantic_recall_degraded = run.semantic_recall_degraded
+            previous_limitations = set(run.coverage.limitations)
             outcome = self.executor.execute(run, obligation)
             run_updates = outcome.pop("_run_updates", {})
             if not isinstance(run_updates, dict):
                 raise TypeError("executor _run_updates must be a dictionary")
             if run_updates:
                 run = run.model_copy(update=run_updates)
-            completed = obligation.model_copy(
-                update={"status": ResearchObligationStatus.COMPLETED}
+            recall_complete = (
+                obligation.kind is ResearchObligationKind.JUDGMENT_RECALL
+                and not run.judgment_recall_incomplete
             )
-            obligations = [completed if item.kind == obligation.kind else item for item in run.obligations]
+            demoted_recall_codes = _nonblocking_recall_codes(
+                outcome,
+                recall_complete=recall_complete,
+            )
+            retryable_codes = _retryable_outcome_codes(outcome)
+            retryable_codes = _filter_optional_tlr_retry_codes(
+                outcome,
+                retryable_codes,
+                recall_complete=recall_complete,
+            )
+            derived_limitations = {
+                code
+                for code in set(run.coverage.limitations) - previous_limitations
+                if _is_retryable_derived_code(code)
+            }
+            if retryable_codes:
+                retryable_codes = sorted(set(retryable_codes) | derived_limitations)
+            # Provider updates may set a derived degradation flag alongside a
+            # transient error.  Track it only when this obligation introduced
+            # it, so a successful retry cannot erase an unrelated limitation.
+            if (
+                retryable_codes
+                and not was_semantic_recall_degraded
+                and any(
+                    str(value).upper() == "SEMANTIC_RECALL_DEGRADED"
+                    for value in outcome.get("warnings", [])
+                )
+            ):
+                retryable_codes = sorted(
+                    set(retryable_codes) | {"SEMANTIC_RECALL_DEGRADED"}
+                )
+            previous_retry_codes = set(obligation.retryable_reason_codes)
+            counter_progress_payload: dict[str, Any] | None = None
+            counter_diagnostic_codes: list[str] = []
+            if obligation.kind is ResearchObligationKind.COUNTER_AUTHORITY:
+                metadata = outcome.get("metadata")
+                if isinstance(metadata, dict):
+                    raw_progress = metadata.get("progress")
+                    if isinstance(raw_progress, dict):
+                        counter_progress_payload = CounterAuthorityProgress.model_validate(
+                            raw_progress
+                        ).model_dump(mode="json")
+                    raw_diagnostics = metadata.get("reason_codes", [])
+                    if isinstance(raw_diagnostics, list):
+                        counter_diagnostic_codes = sorted(
+                            {str(code) for code in raw_diagnostics if code}
+                        )
+                if counter_progress_payload is None:
+                    counter_progress_payload = obligation.counter_authority_progress
+            if retryable_codes:
+                obligation_updates: dict[str, Any] = {
+                    "status": ResearchObligationStatus.PENDING,
+                    "reason": "retryable provider outcome; retry with a new operation_id",
+                    "blocker_code": retryable_codes[0],
+                    "retryable_reason_codes": retryable_codes,
+                }
+                if obligation.kind is ResearchObligationKind.COUNTER_AUTHORITY:
+                    obligation_updates.update(
+                        {
+                            "counter_authority_progress": counter_progress_payload,
+                            "counter_authority_diagnostic_codes": counter_diagnostic_codes,
+                        }
+                    )
+                updated_obligation = obligation.model_copy(
+                    update=obligation_updates,
+                )
+            else:
+                obligation_updates = {
+                    "status": ResearchObligationStatus.COMPLETED,
+                    "reason": "",
+                    "blocker_code": None,
+                    "retryable_reason_codes": [],
+                }
+                if obligation.kind is ResearchObligationKind.COUNTER_AUTHORITY:
+                    # Keep the full progress in the completed operation result
+                    # for audit, but never let a later operation resume a
+                    # terminal-clean/non-retryable obligation.
+                    obligation_updates.update(
+                        {
+                            "counter_authority_progress": None,
+                            "counter_authority_diagnostic_codes": [],
+                        }
+                    )
+                updated_obligation = obligation.model_copy(
+                    update=obligation_updates,
+                )
+            # These fields are server-owned diagnostics in the persisted
+            # operation result; an executor cannot self-declare retryability.
+            outcome["retryable"] = bool(retryable_codes)
+            outcome["retry_reason_codes"] = retryable_codes
+            obligations = [
+                updated_obligation if item.kind == obligation.kind else item
+                for item in run.obligations
+            ]
             sources = self.store.list_sources(run_id)
             evidence = self.store.list_evidence(run_id)
             run = run.model_copy(
@@ -632,15 +1161,142 @@ class ResearchService:
             if not remaining:
                 run = transition_run(run, ResearchState.VERIFYING, updated_at=timestamp)
                 run = transition_run(run, ResearchState.READY_FOR_DRAFT, updated_at=timestamp)
-            elif obligation.kind in {
+            elif not retryable_codes and obligation.kind in {
                 ResearchObligationKind.JUDGMENT_OFFICIAL_VERIFICATION,
                 ResearchObligationKind.EVIDENCE_SUFFICIENCY,
             } and run.state == ResearchState.RESEARCHING:
                 run = transition_run(run, ResearchState.VERIFYING, updated_at=timestamp)
+            run = self._apply_outcome_coverage(
+                run,
+                outcome,
+                clear_codes=(
+                    previous_retry_codes
+                    | (
+                        set(obligation.counter_authority_diagnostic_codes)
+                        if obligation.kind is ResearchObligationKind.COUNTER_AUTHORITY
+                        else set()
+                    )
+                ),
+                demote_codes=demoted_recall_codes,
+            )
+            if (
+                not retryable_codes
+                and "SEMANTIC_RECALL_DEGRADED" in previous_retry_codes
+            ):
+                restore_updates: dict[str, Any] = {"semantic_recall_degraded": False}
+                if (
+                    run.requested_mode is DataMode.HYBRID_VERIFIED
+                    and run.privacy_status
+                    in {
+                        PrivacyStatus.SAFE,
+                        PrivacyStatus.REDACTED_SAFE,
+                    }
+                ):
+                    restore_updates["effective_mode"] = run.requested_mode
+                run = run.model_copy(update=restore_updates)
+            run = self._refresh_sufficiency(run)
             self.store.save_run(run)
             result = self._result(run, outcome, replayed=False)
             self.store.complete_operation(run_id, operation_id, result)
             return result
+
+    @staticmethod
+    def _apply_outcome_coverage(
+        run: ResearchRun,
+        outcome: dict[str, Any],
+        *,
+        clear_codes: set[str] | frozenset[str] = frozenset(),
+        demote_codes: set[str] | frozenset[str] = frozenset(),
+    ) -> ResearchRun:
+        """Merge executor diagnostics into the server-owned coverage receipt."""
+
+        partial, errors, timeouts = _outcome_reason_codes(outcome)
+        demoted = set(demote_codes)
+        partial = sorted(set(partial).union(demoted))
+        errors = sorted(set(errors) - demoted)
+        timeouts = sorted(set(timeouts) - demoted)
+        coverage = run.coverage
+        cleared = set(clear_codes)
+        selected = set(coverage.selected_provider_scope)
+        successful = set(coverage.successful_provider_scope)
+        for call in outcome.get("provider_calls", []):
+            if not isinstance(call, dict):
+                continue
+            provider_id = call.get("provider_id")
+            if not provider_id:
+                continue
+            provider_id = str(provider_id)
+            selected.add(provider_id)
+            if call.get("status") in {"found", "not_found", "partial"}:
+                successful.add(provider_id)
+        updates = {
+            "limitations": sorted(set(coverage.limitations) - cleared),
+            "partial_reason_codes": sorted(
+                (set(coverage.partial_reason_codes) - cleared).union(partial)
+            ),
+            "error_reason_codes": sorted(
+                (set(coverage.error_reason_codes) - cleared).union(errors)
+            ),
+            "timeout_reason_codes": sorted(
+                (set(coverage.timeout_reason_codes) - cleared).union(timeouts)
+            ),
+            "selected_provider_scope": sorted(selected),
+            "successful_provider_scope": sorted(successful),
+        }
+        return run.model_copy(update={"coverage": coverage.model_copy(update=updates)})
+
+    @staticmethod
+    def _refresh_sufficiency(run: ResearchRun) -> ResearchRun:
+        """Recompute server-owned status fields after every research step."""
+
+        workflow_complete = evaluate_research_sufficiency(run).workflow_complete
+        coverage = run.coverage
+        coverage_complete = (
+            workflow_complete
+            and run.evidence_ids
+            and _required_coverage_complete(run)
+            and not coverage.limitations
+            and not coverage.partial_reason_codes
+            and not coverage.error_reason_codes
+            and not coverage.timeout_reason_codes
+            and not run.semantic_recall_degraded
+            and not run.judgment_recall_incomplete
+        )
+        if coverage.coverage_complete != bool(coverage_complete):
+            coverage = coverage.model_copy(
+                update={"coverage_complete": bool(coverage_complete)}
+            )
+        absence_claim_allowed = bool(
+            coverage.coverage_complete
+            and coverage.counter_authority_checked
+            and coverage.bounded_query_scope
+            and coverage.bounded_query_scope.strip()
+            and bool(coverage.selected_provider_scope)
+            and set(coverage.selected_provider_scope).issubset(
+                set(coverage.successful_provider_scope)
+            )
+            and not coverage.limitations
+            and not coverage.partial_reason_codes
+            and not coverage.error_reason_codes
+            and not coverage.timeout_reason_codes
+        )
+        if coverage.absence_claim_allowed != absence_claim_allowed:
+            coverage = coverage.model_copy(
+                update={"absence_claim_allowed": absence_claim_allowed}
+            )
+        if coverage != run.coverage:
+            # Re-run the receipt validator after deriving the bounded absence
+            # capability; model_copy itself intentionally skips validation.
+            coverage = CoverageState.model_validate(coverage.model_dump(mode="python"))
+            run = run.model_copy(update={"coverage": coverage})
+        assessment = evaluate_research_sufficiency(run)
+        return run.model_copy(
+            update={
+                "workflow_complete": assessment.workflow_complete,
+                "research_sufficiency": assessment.research_sufficiency,
+                "answer_mode": assessment.answer_mode,
+            }
+        )
 
     def validate_legal_analysis(
         self,
@@ -711,14 +1367,15 @@ class ResearchService:
             timestamp = now or datetime.now(UTC)
             if run.expires_at <= timestamp:
                 raise ValueError("RESEARCH_RUN_EXPIRED")
-            if run.state != ResearchState.READY_FOR_DRAFT:
-                raise ValueError("RESEARCH_OBLIGATION_PENDING")
-            bindings = [
-                item if isinstance(item, ClaimBinding) else ClaimBinding.model_validate(item)
-                for item in (claim_bindings or [])
-            ]
-            claims = _claims_for_validation(answer_text, bindings)
-            answer_privacy = screen_answer_output(answer_text)
+            full_run, assessed = self._assessed_finalization_runs(run, now=timestamp)
+            run = full_run.model_copy(
+                update={
+                    "workflow_complete": assessed.workflow_complete,
+                    "research_sufficiency": assessed.research_sufficiency,
+                    "answer_mode": assessed.answer_mode,
+                }
+            )
+            finalization = build_finalization_from_run(assessed, now=timestamp)
             claim = self.store.record_operation(
                 run_id,
                 operation_id,
@@ -726,6 +1383,90 @@ class ResearchService:
             )
             if not claim.created:
                 return claim.result
+            if finalization.answer_mode.value == "refusal_only":
+                finalization = self._refusal_contract(finalization)
+                terminal_refusal = self._terminal_refusal(run, finalization)
+                persisted = self._persist_refusal_decision(
+                    run,
+                    finalization,
+                    timestamp=timestamp,
+                )
+                refusal = build_structured_refusal(finalization)
+                result = {
+                    "schema_version": "alr-tw.answer-validation/v4",
+                    "run_id": run_id,
+                    "decision": ResearchState.BLOCKED.value,
+                    "decision_code": "ANSWER_REFUSAL_ONLY",
+                    "safe_to_present": False,
+                    "answer_text": None,
+                    "required_qualification": finalization.required_qualification,
+                    "structured_refusal": refusal.model_dump(mode="json"),
+                    "claim_support": [],
+                    "semantic_summary": None,
+                    "verification_method": "finalization_gate",
+                    "semantic_entailment_performed": False,
+                    "binding_mode": "not_executed",
+                    "issue_coverage": None,
+                    "privacy": None,
+                    "coverage_summary": persisted.coverage.model_dump(mode="json"),
+                    "blockers": [item.code for item in finalization.blockers],
+                    "effective_mode": run.effective_mode.value,
+                    "citations": [],
+                    "finalization": finalization.model_dump(mode="json"),
+                }
+                self.store.complete_operation(run_id, operation_id, result)
+                if terminal_refusal and persisted.ephemeral:
+                    self.store.purge_run(run_id)
+                    result["storage_purged"] = True
+                return result
+            if run.state != ResearchState.READY_FOR_DRAFT:
+                finalization = self._refusal_contract(
+                    finalization,
+                    extra_blocker=FinalizationBlocker(
+                        code="RESEARCH_OBLIGATION_PENDING",
+                        message="研究流程尚未到可驗證階段。",
+                        retryable=True,
+                    ),
+                )
+                terminal_refusal = self._terminal_refusal(run, finalization)
+                persisted = self._persist_refusal_decision(
+                    run,
+                    finalization,
+                    timestamp=timestamp,
+                )
+                result = {
+                    "schema_version": "alr-tw.answer-validation/v4",
+                    "run_id": run_id,
+                    "decision": ResearchState.BLOCKED.value,
+                    "decision_code": "ANSWER_RESEARCH_STATE_NOT_READY",
+                    "safe_to_present": False,
+                    "answer_text": None,
+                    "required_qualification": finalization.required_qualification,
+                    "structured_refusal": build_structured_refusal(finalization).model_dump(
+                        mode="json"
+                    ),
+                    "coverage_summary": persisted.coverage.model_dump(mode="json"),
+                    "blockers": [item.code for item in finalization.blockers],
+                    "citations": [],
+                    "effective_mode": persisted.effective_mode.value,
+                    "verification_method": "finalization_gate",
+                    "semantic_entailment_performed": False,
+                    "binding_mode": "not_executed",
+                    "issue_coverage": None,
+                    "privacy": None,
+                    "finalization": finalization.model_dump(mode="json"),
+                }
+                self.store.complete_operation(run_id, operation_id, result)
+                if terminal_refusal and persisted.ephemeral:
+                    self.store.purge_run(run_id)
+                    result["storage_purged"] = True
+                return result
+            bindings = [
+                item if isinstance(item, ClaimBinding) else ClaimBinding.model_validate(item)
+                for item in (claim_bindings or [])
+            ]
+            claims = _claims_for_validation(answer_text, bindings)
+            answer_privacy = screen_answer_output(answer_text)
             run = transition_run(run, ResearchState.VALIDATING, updated_at=timestamp)
             sources = {source.source_id: source for source in self.store.list_sources(run_id)}
             evidence = self.store.list_evidence(run_id)
@@ -805,20 +1546,39 @@ class ResearchService:
                 or run.judgment_recall_incomplete
                 or run.coverage.limitations
             )
-            if safe and (coverage_qualified or binding_mode == "legacy_unbound"):
+            finalization_qualified = finalization.answer_mode.value == "conditional"
+            if safe and (
+                coverage_qualified
+                or finalization_qualified
+                or binding_mode == "legacy_unbound"
+            ):
                 decision = ResearchState.QUALIFIED
-                qualification = (
-                    "未提供 claim_bindings；本結果僅為舊版相容驗證，"
-                    "不得將其視為核心法律主張已完成 span-level 驗證。"
-                    if binding_mode == "legacy_unbound"
-                    else _coverage_qualification(run)
-                )
+                if finalization_qualified and finalization.required_qualification:
+                    qualification = list(finalization.required_qualification)
+                    if binding_mode == "legacy_unbound":
+                        qualification.extend(
+                            item
+                            for item in (
+                                "claim_bindings",
+                                "未提供 claim_bindings；本結果僅為舊版相容驗證，"
+                                "不得將其視為核心法律主張已完成 span-level 驗證。",
+                            )
+                            if item not in qualification
+                        )
+                elif binding_mode == "legacy_unbound":
+                    qualification = [
+                        "claim_bindings",
+                        "未提供 claim_bindings；本結果僅為舊版相容驗證，"
+                        "不得將其視為核心法律主張已完成 span-level 驗證。",
+                    ]
+                else:
+                    qualification = [_coverage_qualification(run)]
             elif safe:
                 decision = ResearchState.VALIDATED
-                qualification = None
+                qualification = []
             else:
                 decision = ResearchState.BLOCKED
-                qualification = None
+                qualification = []
             run = transition_run(run, decision, updated_at=timestamp)
             obligations = [
                 item.model_copy(update={"status": ResearchObligationStatus.COMPLETED})
@@ -829,7 +1589,7 @@ class ResearchService:
             run = run.model_copy(update={"obligations": obligations})
             self.store.save_run(run)
             result = {
-                "schema_version": "alr-tw.answer-validation/v3",
+                "schema_version": "alr-tw.answer-validation/v4",
                 "run_id": run_id,
                 "decision": decision.value,
                 "decision_code": (
@@ -856,6 +1616,7 @@ class ResearchService:
                     "semantic_recall_degraded": run.semantic_recall_degraded,
                     "judgment_recall_incomplete": run.judgment_recall_incomplete,
                 },
+                "finalization": finalization.model_dump(mode="json"),
                 "blockers": sorted(set(reasons)) if decision == ResearchState.BLOCKED else [],
                 "effective_mode": run.effective_mode.value,
                 "citations": [

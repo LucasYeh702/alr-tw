@@ -1,12 +1,13 @@
 # Architecture Contract
 
-## v0.7.1 agent-neutral contract
+## v0.8.0 agent-neutral contract
 
 ALR-TW is an independently implemented, public-safe contract and validator
 runtime. It is agent-neutral and provider-neutral; no non-public deployment
 artifact, corpus, index, manifest, or operational state is a package dependency.
 
-The v0.7.1 contract adds an optional untrusted planning boundary:
+The v0.8.0 contract adds an optional untrusted planning boundary and a
+server-owned sufficiency/finalization boundary:
 
 ```text
 external issue / authority-locator proposal
@@ -15,6 +16,8 @@ external issue / authority-locator proposal
   -> server-owned evidence
   -> optional unified multi-branch analysis structural/trust validation
   -> claim + issue binding
+  -> research sufficiency / Coverage v2
+  -> server-owned finalization or structured refusal
   -> final validation
 ```
 
@@ -29,7 +32,7 @@ taxonomy, per-element burden records, temporal applicability, authority status,
 and legal validity. They do not duplicate citation support or privacy logic and
 do not perform semantic entailment.
 
-## v0.7.1 server-owned contract
+## v0.8.0 server-owned contract
 
 新整合應以 `alr_tw.contracts` 的 provider-neutral models、`ResearchService`、`ProviderObligationExecutor` 與 `SqliteStore` 為主。外部 agent 只能建立／推進 run 與提交 draft；不得提交 evidence span 讓 final validation 採信。
 
@@ -41,7 +44,18 @@ ResearchRun -> ordered obligations -> ProviderResult
 
 `ProviderCandidate` 永遠不是 `EvidenceSpan`。官方即時內容只有在 provider 完成 origin、schema、content 與 freshness 檢查並由 server 儲存後，才能成為 `evidence_eligible`。Source identifier、hash、role 與 timestamp 不可由 MCP caller 自我認證。
 
-早期的 `tw_legal_rag_mcp.contracts` 仍為 legacy synthetic contract，相容期間不得與 v0.7.1 server-owned records 混作同一 authority store。
+早期的 `tw_legal_rag_mcp.contracts` 仍為 legacy synthetic contract，相容期間不得與
+v0.8.0 server-owned records 混作同一 authority store。`ready_for_draft` 只代表
+workflow completion；`ResearchSufficiency`、Coverage v2 與
+`get_legal_research_finalization` 只決定起草前答案姿態。真正可呈現的
+`validated`／`qualified` 仍必須由 `validate_legal_answer` 回傳；synthetic records
+不得支撐法律答案。
+
+Snapshot receipt 是 provider-neutral 的公開契約與一致性檢查介面，不是內建
+provider 已簽發的保證。內建 `ResearchService` 尚未注入或持久化 live-provider
+generation receipt，因此內建服務輸出最多為 `conditional`／`qualified`；
+`ordinary` 保留給 receipt-aware provider adapter 完成同一 run 的 server-owned
+receipt binding。Finalization 只表達 `safe_to_draft`，不授權 answer presentation。
 
 本文件說明使用者接入自己的法規、裁判、憲法法庭資料或其他合規資料源時，建議保留的資料流介面、來源驗證邊界與 trust gate 規則。本 repo 只示範可替換介面，不提供部署環境專屬的資料、索引、快取、切片策略、調校後的 production ranking 權重或私有評測集。
 
@@ -81,6 +95,11 @@ source_manifest
 | `LegalAnalysisEnvelope` | `src/alr_tw/contracts/legal_analysis.py` | One untrusted envelope containing up to six composable civil, criminal, administrative, and constitutional branches. |
 | `LegalContextProvider` | `src/alr_tw/contracts/legal_context.py` | Provider-neutral temporal, authority, and legal-validity port. |
 | `validate_legal_analysis` | `src/alr_tw/verification/legal_analysis.py` | Fail-closed branch-scope, civil burden, core-dimension, reference, and legal-context validator; never substantive legal reasoning or final-answer authorization. |
+| `evaluate_research_sufficiency` | `src/alr_tw/contracts/research.py` | Server-owned deterministic workflow/coverage assessment; callers cannot self-declare sufficiency. |
+| `get_legal_research_finalization` | MCP server | Server-owned finalization, Coverage v2, optional provider snapshot receipts, answer mode, blockers, qualifications, and safe-next-action projection. It is pre-draft only; structured refusal is produced by the answer-validation refusal path. |
+| `ApplicabilityResolver` / `validate_applicability_resolution` | `src/alr_tw/contracts/applicability.py`, `src/alr_tw/verification/applicability.py` | Structural special/general, superior/inferior, and temporal successor resolution from server-owned metadata; fail-closed and never semantic entailment. |
+| `AuthorityLineageContract` / `validate_server_authority_lineage` | `src/alr_tw/contracts/authority_lineage.py`, `src/alr_tw/verification/authority_lineage.py` | Provider-reported court level, procedural posture, appeal/review lineage, and bounded negative-treatment; never a consensus or opposition classifier. |
+| `PublicLawProviderAdapter` / `GenericPublicLawProviderAdapter` | `src/alr_tw/contracts/public_law.py`, `src/alr_tw/providers/sdk.py` | Provider-neutral administrative-rule, interpretation, appeal, legislative-material, procedure, and remedy contracts with server metadata binding. |
 
 ## Trust Invariants
 

@@ -88,6 +88,7 @@ SERVER_OWNED_TOOLS = {
     "submit_legal_research_plan",
     "continue_legal_research",
     "get_legal_research_state",
+    "get_legal_research_finalization",
     "lookup_legal_source",
     "validate_legal_analysis",
     "validate_legal_answer",
@@ -388,7 +389,7 @@ def tool_definitions() -> list[dict[str, Any]]:
         },
         {
             "name": "get_claim_grounding_policy",
-            "description": "Return the current public claim-grounding contract used by ALR-TW v0.7.1.",
+            "description": "Return the current public claim-grounding contract used by ALR-TW v0.8.0.",
             "inputSchema": {
                 "type": "object",
                 "properties": {},
@@ -700,6 +701,19 @@ def _server_owned_tool_definitions() -> list[dict[str, Any]]:
         {
             "name": "get_legal_research_state",
             "description": "Read research state without network calls or TTL extension.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"run_id": {"type": "string"}},
+                "required": ["run_id"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "get_legal_research_finalization",
+            "description": (
+                "Return the server-owned finalization contract for one research run. "
+                "The contract contains no client-provided evidence or trust decisions."
+            ),
             "inputSchema": {
                 "type": "object",
                 "properties": {"run_id": {"type": "string"}},
@@ -1038,6 +1052,9 @@ def _call_server_owned_tool(
     if name == "get_legal_research_state":
         _reject_unexpected_keys(arguments, {"run_id"})
         return service.get_state(_required_string(arguments, "run_id"))
+    if name == "get_legal_research_finalization":
+        _reject_unexpected_keys(arguments, {"run_id"})
+        return service.get_finalization_contract(_required_string(arguments, "run_id"))
     if name == "lookup_legal_source":
         _reject_unexpected_keys(arguments, {"text", "run_id", "operation_id"})
         run_value = arguments.get("run_id")

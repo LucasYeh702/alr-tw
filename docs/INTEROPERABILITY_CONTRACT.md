@@ -1,6 +1,6 @@
 # ALR-TW Agent-Neutral Interoperability Contract
 
-本文件定義 v0.7.1 的前端無關接口。任何能呼叫 MCP tool 的法律
+本文件定義 v0.8.0 的前端無關接口。任何能呼叫 MCP tool 的法律
 agent、prompt skill、workflow engine 或人工控制程式都可以使用同一套契約；
 核心程式不依賴特定前端專案、模型或提示詞。
 
@@ -11,6 +11,13 @@ runtime. It contains public contracts, validators, synthetic fixtures and
 trust-boundary tests only; it does not ship production corpus, private paths,
 indexes, manifests, operational state, or private evaluation labels. A user
 supplies a conforming provider through these public contracts.
+
+The v0.8.0 public surface also includes structural applicability resolution,
+authority/judgment-lineage records, public-law material contracts, and a
+provider SDK. These are metadata-bound extension points: they describe explicit
+source relationships, court/procedure lineage, and administrative or legislative
+material roles, but they do not perform semantic entailment or opposition
+classification. A deployment must supply the provider and server-owned binding.
 
 ## Responsibility boundary
 
@@ -45,7 +52,7 @@ same run.
 
 ### `server_managed`
 
-This is the v0.7.1-compatible default. ALR-TW plans and executes its bounded
+This is the v0.8.0-compatible default. ALR-TW plans and executes its bounded
 official/TLR discovery obligations. No external research plan is required.
 
 ### `client_assisted`
@@ -196,6 +203,31 @@ eligibility gates still apply. A missing core issue returns
 `CORE_RESEARCH_ISSUE_UNBOUND`; an unknown issue reference returns
 `CLAIM_BINDING_ISSUE_NOT_IN_PLAN`.
 
+## Research sufficiency and finalization
+
+`ready_for_draft` is a workflow-stage marker only. The server recomputes
+`ResearchSufficiencyAssessment` from run-owned obligations, Coverage v2 and
+provider results; clients cannot provide a sufficiency or answer-mode claim.
+Use `get_legal_research_finalization` to obtain the server-owned
+`alr-tw.finalization/v1` contract, including `ordinary`, `conditional`, or
+`refusal_only` posture, blockers, required qualifications, snapshot receipts,
+and blocker/qualification fields. Structured refusal is returned by the answer
+validation refusal path, not by this read-only getter. Coverage is bounded to the recorded query/time
+scope and provider scope. A clean `not_found_in_scope` is not a global absence
+claim. Counter-authority is lexical candidate discovery plus official
+verification, not a semantic opposition classifier or a consensus proof.
+
+Snapshot receipts are provider-neutral contracts, not a claim that the bundled
+providers issue them. The built-in `ResearchService` does not currently inject
+or persist live-provider generation receipts, so built-in live finalization is
+at most `conditional`/`qualified`; `ordinary` requires a receipt-aware adapter
+with a server-owned receipt binding for the same run. Finalization is
+pre-draft (`safe_to_draft`) only; presentation still requires
+`validate_legal_answer`.
+
+Synthetic fixtures and legacy traces remain compatibility demonstrations only;
+they cannot support a legal answer.
+
 ## Recommended universal flow
 
 ```text
@@ -203,6 +235,7 @@ get_legal_research_capabilities
   -> research_legal_question(discovery_mode=...)
   -> [client_assisted only] submit_legal_research_plan
   -> continue_legal_research until ready_for_draft
+  -> get_legal_research_finalization
   -> [optional structured analysis] validate_legal_analysis
   -> external client drafts and binds claims to evidence + issues
   -> validate_legal_answer

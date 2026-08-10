@@ -125,7 +125,27 @@ def _save_eligible_law_evidence(
     )
     store.save_source(run_id, source)
     store.save_evidence(run_id, evidence)
+    _mark_law_coverage(store, run_id)
     return evidence
+
+
+def _mark_law_coverage(store: SqliteStore, run_id: str) -> None:
+    """Make the fixture pass research sufficiency before testing answer gates."""
+
+    run = store.get_run(run_id)
+    assert run is not None
+    store.save_run(
+        run.model_copy(
+            update={
+                "coverage": run.coverage.model_copy(
+                    update={
+                        "law_checked": True,
+                        "coverage_complete": True,
+                    }
+                )
+            }
+        )
+    )
 
 
 def test_validate_answer_blocks_and_removes_untrusted_answer_without_evidence(tmp_path: Path):
@@ -138,8 +158,10 @@ def test_validate_answer_blocks_and_removes_untrusted_answer_without_evidence(tm
     assert result["decision"] == "blocked"
     assert result["safe_to_present"] is False
     assert result["answer_text"] is None
-    assert result["binding_mode"] == "legacy_unbound"
-    assert "CLAIM_CITATION_BINDING_REQUIRED" in result["blockers"]
+    assert result["decision_code"] == "ANSWER_REFUSAL_ONLY"
+    assert result["binding_mode"] == "not_executed"
+    assert "RESEARCH_INSUFFICIENT" in result["blockers"]
+    assert result["structured_refusal"]["answer_mode"] == "refusal_only"
 
 
 def test_legacy_unbound_supporting_claim_is_qualified_not_validated(tmp_path: Path):
@@ -244,6 +266,7 @@ def test_validate_answer_uses_only_server_owned_eligible_evidence(tmp_path: Path
             }
         ),
     )
+    _mark_law_coverage(store, run.run_id)
 
     result = service.validate_answer(
         run.run_id,
@@ -260,10 +283,10 @@ def test_validate_answer_uses_only_server_owned_eligible_evidence(tmp_path: Path
         ],
     )
 
-    assert result["decision"] == "validated"
+    assert result["decision"] == "qualified"
     assert result["safe_to_present"] is True
     assert result["answer_text"] == text
-    assert result["schema_version"] == "alr-tw.answer-validation/v3"
+    assert result["schema_version"] == "alr-tw.answer-validation/v4"
     assert result["binding_mode"] == "structured"
     assert result["verification_method"] == "deterministic_grounding_v2"
     assert result["semantic_entailment_performed"] is False
@@ -307,6 +330,7 @@ def test_expired_server_evidence_cannot_validate_answer(tmp_path: Path):
     )
     store.save_source(run.run_id, source)
     store.save_evidence(run.run_id, evidence)
+    _mark_law_coverage(store, run.run_id)
 
     result = service.validate_answer(
         run.run_id,
@@ -324,9 +348,12 @@ def test_expired_server_evidence_cannot_validate_answer(tmp_path: Path):
     )
 
     assert result["decision"] == "blocked"
-    assert result["decision_code"] == "ANSWER_BLOCKED"
+    # v0.8 finalization rechecks eligibility before running claim validation;
+    # stale evidence therefore enters the structured refusal path directly.
+    assert result["decision_code"] == "ANSWER_REFUSAL_ONLY"
     assert result["answer_text"] is None
-    assert "SOURCE_STALE" in result["blockers"]
+    assert result["binding_mode"] == "not_executed"
+    assert "SERVER_EVIDENCE_UNAVAILABLE" in result["blockers"]
 
 
 def test_ephemeral_run_is_purged_after_validation_response(tmp_path: Path):
@@ -386,6 +413,7 @@ def test_final_validation_blocks_answer_containing_unmasked_pii(tmp_path: Path):
     )
     store.save_source(run.run_id, source)
     store.save_evidence(run.run_id, evidence)
+    _mark_law_coverage(store, run.run_id)
 
     result = service.validate_answer(
         run.run_id,

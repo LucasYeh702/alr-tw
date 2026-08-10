@@ -128,6 +128,7 @@ def test_official_judgment_exact_lookup_creates_sectioned_website_snapshot() -> 
     assert "id=TSTV%2C130%2C" in transport.calls[0][1]
     assert result.status == ProviderResultStatus.FOUND
     assert source is not None and source.trust_status == TrustStatus.EVIDENCE_ELIGIBLE
+    assert source.official_url is not None
     assert source.official_url.startswith(JUDGMENT_DATA_URL)
     assert source.metadata["retrieval"] == "official_website_html"
     assert evidence[0].section_type == EvidenceSectionType.DISPOSITION

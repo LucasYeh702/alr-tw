@@ -90,6 +90,20 @@ def _save_law_evidence(
     )
     store.save_source(run_id, source)
     store.save_evidence(run_id, evidence)
+    run = store.get_run(run_id)
+    assert run is not None
+    store.save_run(
+        run.model_copy(
+            update={
+                "coverage": run.coverage.model_copy(
+                    update={
+                        "law_checked": True,
+                        "coverage_complete": True,
+                    }
+                )
+            }
+        )
+    )
     return evidence
 
 
@@ -162,8 +176,9 @@ def test_core_plan_issue_requires_explicit_final_claim_binding(tmp_path: Path):
     service = ResearchService(store)
     run = service.create_run(
         "請分析本案法定義務",
-        mode=DataMode.SYNTHETIC,
+        mode=DataMode.OFFICIAL_ONLY,
         depth=ResearchDepth.QUICK,
+        include_counter_authority=False,
         discovery_mode=DiscoveryMode.CLIENT_ASSISTED,
         now=now,
     )
@@ -203,8 +218,9 @@ def test_core_plan_issue_can_validate_when_bound_to_server_evidence(tmp_path: Pa
     service = ResearchService(store)
     run = service.create_run(
         "請分析本案法定義務",
-        mode=DataMode.SYNTHETIC,
+        mode=DataMode.OFFICIAL_ONLY,
         depth=ResearchDepth.QUICK,
+        include_counter_authority=False,
         discovery_mode=DiscoveryMode.CLIENT_ASSISTED,
         now=now,
     )
@@ -234,5 +250,5 @@ def test_core_plan_issue_can_validate_when_bound_to_server_evidence(tmp_path: Pa
         ],
     )
 
-    assert result["decision"] == "validated"
+    assert result["decision"] == "qualified"
     assert result["issue_coverage"]["missing_core_issue_ids"] == []

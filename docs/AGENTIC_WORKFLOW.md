@@ -2,7 +2,7 @@
 
 This repository does not ship an LLM or agent implementation. The external client supplies planning and drafting; the server owns research state and trust decisions.
 
-## v0.7.1 agent-neutral client-assisted workflow
+## v0.8.0 agent-neutral client-assisted workflow
 
 1. 呼叫 `get_legal_research_capabilities`，不得假設 provider 或研究能力存在。
 2. 以 `discovery_mode=client_assisted` 建立 run。
@@ -14,23 +14,43 @@ This repository does not ship an LLM or agent implementation. The external clien
    `validate_legal_analysis`。Server 只核對結構、scope、normative source、
    fact／evidence references 與 legal context。
 7. 外部 client 以 server evidence 起草，並把 claim 綁定到 evidence ID 與 issue ID。
-8. `validate_legal_answer` 同時執行 evidence、role、time、privacy、claim 及 issue coverage gates。
+8. 呼叫 `get_legal_research_finalization` 讀取 server-owned Coverage v2、
+   `research_sufficiency`、`answer_mode`、snapshot receipts、blockers 與
+   qualifications；structured refusal 由拒答的答案驗證路徑產生。
+9. `validate_legal_answer` 同時執行 evidence、role、time、privacy、claim 及 issue coverage gates；
+   finalization 的 `refusal_only` 不得輸出草稿。
 
 `client_assisted` 不代表 client 擁有 verification。它只改變初始 locator
 來源；任何 analysis `validated` 也不代表實體涵攝或 final answer 已通過。
 兩者都不能改變 server-owned trust boundary。詳見
 [Interoperability Contract](INTEROPERABILITY_CONTRACT.md)。
 
-## v0.7.1 server-managed workflow
+v0.8.0 另提供 provider-neutral applicability、authority／judgment-lineage 與
+public-law contracts，以及可替換 provider SDK。它們只承載 server-owned
+metadata、來源角色、時點、程序及 bounded 關係；不能從來源文字推導法律效果，
+也不能把 `not_found_in_scope` 轉成全球不存在或實務一致。
+
+Provider-neutral snapshot receipts are an adapter contract. The bundled
+`ResearchService` does not yet issue or persist live-provider generation
+receipts, so built-in live runs remain at most `conditional`／`qualified`;
+`ordinary` requires a receipt-aware provider adapter bound to the same run.
+Finalization is pre-draft (`safe_to_draft`) only; presentation still requires
+`validate_legal_answer`.
+
+## v0.8.0 server-managed workflow
 
 1. `research_legal_question` 建立 run 與固定順序 obligations，不生成答案。
 2. Agent 重複呼叫 `continue_legal_research`；每次只執行一個 obligation，並使用唯一 `operation_id`。
 3. `get_legal_research_state` 唯讀觀察，不觸發 provider 或延長 TTL。
 4. `lookup_legal_source` 只做精確來源查詢；帶 `run_id` 時 server 才把官方 snapshot 連結到該 run。
-5. 非 final obligations 完成後，run 進入 `ready_for_draft`。
-6. Agent 起草並呼叫 `validate_legal_answer`；server 只使用 run-owned、fresh、eligible evidence。
-7. 只有 `validated`／`qualified` 可展示答案；`blocked` 必須丟棄草稿。
-8. `ephemeral` run 在 validation 回傳後同步 purge；其他 run 依 TTL 或明確 purge 清除。
+5. 非 final obligations 完成後，run 進入 `ready_for_draft`；這只代表 workflow completion，
+   不代表 research sufficiency。
+6. Agent 先讀 `get_legal_research_finalization`；server 以 sufficiency 與 answer mode
+   決定 ordinary、conditional 或 refusal-only 姿態。
+7. Agent 起草並呼叫 `validate_legal_answer`；server 只使用 run-owned、fresh、eligible evidence。
+8. Finalization 只提供起草前姿態；只有 `validate_legal_answer` 回傳的
+   `validated`／`qualified` 可展示；`blocked` 或 `refusal_only` 必須丟棄草稿並回傳結構化限制。
+9. `ephemeral` run 在 validation 回傳後同步 purge；其他 run 依 TTL 或明確 purge 清除。
 
 Agent 不能自行把 obligation 標完成、加入 evidence、改 source role、延長 TTL 或宣告 final decision。
 

@@ -1,6 +1,11 @@
 # Official Providers
 
-ALR-TW v0.7.1 以三個獨立 provider 取得台灣中央法規、普通法院裁判與憲法法庭資料。官方即時內容通過結構與一致性檢查後，會固定成短期 server-owned evidence snapshot（伺服器持有的證據快照）；呼叫端不能自行宣告某段文字為官方資料。
+ALR-TW v0.8.0 以三個獨立 provider 取得台灣中央法規、普通法院裁判與憲法法庭資料。官方即時內容通過結構、一致性與 freshness 檢查後，會固定成 server-owned evidence；呼叫端不能自行宣告某段文字為官方資料。Provider-neutral snapshot receipt 是可選的 provider 契約，並非內建 runtime 已簽發的保證；目前內建 `ResearchService` 尚未注入或持久化 live-provider receipt，因此服務 finalization 最多為 `conditional`／`qualified`，`ordinary` 保留給 receipt-aware provider adapter。
+
+v0.8.0 另公開行政規則、行政解釋、訴願與立法資料的 provider-neutral
+contracts／SDK，但不在本 repo 內附公法資料 provider、corpus 或 index。部署者
+可用 `PublicLawProviderAdapter` 接入自有來源；所有結果仍須由 server metadata
+binding 與既有 evidence／finalization gates 驗證。
 
 ## 法務部法規 Provider
 

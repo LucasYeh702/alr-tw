@@ -1,5 +1,7 @@
 # ALR-TW v0.6.1 Release Audit
 
+> Archived historical release record. It does not describe the current v0.8.0 capability surface.
+
 Audit date: 2026-07-22 (Asia/Taipei)
 
 Source commit under test: `605b51ab1da86423649a7178702c36ce7d1e8e68`

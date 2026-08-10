@@ -1,10 +1,10 @@
 # ALR-TW Trust Model
 
-## v0.7.1 evidence promotion
+## v0.8.0 evidence promotion
 
 Final validation 只讀取該 run 在 server-side SQLite 中已連結、未到期且 `trust_status=evidence_eligible` 的 evidence。MCP caller 即使提交看似完整的 official URL、hash 或 verified time，也只能視為 caller-attested metadata，不能升格為正式證據。
 
-官方 provider 取得的內容必須先形成 immutable snapshot，保存 official identifier、official URL、content hash、fetched/verified/expires timestamps 與 section role。TLR candidate、keyword-search hit、party argument、case fact、concurring opinion 與 dissenting opinion 都有獨立限制，不得因文字相似直接支持不同角色的 claim。
+官方 provider 取得的內容必須先形成 server-owned evidence record，保存 official identifier、official URL、content hash、fetched/verified/expires timestamps 與 section role。Provider-neutral snapshot receipt 可由 receipt-aware adapter 選擇性附加；內建 runtime 尚未簽發 live-provider receipt。TLR candidate、keyword-search hit、party argument、case fact、concurring opinion 與 dissenting opinion 都有獨立限制，不得因文字相似直接支持不同角色的 claim。
 
 Final decisions 是 `validated`、`qualified`、`blocked`。`qualified` 只代表已驗證 evidence 支持 draft、但有明示召回限制；它不是降低來源門檻。`blocked` 不得包含 answer body。
 
@@ -21,7 +21,7 @@ ALR-TW separates source discovery from final citation authority.
 | `synthetic` | Demo and test fixture | No |
 | `unknown` | Missing or unsupported source tier | No |
 
-Legacy Python contracts may expose metadata validation helpers, but the v0.7.1
+Legacy Python contracts may expose metadata validation helpers, but the v0.8.0
 MCP boundary does not trust caller-supplied metadata. Byte-level verification
 must happen in a server-owned provider or governed resolver.
 
@@ -70,3 +70,12 @@ ALR-TW refuses when there is no final citation, a rejected or unverifiable
 source, or low required coverage. It may return `human_review_required` only
 when final citation eligibility exists and the remaining blocker is unchecked
 claim support. Non-answer traces must keep `answer` as `null`.
+
+`ready_for_draft` is not an evidence or sufficiency decision. The server-owned
+research sufficiency evaluator and finalization contract determine whether the
+run may enter drafting (`safe_to_draft`) as ordinary, conditional, or refusal-only;
+finalization does not authorize presentation. The bundled live runtime remains
+at most conditional/qualified until a receipt-aware adapter binds a receipt.
+Counter-authority is bounded
+candidate discovery plus official verification; a scoped miss cannot establish
+global absence or consensus. Synthetic fixtures remain demo-only.

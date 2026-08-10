@@ -1,12 +1,17 @@
 # TLR Provider
 
-ALR-TW v0.7.1 以 clean-room adapter（淨室轉接器）接入 [TLR（Taiwan Legal RAG）公開專案](https://github.com/aa0101181514/tw-legal-rag)的 HTTP API。實作只依公開 OpenAPI 行為撰寫；未複製 TLR 或其他參考專案的程式碼。
+ALR-TW v0.8.0 以 clean-room adapter（淨室轉接器）接入 [TLR（Taiwan Legal RAG）公開專案](https://github.com/aa0101181514/tw-legal-rag)的 HTTP API。實作只依公開 OpenAPI 行為撰寫；未複製 TLR 或其他參考專案的程式碼。
 
 TLR 回傳的 `doc_id`、`citation_url`、正式字號與 rank 會被正規化為 typed candidate identity。Candidate 先排序、依可得的 canonical JID 去重，再由 ALR-TW 直接回查司法院官方全文；頁面識別碼不一致時以 `CANDIDATE_OFFICIAL_ID_MISMATCH` 阻擋。五段候選只有在官方頁明示相同五段 ID，或唯一提供前五段相符的六段 canonical JID 時，才能升格；TLR snippet 本身始終不可作 claim-support evidence。
 
 ## 角色與資料流
 
 TLR 是 retrieval-only（僅檢索）的高召回候選服務，不是法律答案生成器，也不是 ALR-TW 的最終權威來源。
+
+TLR 只負責外部 semantic candidate recall；ALR-TW 的 counter-authority
+coverage 只做 bounded lexical candidate discovery，官方逐筆回查與
+finalization 仍由 ALR-TW server-owned gate 掌控。TLR 的查無結果不可主張
+全球不存在反面見解，也不代表實務見解一致。
 
 ```text
 使用者查詢
@@ -15,9 +20,14 @@ TLR 是 retrieval-only（僅檢索）的高召回候選服務，不是法律答�
   -> TLR /v1/search
   -> external_semantic_recall 候選
   -> 司法院官方來源精確回查
-  -> server-owned evidence snapshot
+  -> server-owned evidence (optional provider snapshot receipt)
   -> final validation
 ```
+
+Provider-neutral snapshot receipt 是可選的 provider contract；只有 receipt-aware
+adapter 能為同一 run 提供並持久化 receipt 時才會綁定。內建 runtime 目前不簽發
+live-provider receipt，因此服務輸出最多為 `conditional`／`qualified`；`ordinary`
+僅保留給完成 server-owned receipt binding 的 adapter。
 
 只有 `ALR_TW_DATA_MODE=hybrid_verified` 會啟用外部語意召回。`official_only` 與 `synthetic` 不會將查詢傳給 TLR。
 

@@ -1,5 +1,7 @@
 # ALR-TW v0.7.0 Interoperability Acceptance
 
+> Archived historical acceptance record. It does not describe the current v0.8.0 capability surface.
+
 This is the release acceptance record for the v0.7.0 public preview.
 
 ALR-TW v0.7.0 is an agent-neutral Taiwan-law research verification runtime.
