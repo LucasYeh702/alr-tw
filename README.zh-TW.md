@@ -2,7 +2,7 @@
 
 繁體中文 | [English](README.en.md)
 
-ALR-TW v0.8.0 是台灣法律研究安全 harness 的 agent-neutral public preview。外部 agent／LLM 可透過 MCP 建立研究 run、提出爭點與法源 locator；來源取得、研究義務、證據升格、答案驗證與清除則由 server 掌控。架構採台灣大陸法系角度：現行法規與法律時點優先，普通裁判依審級及段落角色處理，憲法法庭多數理由、協同意見與不同意見分離。
+ALR-TW v0.9.0 是台灣法律研究安全 harness 的 agent-neutral public preview。外部 agent／LLM 可透過 MCP 建立研究 run、提出爭點與法源 locator；來源取得、研究義務、證據升格、答案驗證與清除則由 server 掌控。架構採台灣大陸法系角度：現行法規與法律時點優先，普通裁判依審級及段落角色處理，憲法法庭多數理由、協同意見與不同意見分離。
 
 本專案已整合並在 `hybrid_verified` 模式使用 [TLR（Taiwan Legal RAG）](https://github.com/aa0101181514/tw-legal-rag)尋找普通裁判候選，再由 ALR-TW 回查司法院官方全文；TLR 結果本身不是正式引用證據。
 
@@ -10,10 +10,9 @@ ALR-TW v0.8.0 是台灣法律研究安全 harness 的 agent-neutral public previ
 
 本 repo 不包含 LLM，也不包含 agent 實作。規劃、工具選擇與自然語言推理由外部呼叫端提供；ALR-TW 只負責可稽核工具與確定性閘門。Repo 內的示範 ranking 參數僅供測試，不是 production ranking 設定。
 
-> v0.8.0 仍是 `0.x` public preview。答案必須由具資格的人員依官方原文、時點與個案事實複核。
+> v0.9.0 仍是 public preview。答案必須由具資格的人員依官方原文、時點與個案事實複核。
 
-> 目前 `main` 工作樹與套件版本是 `0.8.0`；`v0.8.0` 是 public preview，
-> 仍不代表完整 production 法律判斷能力。
+> 目前 `main` 工作樹是 v0.9.0；仍不代表完整 production 法律判斷能力。
 
 ## Agentic RAG 能力
 
@@ -30,7 +29,7 @@ User query
   -> validated | qualified | blocked
 ```
 
-v0.8.0 提供 query understanding、outbound/output privacy 分離、法規／裁判／
+v0.9.0 提供 query understanding、outbound/output privacy 分離、法規／裁判／
 憲法來源規劃、TLR 候選官方升格、partial source 保留、裁判角色分類、
 explicit claim bindings、deterministic grounding v2、短期 resumable run、
 agent-neutral interoperability 與 deterministic finalization。單一法律分析
@@ -56,10 +55,17 @@ evidence 仍分離。
 不能支撐法律答案；counter-authority 目前是 bounded lexical candidate discovery
 （最多 4 queries）加官方逐筆驗證（最多 5 件新全文），尚無 semantic opposition classifier。
 
+目前的 v0.9.0 contracts 另提供 optional semantic verifier sidecar、
+provider conformance、receipt-aware adapter 與 deployer boundary validator：sidecar
+只能 shadow／advisory 回報，provider source／evidence 必須通過獨立 server binding
+與 snapshot consistency，部署者自備 corpus、模型、credentials 與 deployment
+parameters 不會進入公開套件。這些介面仍是 structural/trust validation，不是
+semantic entailment 或法律答案授權。
+
 ### Snapshot receipt 與內建 runtime 限制
 
 Provider-neutral snapshot receipt 是公開的 provider 契約與一致性檢查介面，
-不表示本套內建 provider 已簽發 receipt。v0.8.0 內建 `ResearchService` 尚未把
+不表示本套內建 provider 已簽發 receipt。v0.9.0 內建 `ResearchService` 尚未把
 live provider 的 snapshot generation receipt 注入或持久化；因此內建服務的
 `get_legal_research_finalization`／`get_legal_research_state` 輸出最多是
 `conditional`／`qualified`（通常帶 `SNAPSHOT_RECEIPT_MISSING_LEGACY`），不應宣稱
@@ -82,7 +88,7 @@ run 的 server-owned receipts 綁定完成的部署。Finalization 只授權進�
 ALR-TW 執行一次相同召回。列為範例不代表外部專案成為核心依賴、
 共同發布物或可信證據來源；各專案仍維持獨立程式碼、版本、設定與授權。
 
-## v0.8.0 的安全模型
+## v0.9.0 的安全模型
 
 ```text
 外部 agent 提問／起草
@@ -129,7 +135,7 @@ alr-tw doctor --live
 
 普通裁判不需要司法院 API token。啟用 live mode 後，搜尋詞與篩選條件會直接送到司法院裁判書查詢網站；不得以未公開案情、個人秘密或受保密義務保護的資料作為搜尋詞。也不要把 TLR API key 或真實查詢寫入 repo。
 
-## v0.8.0 MCP tools
+## v0.9.0 MCP tools
 
 | Tool | 用途 |
 |---|---|
@@ -180,7 +186,7 @@ provider 時應綁 eligible evidence ID，caller 自提 fact status 會被阻擋
 
 精確查到來源不等於答案已驗證。Final answer 仍必須通過 `validate_legal_answer`。
 
-v0.8.0 的核心法律主張必須以 `claim_bindings` 綁定同一 run 的 evidence ID。只傳 `answer_text` 的舊 caller 會標示 `binding_mode=legacy_unbound`，未綁定核心主張不得進入 `validated`。驗證方法為 `deterministic_grounding_v2`，包含中文 2–4 gram、否定、例外、法條／數字 anchor 與角色規則；這不是 semantic entailment（語義蘊含）。
+v0.9.0 的核心法律主張必須以 `claim_bindings` 綁定同一 run 的 evidence ID。只傳 `answer_text` 的舊 caller 會標示 `binding_mode=legacy_unbound`，未綁定核心主張不得進入 `validated`。驗證方法為 `deterministic_grounding_v2`，包含中文 2–4 gram、否定、例外、法條／數字 anchor 與角色規則；這不是 semantic entailment（語義蘊含）。
 
 ## Claim Grounding 與 Trust Gate
 
@@ -273,7 +279,7 @@ Choose data mode
 - TLR：[TLR](https://github.com/aa0101181514/tw-legal-rag)只提高普通裁判 candidate recall；命中後仍須回司法院官方來源驗證。`mcp-taiwan-legal-db` 只是公開行為參考，不是 dependency，相關 provider、transport、parser 與 evidence pipeline 均為獨立實作。
 - 憲法材料：保留主文、理由、協同意見與不同意見的角色差異，個別意見不能冒充多數理由。
 
-v0.8.0 同時提供 provider-neutral applicability、authority／lineage、公法材料
+v0.9.0 同時提供 provider-neutral applicability、authority／lineage、公法材料
 與 provider SDK contracts。這些介面只處理 server-owned metadata、來源角色、
 時點、程序及 bounded 關係，不從來源文字推導法律效果，也不執行 semantic
 opposition／entailment；部署者仍須自行提供資料 provider，並由 ALR-TW 驗證

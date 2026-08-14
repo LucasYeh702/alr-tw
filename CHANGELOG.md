@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.9.0 - 2026-08-14
+
+### Added
+
+- 裁判語境 attribution 與 disposition contracts：區分本院、原審、當事人及其他
+  發話者，並將上訴駁回、維持、廢棄發回、撤銷改判、部分准許與程序駁回分開保存；
+  無法唯一解析時維持 fail-closed。
+- `HistoricalLawQuery`、`HistoricalLawResolution` 與
+  `LegislativeHistoryProviderAdapter`：提供立法院／官方歷史法規 provider 的
+  bounded port，法條版本與立法資料分離，並要求明示法律時點及 server-owned
+  source／snapshot binding。
+- 既有 public-law SDK、applicability resolver 與 finalization gate 的銜接契約；
+  公開套件不附 endpoint、credentials、corpus 或 production deployment state。
+- `alr-tw.semantic-verifier-request/v1`、`alr-tw.semantic-verifier-result/v1` 與
+  `alr-tw.semantic-verifier-validation/v1`：提供 optional、advisory-only 的
+  semantic verifier plugin 邊界；plugin 不能建立 evidence、改變 source trust
+  或授權 finalization／答案。
+- 六個 `LegalAnalysisEnvelope` 分支的 additive domain fields：五個
+  issue-oriented 分支可表達 issue-level burden、defenses、branch procedural
+  posture 與 refusal constraints；民法分支保留 element-level schema，所有引用
+  仍由 server-owned validator 重新檢查。
+
+- provider conformance 與 receipt-aware adapter：統一檢查 official／candidate-only
+  provider 的 source、evidence、scope、retry、privacy 與 snapshot receipt binding；
+  沒有 server-owned receipt 時不得升格 ordinary。
+- optional semantic sidecar registration 與 deployer provider boundary contract：
+  sidecar 維持 shadow／advisory-only，部署者自備 corpus 與模型不進入公開套件，
+  且不得成為 evidence、trust 或 final-decision owner。
+- 新增公開發布用 repository-scoped secret-scan policy，將 synthetic redaction
+  fixture 的例外範圍限制在單一測試檔案。
+
+以下版本段落是歷史變更紀錄，不代表目前 v0.9.0 的能力或公開宣稱。
+
 ## 0.8.0 - 2026-08-08
 
 ### Added

@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import alr_tw
-
 from alr_tw.harness.execution_graph import StepKind, graph_as_dict
 from alr_tw.harness.orchestrator import run_agentic_demo
 from tw_legal_rag_mcp.mcp_server.server import tool_definitions
@@ -78,7 +76,7 @@ def test_agentic_harness_name_is_backed_by_graph_tools_and_scenarios():
 def test_acceptance_doc_states_current_claim_boundary():
     text = Path("docs/AGENTIC_HARNESS_ACCEPTANCE.md").read_text(encoding="utf-8")
 
-    assert f"v{alr_tw.__version__}" in text
+    assert "v0.9.0" in text
     assert "server-owned" in text
     assert "Coverage v2" in text
     assert "不可宣稱" in text or "不宣稱" in text

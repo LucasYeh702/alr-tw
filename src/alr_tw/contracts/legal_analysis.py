@@ -9,6 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .civil_analysis import (
     AnalysisValidationSeverity,
+    BurdenBearer,
+    BurdenShiftStatus,
+    BurdenType,
     CivilClaim,
     CivilDefense,
     CivilElement,
@@ -17,7 +20,11 @@ from .civil_analysis import (
     ElementBurdenOfProof,
     EvidenceAssessment,
     FactAssessment,
+    LegalEffectType,
+    PresumptionStatus,
     ProceduralPosture,
+    RebuttalStatus,
+    StandardOfProof,
 )
 
 _IDENTIFIER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$"
@@ -126,6 +133,73 @@ class _DomainIssueBase(BaseModel):
         return value
 
 
+class DomainBurdenOfProof(BaseModel):
+    """Issue-level burden record for non-civil-substantive branches."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    issue_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    burden_type: BurdenType
+    burden_bearer: BurdenBearer
+    presumption: PresumptionStatus
+    burden_shift: BurdenShiftStatus
+    standard_of_proof: StandardOfProof
+    rebuttal_status: RebuttalStatus
+    normative_source_ids: list[str] = Field(default_factory=list, max_length=32)
+
+    @field_validator("normative_source_ids")
+    @classmethod
+    def require_unique_source_ids(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("domain burden source IDs must be unique")
+        return value
+
+
+class DomainDefense(BaseModel):
+    """Issue-linked defense/exception proposal for a non-civil branch."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    defense_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    issue_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    label: str = Field(min_length=1, max_length=200)
+    legal_effect: LegalEffectType
+    status: ElementAssessmentStatus
+    normative_source_ids: list[str] = Field(default_factory=list, max_length=32)
+    fact_ids: list[str] = Field(default_factory=list, max_length=64)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=64)
+
+    @field_validator("normative_source_ids", "fact_ids", "evidence_ids")
+    @classmethod
+    def require_unique_references(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("domain defense reference IDs must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def reject_constitutive_effect(self) -> DomainDefense:
+        if self.legal_effect is LegalEffectType.RIGHT_CONSTITUTING:
+            raise ValueError("a domain defense cannot constitute the claimant right")
+        return self
+
+
+class DomainRefusalConstraint(BaseModel):
+    """Client-proposed refusal trigger, retained as an auditable declaration."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    code: str = Field(pattern=_IDENTIFIER_PATTERN)
+    trigger: Literal[
+        "missing_normative_source",
+        "missing_fact_or_evidence",
+        "unresolved_issue",
+        "unresolved_burden",
+        "unresolved_procedure",
+        "incomplete_scope",
+    ]
+    message: str = Field(min_length=1, max_length=500)
+
+
 class CivilProcedureIssue(_DomainIssueBase):
     issue_type: CivilProcedureIssueType
 
@@ -162,6 +236,41 @@ class _DomainAnalysisBase(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     scope: AnalysisCoverageScope = AnalysisCoverageScope.ISSUE_LIMITED
+    procedural_posture: ProceduralPosture | None = None
+    refusal_constraints: list[DomainRefusalConstraint] = Field(default_factory=list, max_length=32)
+
+    @model_validator(mode="after")
+    def validate_refusal_constraints(self) -> _DomainAnalysisBase:
+        codes = [item.code for item in self.refusal_constraints]
+        if len(codes) != len(set(codes)):
+            raise ValueError("domain refusal constraint codes must be unique")
+        return self
+
+
+class _IssueAnalysisBase(_DomainAnalysisBase):
+    """Shared additive domain fields for the five issue-oriented branches."""
+
+    burden_of_proof: list[DomainBurdenOfProof] = Field(default_factory=list, max_length=128)
+    defenses: list[DomainDefense] = Field(default_factory=list, max_length=64)
+
+    @model_validator(mode="after")
+    def validate_domain_references(self) -> _IssueAnalysisBase:
+        raw_issues = getattr(self, "issues", [])
+        issue_ids = [issue.issue_id for issue in raw_issues]
+        if len(issue_ids) != len(set(issue_ids)):
+            raise ValueError("domain issue IDs must be unique")
+        known_issue_ids = set(issue_ids)
+        burden_ids = [item.issue_id for item in self.burden_of_proof]
+        if len(burden_ids) != len(set(burden_ids)):
+            raise ValueError("domain burden permits one record per issue")
+        if any(issue_id not in known_issue_ids for issue_id in burden_ids):
+            raise ValueError("domain burden references an unknown issue_id")
+        defense_ids = [item.defense_id for item in self.defenses]
+        if len(defense_ids) != len(set(defense_ids)):
+            raise ValueError("domain defense IDs must be unique")
+        if any(item.issue_id not in known_issue_ids for item in self.defenses):
+            raise ValueError("domain defense references an unknown issue_id")
+        return self
 
 
 class CivilSubstantiveAnalysis(_DomainAnalysisBase):
@@ -204,27 +313,27 @@ class CivilSubstantiveAnalysis(_DomainAnalysisBase):
         return self
 
 
-class CivilProcedureAnalysis(_DomainAnalysisBase):
+class CivilProcedureAnalysis(_IssueAnalysisBase):
     profile: Literal["civil_procedure"] = "civil_procedure"
     issues: list[CivilProcedureIssue] = Field(min_length=1, max_length=128)
 
 
-class CriminalSubstantiveAnalysis(_DomainAnalysisBase):
+class CriminalSubstantiveAnalysis(_IssueAnalysisBase):
     profile: Literal["criminal_substantive"] = "criminal_substantive"
     issues: list[CriminalSubstantiveIssue] = Field(min_length=1, max_length=128)
 
 
-class CriminalProcedureAnalysis(_DomainAnalysisBase):
+class CriminalProcedureAnalysis(_IssueAnalysisBase):
     profile: Literal["criminal_procedure"] = "criminal_procedure"
     issues: list[CriminalProcedureIssue] = Field(min_length=1, max_length=128)
 
 
-class AdministrativeAnalysis(_DomainAnalysisBase):
+class AdministrativeAnalysis(_IssueAnalysisBase):
     profile: Literal["administrative"] = "administrative"
     issues: list[AdministrativeIssue] = Field(min_length=1, max_length=128)
 
 
-class ConstitutionalReviewAnalysis(_DomainAnalysisBase):
+class ConstitutionalReviewAnalysis(_IssueAnalysisBase):
     profile: Literal["constitutional_review"] = "constitutional_review"
     issues: list[ConstitutionalReviewIssue] = Field(min_length=1, max_length=128)
 
@@ -267,8 +376,14 @@ class LegalAnalysisEnvelope(BaseModel):
             if not isinstance(analysis, CivilSubstantiveAnalysis)
             for issue in analysis.issues
         ]
+        defense_ids = [
+            defense.defense_id
+            for analysis in self.analyses
+            for defense in analysis.defenses
+        ]
         identifiers = (
             ("issue_id", issue_ids),
+            ("defense_id", defense_ids),
             ("fact_id", [fact.fact_id for fact in self.facts]),
             (
                 "evidence_id",

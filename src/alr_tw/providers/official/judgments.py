@@ -43,6 +43,7 @@ from .judgment_parser import (
     extract_judgment_blocks,
     parse_judgment_blocks,
 )
+from alr_tw.contracts.judgment_semantics import JudgmentSpeaker
 
 JUDGMENT_SEARCH_ORIGIN = "https://judgment.judicial.gov.tw"
 JUDGMENT_ADVANCED_SEARCH_URL = f"{JUDGMENT_SEARCH_ORIGIN}/FJUD/Default_AD.aspx"
@@ -871,6 +872,15 @@ class OfficialJudgmentProvider:
         eligible_span_count = sum(
             item.eligible_for_claim_support for item in parsed_judgment.sections
         )
+        attribution_state_counts: dict[str, int] = {}
+        for item in parsed_judgment.sections:
+            key = f"{item.speaker.value}:{item.stance.value}"
+            attribution_state_counts[key] = attribution_state_counts.get(key, 0) + 1
+        current_court_eligible_span_count = sum(
+            item.eligible_for_claim_support
+            and item.speaker is JudgmentSpeaker.CURRENT_COURT
+            for item in parsed_judgment.sections
+        )
         source = SourceRecord(
             source_id=source_id,
             source_key=f"judgment:{jid}",
@@ -901,6 +911,11 @@ class OfficialJudgmentProvider:
                 "parse_status": parsed_judgment.parse_status.value,
                 "parser_version": parsed_judgment.parser_version,
                 "eligible_span_count": eligible_span_count,
+                "current_court_eligible_span_count": current_court_eligible_span_count,
+                "disposition_codes": [
+                    item.value for item in parsed_judgment.disposition_codes
+                ],
+                "attribution_state_counts": attribution_state_counts,
                 "unclassified_text_present": parsed_judgment.unparsed_remainder is not None,
             },
             warnings=list(parsed_judgment.warnings),

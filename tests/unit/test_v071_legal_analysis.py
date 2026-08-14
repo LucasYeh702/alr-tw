@@ -410,6 +410,26 @@ def test_issue_limited_analysis_is_always_qualified():
     assert "DOMAIN_ISSUE_UNRESOLVED" in result.qualifications
 
 
+def test_disputed_civil_element_is_unresolved_not_determinate():
+    result = _validate(
+        _analysis_payload("civil_substantive", status="disputed"),
+        now=datetime.now(UTC),
+    )
+
+    assert result.decision.value == "qualified"
+    assert "CIVIL_ELEMENT_UNRESOLVED" in result.qualifications
+
+
+def test_administrative_legality_and_remedy_tracks_report_domain_refusal_codes():
+    result = _validate(
+        _analysis_payload("administrative", status="disputed"),
+        now=datetime.now(UTC),
+    )
+
+    assert result.decision.value == "qualified"
+    assert "DOMAIN_REFUSAL_CONSTRAINT_NOT_DECLARED" in result.qualifications
+
+
 def test_complete_profile_missing_core_dimension_is_blocked():
     payload = _analysis_payload(
         "criminal_substantive",

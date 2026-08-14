@@ -78,18 +78,18 @@ class CounterAuthorityGate(BaseModel):
 
     @model_validator(mode="after")
     def reject_unverifiable_consensus(self) -> CounterAuthorityGate:
-        """Keep global-consensus authority disabled in the v0.8 contract.
+        """Keep global-consensus authority disabled in the current contract.
 
         Counter-authority lookup is bounded and does not include a semantic
         opposition classifier.  A caller therefore cannot turn a completed
         bounded search into a global ``consensus`` assertion by setting this
         flag.  A future semantic-verifier receipt may introduce a new
-        contract version; v0.8 remains fail-closed.
+        contract version; the current preview remains fail-closed.
         """
 
         if self.consensus_claim_allowed:
             raise ValueError(
-                "v0.8 finalization cannot authorize an unqualified consensus claim"
+                "Current finalization cannot authorize an unqualified consensus claim"
             )
         return self
 

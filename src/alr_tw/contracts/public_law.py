@@ -24,13 +24,15 @@ _OPAQUE_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
 
 
 class PublicLawMaterialType(str, Enum):
-    """Material families covered by the current v0.8 public-law contract."""
+    """Material families covered by the current v0.9.0 public-law contract."""
 
     ADMINISTRATIVE_RULE = "administrative_rule"
     ADMINISTRATIVE_REGULATION = "administrative_rule"
     ADMINISTRATIVE_INTERPRETATION = "administrative_interpretation"
     ADMINISTRATIVE_APPEAL = "administrative_appeal"
     PETITION_APPEAL = "administrative_appeal"
+    HISTORICAL_STATUTE = "historical_statute"
+    LAW_VERSION = "historical_statute"
     LEGISLATIVE_MATERIAL = "legislative_material"
 
 
@@ -116,7 +118,7 @@ class PublicLawProviderCapabilities(BaseModel):
         "alr-tw.public-law-provider-capabilities/v1"
     )
     provider_id: str = Field(pattern=_OPAQUE_PATTERN)
-    material_types: list[PublicLawMaterialType] = Field(min_length=1, max_length=4)
+    material_types: list[PublicLawMaterialType] = Field(min_length=1, max_length=5)
     keyword_search: bool = True
     exact_lookup: bool = False
     historical_versions: bool = False
@@ -313,6 +315,7 @@ class PublicLawSourceRecord(BaseModel):
                 PublicLawSourceRole.INTERPRETIVE_GUIDANCE
             ),
             PublicLawMaterialType.ADMINISTRATIVE_APPEAL: PublicLawSourceRole.APPEAL_DECISION,
+            PublicLawMaterialType.HISTORICAL_STATUTE: PublicLawSourceRole.NORMATIVE_RULE,
             PublicLawMaterialType.LEGISLATIVE_MATERIAL: PublicLawSourceRole.LEGISLATIVE_HISTORY,
         }
         expected_role = expected_roles[self.material_type]
@@ -370,7 +373,7 @@ class PublicLawSearchRequest(BaseModel):
     )
     query_id: str = Field(pattern=_IDENTIFIER_PATTERN)
     query: str = Field(min_length=1, max_length=2000)
-    material_types: list[PublicLawMaterialType] = Field(min_length=1, max_length=4)
+    material_types: list[PublicLawMaterialType] = Field(min_length=1, max_length=5)
     remedy_stages: list[PublicLawRemedyStage] = Field(default_factory=list, max_length=8)
     bounded_scope: str = Field(min_length=1, max_length=500)
     max_results: int = Field(default=10, ge=1, le=50)

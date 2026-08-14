@@ -348,7 +348,7 @@ def test_expired_server_evidence_cannot_validate_answer(tmp_path: Path):
     )
 
     assert result["decision"] == "blocked"
-    # v0.8 finalization rechecks eligibility before running claim validation;
+    # Current finalization rechecks eligibility before running claim validation;
     # stale evidence therefore enters the structured refusal path directly.
     assert result["decision_code"] == "ANSWER_REFUSAL_ONLY"
     assert result["answer_text"] is None

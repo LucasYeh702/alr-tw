@@ -16,7 +16,6 @@ ACTIVE_RECEIPT_DOCS = (
     "docs/ARCHITECTURE_CONTRACT.md",
     "docs/INTEROPERABILITY_CONTRACT.md",
     "docs/OFFICIAL_PROVIDERS.md",
-    "docs/RELEASE_NOTES.md",
     "docs/STORAGE_AND_PURGE.md",
     "docs/TLR_PROVIDER.md",
     "DATA_POLICY.md",
@@ -32,7 +31,6 @@ PREDRAFT_DOCS = (
     "docs/AGENT_CLIENT_GUIDE.md",
     "docs/ARCHITECTURE_CONTRACT.md",
     "docs/INTEROPERABILITY_CONTRACT.md",
-    "docs/RELEASE_NOTES.md",
     "docs/TRACE_SCHEMA.md",
 )
 

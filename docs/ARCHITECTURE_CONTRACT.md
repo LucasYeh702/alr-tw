@@ -1,12 +1,12 @@
 # Architecture Contract
 
-## v0.8.0 agent-neutral contract
+## v0.9.0 agent-neutral contract
 
 ALR-TW is an independently implemented, public-safe contract and validator
 runtime. It is agent-neutral and provider-neutral; no non-public deployment
 artifact, corpus, index, manifest, or operational state is a package dependency.
 
-The v0.8.0 contract adds an optional untrusted planning boundary and a
+The v0.9.0 contract adds an optional untrusted planning boundary and a
 server-owned sufficiency/finalization boundary:
 
 ```text
@@ -32,7 +32,7 @@ taxonomy, per-element burden records, temporal applicability, authority status,
 and legal validity. They do not duplicate citation support or privacy logic and
 do not perform semantic entailment.
 
-## v0.8.0 server-owned contract
+## v0.9.0 server-owned contract
 
 新整合應以 `alr_tw.contracts` 的 provider-neutral models、`ResearchService`、`ProviderObligationExecutor` 與 `SqliteStore` 為主。外部 agent 只能建立／推進 run 與提交 draft；不得提交 evidence span 讓 final validation 採信。
 
@@ -45,7 +45,7 @@ ResearchRun -> ordered obligations -> ProviderResult
 `ProviderCandidate` 永遠不是 `EvidenceSpan`。官方即時內容只有在 provider 完成 origin、schema、content 與 freshness 檢查並由 server 儲存後，才能成為 `evidence_eligible`。Source identifier、hash、role 與 timestamp 不可由 MCP caller 自我認證。
 
 早期的 `tw_legal_rag_mcp.contracts` 仍為 legacy synthetic contract，相容期間不得與
-v0.8.0 server-owned records 混作同一 authority store。`ready_for_draft` 只代表
+v0.9.0 server-owned records 混作同一 authority store。`ready_for_draft` 只代表
 workflow completion；`ResearchSufficiency`、Coverage v2 與
 `get_legal_research_finalization` 只決定起草前答案姿態。真正可呈現的
 `validated`／`qualified` 仍必須由 `validate_legal_answer` 回傳；synthetic records
@@ -100,6 +100,14 @@ source_manifest
 | `ApplicabilityResolver` / `validate_applicability_resolution` | `src/alr_tw/contracts/applicability.py`, `src/alr_tw/verification/applicability.py` | Structural special/general, superior/inferior, and temporal successor resolution from server-owned metadata; fail-closed and never semantic entailment. |
 | `AuthorityLineageContract` / `validate_server_authority_lineage` | `src/alr_tw/contracts/authority_lineage.py`, `src/alr_tw/verification/authority_lineage.py` | Provider-reported court level, procedural posture, appeal/review lineage, and bounded negative-treatment; never a consensus or opposition classifier. |
 | `PublicLawProviderAdapter` / `GenericPublicLawProviderAdapter` | `src/alr_tw/contracts/public_law.py`, `src/alr_tw/providers/sdk.py` | Provider-neutral administrative-rule, interpretation, appeal, legislative-material, procedure, and remedy contracts with server metadata binding. |
+| `JudgmentSemanticsContract` / `validate_server_judgment_semantics` | `src/alr_tw/contracts/judgment_semantics.py`, `src/alr_tw/verification/judgment_semantics.py` | Separates current-court, lower-court, party, quoted-authority, separate-opinion and unknown attribution, plus bounded disposition categories; no semantic entailment or citation authorization. |
+| `HistoricalLawQuery` / `HistoricalLawResolution` / `LegislativeHistoryProviderAdapter` | `src/alr_tw/contracts/historical_law.py`, `src/alr_tw/providers/legislative_history.py`, `src/alr_tw/verification/historical_law.py` | Bounded historical law-version and Legislative Yuan material port with explicit `as_of_date`, independent server metadata, and normative/material separation. |
+| `SemanticVerifierRequest` / `SemanticVerifierResult` / `run_server_semantic_verifier` | `src/alr_tw/contracts/semantic_verifier.py`, `src/alr_tw/verification/semantic_verifier.py` | Optional advisory sidecar contract; supports/contradicts/uncertain/not-evaluated only, with independent server target/source/evidence binding and no authority mutation or finalization permission. |
+| `DomainBurdenOfProof` / `DomainDefense` / `DomainRefusalConstraint` | `src/alr_tw/contracts/legal_analysis.py`, `src/alr_tw/verification/legal_analysis.py` | Additive issue-level burden, defense, branch posture and refusal declarations for the six analysis profiles; references still pass server-owned gates and declarations cannot waive blockers. |
+
+| ProviderConformanceRequest / validate_provider_conformance | src/alr_tw/contracts/provider_conformance.py, src/alr_tw/verification/provider_conformance.py | Common official/candidate-only provider gate for independent source/evidence bindings, freshness, scope, retry, privacy, material role, and snapshot receipt consistency. |
+| ReceiptAwareProviderAdapter | src/alr_tw/providers/receipt_adapter.py | Optional deployer adapter; accepts a server-owned receipt issuer but never self-certifies receipts or bypasses finalization. |
+| SemanticSidecarRegistration / DeployerProviderDeclaration | src/alr_tw/contracts/sidecar.py, src/alr_tw/verification/sidecar.py | Shadow/advisory sidecar and deployer corpus boundary declarations; no bundled model/corpus/credentials and no evidence/trust/final-decision ownership. |
 
 ## Trust Invariants
 

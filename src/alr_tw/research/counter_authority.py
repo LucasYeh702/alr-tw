@@ -41,7 +41,7 @@ class CounterAuthorityStatus(str, Enum):
 class CounterAuthorityRelationStatus(str, Enum):
     """Relation between a verified judgment and the issue.
 
-    v0.8 verifies only official identity/content.  It intentionally does not
+    The current preview verifies only official identity/content.  It intentionally does not
     infer that a judgment is opposing, supporting, or unrelated to the issue.
     """
 
@@ -658,7 +658,7 @@ def execute_bounded_counter_authority(
     relation_unclassified = bool(verified_source_ids)
     if relation_unclassified:
         # Identity/content verification is not semantic opposition
-        # classification in v0.8, therefore it cannot produce a terminal
+        # classification in the current preview, therefore it cannot produce a terminal
         # ``found_verified`` counter-authority decision.
         overall_status = CounterAuthorityStatus.PARTIAL
     elif verification_budget_exhausted:

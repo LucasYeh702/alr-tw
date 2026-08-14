@@ -12,6 +12,15 @@ from alr_tw.providers.sdk import (
     PublicLawProviderAdapter,
     PublicLawSourcePromoter,
 )
+from alr_tw.providers.legislative_history import (
+    LegislativeHistoryBackend,
+    LegislativeHistoryProviderAdapter,
+)
+from alr_tw.providers.receipt_adapter import (
+    ProviderReceiptIssuer,
+    ReceiptAwareProviderAdapter,
+    ReceiptAwareProviderEnvelope,
+)
 
 __all__ = [
     "BoundedPublicLawProviderAdapter",
@@ -24,4 +33,9 @@ __all__ = [
     "PublicLawMetadataIssuer",
     "PublicLawProviderAdapter",
     "PublicLawSourcePromoter",
+    "LegislativeHistoryBackend",
+    "LegislativeHistoryProviderAdapter",
+    "ProviderReceiptIssuer",
+    "ReceiptAwareProviderAdapter",
+    "ReceiptAwareProviderEnvelope",
 ]

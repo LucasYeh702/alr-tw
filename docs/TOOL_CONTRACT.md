@@ -1,6 +1,6 @@
 # ALR-TW Tool Contract
 
-## v0.8.0 interoperability tools
+## v0.9.0 interoperability tools
 
 | Tool | Required input | Contract |
 |---|---|---|
@@ -22,6 +22,11 @@ hash、`official=true` 或 client trust attestation。整份 analysis 固定為
 `issue_limited` 固定附帶 scope qualification。每個議題都要有 normative
 source，確定的 `met`／`not_met` 結論另須 fact 或 eligible evidence；民法
 每個 element 必須有一筆 burden-of-proof record。
+v0.9.0 另允許五個 issue-oriented 分支攜帶 issue-level
+`burden_of_proof`、`defenses`、branch-specific `procedural_posture` 與
+`refusal_constraints`；民法分支沿用 element-level burden／defense schema。
+這些仍是 `untrusted_client_proposal`，server 會把其 source、fact、evidence
+重新送入既有 trust gate；refusal constraint 不能解除任何 blocker。
 公開的 stateless validator 可由部署者傳入 server-owned `server_fact_states`；
 內建 managed `ResearchService` 不保存 fact records，capabilities 會回報
 `managed_fact_state_store_available=false`，因此 MCP caller 不能用自己提交
@@ -40,7 +45,7 @@ structure and trust decision，不是 final-answer decision，且固定：
 explicit-allowlist synthetic fixture provider；live context 未確認時 fail
 closed。
 
-## v0.8.0 provider-neutral applicability and source contracts
+## v0.9.0 provider-neutral applicability and source contracts
 
 除 MCP research tools 外，公開套件提供可替換的 provider contracts／facades：
 
@@ -54,9 +59,61 @@ closed。
 production 參數。candidate、server-owned source 與 evidence 的信任層級仍由既有
 verification／finalization gates 決定。
 
+## v0.9.0 provider contracts
+
+`HistoricalLawQuery`／`HistoricalLawResolution`／
+`validate_server_historical_law` 提供立法院／其他官方歷史法規 provider 的
+bounded port。查詢必須明示 `as_of_date` 與法規識別碼或名稱；resolution 會把
+`HISTORICAL_STATUTE` 法條版本與 `LEGISLATIVE_MATERIAL` 立法資料分開保存。只有
+server-owned、官方驗證且與 snapshot metadata 綁定的法條版本可作為
+applicability resolver 的輸入；立法理由、委員會報告或議事紀錄不得直接當成法條。
+
+`LegislativeHistoryProviderAdapter` 位於
+`src/alr_tw/providers/legislative_history.py`，只定義 backend port 與 bounded
+adapter，不內建立法院 endpoint、token、資料庫、索引或 production 參數。沒有
+metadata issuer、source promoter、完整時點 scope 或法條版本時，結果維持
+blocked／qualified，不能宣稱歷史法規已確認。
+
+## v0.9.0 semantic-verifier plugin contract
+
+公開套件提供 `alr-tw.semantic-verifier-request/v1`、
+`alr-tw.semantic-verifier-result/v1` 與
+`alr-tw.semantic-verifier-validation/v1`。插件只能針對 server-selected
+target 回報 `supports`、`contradicts`、`uncertain` 或 `not_evaluated`；不能
+建立 source／evidence、改變 source trust、升格 evidence、授權
+`ordinary`／`validated` 或產生 final answer。結果一律標示
+`advisory_only=true`，並由 `validate_server_semantic_verifier` 以獨立
+server-owned target、source、evidence 與 run binding 重新檢查。
+
+`run_server_semantic_verifier` 只提供 optional sidecar 執行邊界；插件例外、
+schema 錯誤、foreign／stale reference 或 authority sentinel 偽造一律
+blocked，不會被解讀為 `uncertain` 或 scoped absence。核心 runtime 不依賴
+任何模型、prompt、embedding 或 semantic provider。
+
+## v0.9.0 provider conformance and optional sidecar boundary
+
+validate_provider_conformance 對 common ProviderResult 執行同一套
+provider-neutral gate：server_source_ids、server_evidence_ids 與對應
+server-owned object mapping 必須獨立注入；source 必須為新鮮的
+official_verified／evidence_eligible，evidence 必須綁定可支援主張的 source。
+candidate_only provider 永遠不能攜帶 source／evidence promotion。ERROR 只會
+產生 retry blocker，NOT_FOUND 只有在明示 bounded scope 且完整覆蓋時才可作
+scoped absence。
+
+ReceiptAwareProviderAdapter 可接受部署者提供的 server receipt issuer，但不會
+自行簽發或信任 receipt。只有同一 run 的完整 server-owned receipt set 通過
+snapshot consistency，且所有 source／evidence gate 均通過時，才回報
+ordinary_eligible；這個欄位仍不取代既有 finalization／answer validation。
+
+SemanticSidecarRegistration 與 DeployerProviderDeclaration 是 optional
+boundary contracts。sidecar 只能 shadow／advisory 執行，不能建立 evidence、改變
+source trust、授權 finalization 或輸出可呈現答案。部署者 provider 的 corpus、模型、
+credentials、private data 與 deployment parameters 均不得 bundled；公開 repo
+只提供契約、validator 與 synthetic fixtures。
+
 詳見 [Agent-neutral interoperability contract](INTEROPERABILITY_CONTRACT.md)。
 
-## v0.8.0 server-managed tools
+## v0.9.0 server-managed tools
 
 | Tool | Required input | Contract |
 |---|---|---|
@@ -85,10 +142,10 @@ All MCP tool results are wrapped in:
 }
 ```
 
-## v0.8.0 answer validation
+## v0.9.0 answer validation
 
 `claim_bindings` 是 optional array；每筆包含 `claim_id`、`claim_text`、
-`claim_type`、`importance`、至少一個同 run 的 `evidence_ids`，以及 v0.8.0
+`claim_type`、`importance`、至少一個同 run 的 `evidence_ids`，以及 v0.9.0
 可選的 `issue_ids` 與 `citation_occurrences`。允許的 `claim_type` 是
 `law_rule`、`court_view`、`disposition`、`fact`、`procedure`、`limitation`。
 
@@ -121,7 +178,7 @@ fixture 不能支撐法律答案，counter `not_found_in_scope` 不能證明全�
 反面見解或實務一致。
 
 Snapshot receipt 是 provider-neutral contract，不表示 bundled provider 已簽發
-receipt。v0.8.0 內建 `ResearchService` 尚未注入或持久化 live-provider generation
+receipt。v0.9.0 內建 `ResearchService` 尚未注入或持久化 live-provider generation
 receipt，因此 built-in live output 最多為 `conditional`／`qualified`；`ordinary`
 只保留給 receipt-aware provider adapter 完成同一 run 的 server-owned binding。
 

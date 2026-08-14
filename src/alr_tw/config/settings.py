@@ -1,4 +1,4 @@
-"""Fail-closed environment configuration for v0.8.0 live data modes."""
+"""Fail-closed environment configuration for the v0.9.0 preview."""
 
 from __future__ import annotations
 

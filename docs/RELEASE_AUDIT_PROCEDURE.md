@@ -1,4 +1,4 @@
-# v0.8.0 公開版發布審核規程
+# v0.9.0 公開版發布審核規程
 
 原則：fail closed。程式 regression、公開邊界、build artifact 或 live dependency 狀態必須分開記錄；外部服務暫時不可用不應被掩飾，也不應直接誤判為程式 regression。
 
@@ -22,7 +22,7 @@ uv run mypy src
 uv run pytest -q
 ```
 
-至少覆蓋：v0.8.0 六種 domain profiles、complete／issue-limited scope、
+至少覆蓋：v0.9.0 六種 domain profiles、complete／issue-limited scope、
 server-owned analysis references、legacy tool regression、caller-attested
 source rejection、candidate-only blocking、role mismatch、historical-law
 block、source expiry、privacy downgrade、idempotency、TTL、WAL/SHM/temp purge。
@@ -30,10 +30,14 @@ block、source expiry、privacy downgrade、idempotency、TTL、WAL/SHM/temp pur
 ## C. Packaging 與 base-install smoke
 
 ```bash
-VERSION=0.8.0
+VERSION=0.9.0
 uv build
 python -m zipfile -l "dist/alr_tw-${VERSION}-py3-none-any.whl"
 ```
+
+正式 release 授權前，`pyproject.toml`、`src/alr_tw/_version.py`、MCP
+`initialize` 回報與測試中的 package identity 必須同步到同一個 release target；
+在同步完成前，工作樹只能視為未發布狀態，不能建立正式 tag 或宣稱已發布。
 
 在新的 virtual environment 安裝 wheel：
 
@@ -50,7 +54,7 @@ python -m zipfile -l "dist/alr_tw-${VERSION}-py3-none-any.whl"
 - current protocol `2025-11-25`；
 - legacy supported protocol `2024-11-05`；
 - unsupported protocol fail closed；
-- tools/list 包含 v0.8.0 server-managed 與 interoperability MCP tools；
+- tools/list 包含 v0.9.0 server-managed 與 interoperability MCP tools；
 - capabilities 與 tools/list 包含 `alr-tw.legal-analysis/v1`、六種 profiles
   與 `validate_legal_analysis`；
 - synthetic run 可推進到 ready-for-draft，沒有 evidence 時 final validation blocked 且 answer body 為 null；

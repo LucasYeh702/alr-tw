@@ -1,6 +1,6 @@
 # v0.6.0 Baseline Audit
 
-> Archived historical baseline record. It does not describe the current v0.8.0 capability surface.
+> Archived historical baseline record. It does not describe the current v0.9.0 capability surface.
 
 Status: WP-00 implementation baseline for the v0.6.0 public preview.
 

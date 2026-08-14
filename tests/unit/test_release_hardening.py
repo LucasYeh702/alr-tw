@@ -268,7 +268,7 @@ def test_current_public_tree_has_no_domain_guard_false_positives():
 def test_public_readmes_share_current_safety_claims():
     for relative in ("README.md", "README.zh-TW.md"):
         text = (REPO_ROOT / relative).read_text(encoding="utf-8")
-        assert "v0.8.0" in text
+        assert "v0.9.0" in text
         assert "本 repo 不包含 LLM，也不包含 agent 實作。" in text
         assert "TLR" in text and "candidate" in text
         assert "blocked" in text and "answer body" in text
@@ -303,5 +303,38 @@ def test_current_public_docs_use_latest_release_identity():
     )
     for relative in current_docs:
         text = (REPO_ROOT / relative).read_text(encoding="utf-8")
-        assert "v0.8.0" in text, relative
+        assert "v0.9.0" in text, relative
         assert "v0.6" not in text, relative
+
+
+def test_current_public_docs_do_not_retain_previous_release_identity():
+    current_docs = (
+        "README.md",
+        "README.zh-TW.md",
+        "README.en.md",
+        "ARCHITECTURE.md",
+        "ROADMAP.md",
+        "DATA_POLICY.md",
+        "SECURITY.md",
+        "docs/AGENTIC_HARNESS_ACCEPTANCE.md",
+        "docs/AGENTIC_WORKFLOW.md",
+        "docs/AGENT_CLIENT_GUIDE.md",
+        "docs/ARCHITECTURE_CONTRACT.md",
+        "docs/ERROR_CODES.md",
+        "docs/INTEROPERABILITY_CONTRACT.md",
+        "docs/OFFICIAL_PROVIDERS.md",
+        "docs/PUBLIC_PRIVATE_BOUNDARY.md",
+        "docs/RELEASE_AUDIT_PROCEDURE.md",
+        "docs/RELEASE_NOTES.md",
+        "docs/STORAGE_AND_PURGE.md",
+        "docs/THREAT_MODEL.md",
+        "docs/TLR_PROVIDER.md",
+        "docs/TOOL_CONTRACT.md",
+        "docs/TRACE_SCHEMA.md",
+        "docs/TRUST_MODEL.md",
+        "docs/eval_methodology.md",
+    )
+    for relative in current_docs:
+        text = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        assert "v0.8" not in text, relative
+        assert "0.8.0" not in text, relative

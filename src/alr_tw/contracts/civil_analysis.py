@@ -23,6 +23,7 @@ class ElementAssessmentStatus(str, Enum):
     MET = "met"
     NOT_MET = "not_met"
     UNCERTAIN = "uncertain"
+    DISPUTED = "disputed"
     NOT_APPLICABLE = "not_applicable"
 
 
@@ -47,6 +48,8 @@ class BurdenType(str, Enum):
 class BurdenBearer(str, Enum):
     CLAIMANT = "claimant"
     DEFENDANT = "defendant"
+    PROSECUTION = "prosecution"
+    ACCUSED = "accused"
     THIRD_PARTY = "third_party"
     COURT_EX_OFFICIO = "court_ex_officio"
     DISPUTED = "disputed"

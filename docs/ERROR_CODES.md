@@ -1,6 +1,29 @@
 # ALR-TW Error Codes
 
-## v0.8.0 provider and research codes
+## v0.9.0 contract codes
+
+| Code | Meaning |
+|---|---|
+| `JUDGMENT_SEMANTICS_RUN_MISMATCH` | 裁判語境結果與 server research run 不一致 |
+| `JUDGMENT_SEMANTICS_SOURCE_NOT_SERVER_BOUND` | 裁判語境 source 不在 server-owned source scope |
+| `JUDGMENT_SEMANTICS_TRUST_STATUS_FORGED` | Caller 嘗試偽造 parser trust status |
+| `JUDGMENT_SEMANTICS_SEMANTIC_FLAG_FORGED` | Caller 嘗試偽造 semantic entailment 狀態 |
+| `JUDGMENT_ATTRIBUTION_SOURCE_NOT_BOUND` | Attribution section 引用未綁定 source |
+| `JUDGMENT_ATTRIBUTION_EVIDENCE_NOT_BOUND` | Attribution section 引用未綁定 evidence |
+| `JUDGMENT_ATTRIBUTION_ELIGIBILITY_FORGED` | 非本院／未解析 attribution 嘗試自我宣告可支援主張 |
+| `JUDGMENT_DISPOSITION_UNRESOLVED` | 主文未能唯一分類，不能把理由推導為裁判結果 |
+| `JUDGMENT_CURRENT_COURT_ATTRIBUTION_UNRESOLVED` | 本院發話者或其與主文關係未能唯一確認 |
+| `HISTORICAL_LAW_IDENTIFIER_OR_NAME_REQUIRED` | 歷史法規查詢缺少法規識別碼或名稱 |
+| `HISTORICAL_LAW_BOUNDED_SCOPE_REQUIRED` | 歷史法規查詢缺少 bounded provider scope |
+| `HISTORICAL_LAW_PROVIDER_MISMATCH` | 歷史法規 resolution 與 provider 不一致 |
+| `HISTORICAL_LAW_SOURCE_ROLE_OVERLAP` | 法條版本與立法資料 source ID 重疊 |
+| `HISTORICAL_LAW_SOURCE_NOT_IN_RESULT` | Resolution 引用 provider result 未返回的 source |
+| `HISTORICAL_LAW_NORMATIVE_SOURCE_MISSING` | 只有立法資料，沒有可供 applicability 的法條版本 |
+| `HISTORICAL_LAW_NORMATIVE_SOURCE_NOT_SERVER_OWNED` | 法條版本 source 未綁定 server catalog |
+| `HISTORICAL_LAW_NORMATIVE_ROLE_MISMATCH` | 法條版本 source role 不是 normative text |
+| `HISTORICAL_LAW_SOURCE_ROLE_INVALID` | Provider 回傳的法條／立法資料分類無法安全驗證 |
+
+## v0.9.0 provider and research codes
 
 | Code | Meaning |
 |---|---|
@@ -62,7 +85,7 @@
 | `COUNTER_AUTHORITY_COVERAGE_INCOMPLETE` | 未執行、未完成或失敗的反面見解搜尋必須揭露 |
 | `PROCEDURAL_POSTURE_UNRESOLVED` | 程序階段尚未確認 |
 
-## v0.8.0 applicability and authority-lineage codes
+## v0.9.0 applicability and authority-lineage codes
 
 | Code | Meaning |
 |---|---|
@@ -92,7 +115,7 @@
 | `AUTHORITY_LINEAGE_NOT_FOUND_IS_BOUNDED_ONLY` | `not_found_in_scope` 僅限 bounded scope，不支持全球不存在主張 |
 | `NEGATIVE_TREATMENT_SEMANTIC_CLASSIFICATION_NOT_PERFORMED` | Provider treatment 尚未經 semantic opposition classifier |
 
-## v0.8.0 public-law provider and SDK codes
+## v0.9.0 public-law provider and SDK codes
 
 | Code | Meaning |
 |---|---|
@@ -152,6 +175,89 @@
 | `SNAPSHOT_RECEIPT_MISMATCH` | provider snapshot receipt 與 run scope 或世代不一致 |
 | `SNAPSHOT_RECEIPT_MISSING_LEGACY` | 舊紀錄沒有 receipt；不得據此宣稱 ordinary sufficiency |
 | `ANSWER_REFUSAL_ONLY` | finalization 只允許結構化拒答，不回傳草稿 |
+
+## v0.9.0 semantic-verifier plugin codes
+
+| Code | Meaning |
+|---|---|
+| `SEMANTIC_VERIFIER_REQUEST_NOT_SERVER_OWNED` | plugin request 不是由 server-owned research run 發出 |
+| `SEMANTIC_VERIFIER_REQUEST_TARGET_NOT_SERVER_OWNED` | request target 不在獨立 server target set |
+| `SEMANTIC_VERIFIER_REQUEST_TARGET_INVALID` | request target schema 無法驗證 |
+| `SEMANTIC_VERIFIER_SERVER_TARGET_INVALID` | server target binding schema 無法驗證 |
+| `SEMANTIC_VERIFIER_TARGET_NOT_SERVER_OWNED` | plugin finding 指向未知或外部 target |
+| `SEMANTIC_VERIFIER_RUN_NOT_SERVER_BOUND` | plugin request/result 與 server run 不一致 |
+| `SEMANTIC_VERIFIER_REQUEST_ID_MISMATCH` | plugin result 不屬於該 verifier request |
+| `SEMANTIC_VERIFIER_PLUGIN_ID_MISMATCH` | plugin result 身分與註冊 adapter 不一致 |
+| `SEMANTIC_VERIFIER_PLUGIN_VERSION_MISMATCH` | plugin result 版本與註冊 adapter 不一致 |
+| `SEMANTIC_VERIFIER_PLUGIN_ID_MISSING` | plugin 未提供穩定的 plugin ID |
+| `SEMANTIC_VERIFIER_PLUGIN_VERSION_MISSING` | plugin 未提供穩定的 plugin version |
+| `SEMANTIC_VERIFIER_PLUGIN_EXECUTION_FAILED` | plugin 執行失敗；不得降級為 clean miss |
+| `SEMANTIC_VERIFIER_RUN_FAILED` | plugin 明示執行失敗；結果必須 blocked |
+| `SEMANTIC_VERIFIER_RESULT_INVALID` | plugin result schema 無法驗證 |
+| `SEMANTIC_VERIFIER_FINDING_INVALID` | 個別 plugin finding 無法驗證 |
+| `SEMANTIC_VERIFIER_FINDINGS_INVALID` | plugin findings 不是 bounded sequence |
+| `SEMANTIC_VERIFIER_SUPPORT_REFERENCE_REQUIRED` | supports／contradicts 必須引用 server-owned source 或 evidence |
+| `SEMANTIC_VERIFIER_SOURCE_NOT_SERVER_OWNED` | finding 引用不屬於該 run 的 source |
+| `SEMANTIC_VERIFIER_EVIDENCE_NOT_SERVER_OWNED` | finding 引用不屬於該 run 的 evidence |
+| `SEMANTIC_VERIFIER_SOURCE_NOT_ELIGIBLE` | source 過期或不是 evidence eligible |
+| `SEMANTIC_VERIFIER_EVIDENCE_NOT_ELIGIBLE` | evidence 過期、foreign 或不具 claim-support eligibility |
+| `SEMANTIC_VERIFIER_SOURCE_OUTSIDE_TARGET_SCOPE` | finding 引用 target 未宣告的 source |
+| `SEMANTIC_VERIFIER_EVIDENCE_OUTSIDE_TARGET_SCOPE` | finding 引用 target 未宣告的 evidence |
+| `SEMANTIC_VERIFIER_AUTHORITY_SENTINEL_FORGED` | plugin 試圖授權 evidence、trust、finalization 或答案 |
+| `SEMANTIC_VERIFIER_EVALUATION_SENTINEL_INVALID` | semantic evaluation sentinel 不合法 |
+| `SEMANTIC_VERIFIER_TARGET_DUPLICATED` | plugin 對同一 target 回傳多筆 finding |
+| `SEMANTIC_VERIFIER_TARGET_COVERAGE_PARTIAL` | completed plugin 結果未涵蓋所有 requested targets |
+
+## v0.9.0 provider conformance and boundary codes
+
+| Code | Meaning |
+|---|---|
+| PROVIDER_RESULT_SCHEMA_INVALID | Common provider result 無法驗證 |
+| PROVIDER_ID_MISMATCH | Provider result 與 server request 身分不一致 |
+| PROVIDER_SOURCE_ID_DUPLICATE | Provider source reference 重複 |
+| PROVIDER_EVIDENCE_ID_DUPLICATE | Provider evidence reference 重複 |
+| PROVIDER_SERVER_SOURCE_BINDING_REQUIRED | Source promotion 缺少獨立 server source catalog binding |
+| PROVIDER_SERVER_EVIDENCE_BINDING_REQUIRED | Evidence promotion 缺少獨立 server evidence catalog binding |
+| PROVIDER_SOURCE_NOT_SERVER_BOUND | Source ID 不在 server-owned catalog／object scope |
+| PROVIDER_EVIDENCE_NOT_SERVER_BOUND | Evidence ID 不在 server-owned catalog／object scope |
+| PROVIDER_SOURCE_NOT_EVIDENCE_ELIGIBLE | Source trust status 不允許 evidence promotion |
+| PROVIDER_SOURCE_STALE | Source 已過期 |
+| PROVIDER_SOURCE_TIMESTAMP_FUTURE | Source fetched／verified timestamp 尚未到達 server decision time |
+| PROVIDER_SERVER_SOURCE_BINDING_INVALID | Server source catalog binding 含重複 ID |
+| PROVIDER_SERVER_EVIDENCE_BINDING_INVALID | Server evidence catalog binding 含重複 ID |
+| PROVIDER_EVIDENCE_SOURCE_NOT_ELIGIBLE | Evidence 未綁定可引用 source |
+| PROVIDER_CANDIDATE_PROMOTION_FORBIDDEN | Candidate-only provider 嘗試提交 source／evidence |
+| PROVIDER_ERROR_RETRY_REQUIRED | Provider error 不得被解讀為 clean miss |
+| PROVIDER_BOUNDED_SCOPE_REQUIRED | NOT_FOUND 缺少 bounded scope，不能建立 absence claim |
+| PROVIDER_SNAPSHOT_RECEIPT_REQUIRED | Conformance profile 明示需要 server receipt |
+| PROVIDER_SNAPSHOT_NOT_CONSISTENT | Receipt 與 server run set 不一致或非當前 |
+| PROVIDER_SNAPSHOT_RECEIPT_MISSING | Source／evidence 有效但尚無 receipt，只能 qualified |
+| PROVIDER_METADATA_SENSITIVE_FIELD | Provider metadata 含疑似 credential／secret 欄位 |
+| PROVIDER_METADATA_PRIVATE_DEPLOYMENT_MARKER | Provider metadata 含私有部署路徑或連線 marker |
+| SIDECAR_EVIDENCE_CREATION_FORBIDDEN | Sidecar 不得建立 evidence |
+| SIDECAR_SOURCE_TRUST_MUTATION_FORBIDDEN | Sidecar 不得改變 source trust |
+| SIDECAR_FINALIZATION_AUTHORIZATION_FORBIDDEN | Sidecar 不得授權 finalization |
+| SIDECAR_PRESENTABLE_ANSWER_FORBIDDEN | Sidecar 不得輸出可呈現答案 |
+| SIDECAR_BUNDLED_MODEL_FORBIDDEN | 公開套件不得 bundled model |
+| SIDECAR_BUNDLED_CORPUS_FORBIDDEN | 公開套件不得 bundled corpus |
+| DEPLOYER_BUNDLED_CORPUS_FORBIDDEN | Deployer declaration 不得宣告公開套件含 corpus |
+| DEPLOYER_PRIVATE_DATA_FORBIDDEN | 公開套件不得含 private data |
+| DEPLOYER_CREDENTIALS_FORBIDDEN | 公開套件不得含 credentials |
+| DEPLOYER_DEPLOYMENT_PARAMETERS_FORBIDDEN | 公開套件不得含 deployment parameters |
+
+## v0.9.0 legal-analysis domain constraint codes
+
+| Code | Meaning |
+|---|---|
+| `DOMAIN_BURDEN_NOT_DECLARED` | issue-oriented branch 未宣告 issue-level burden（info） |
+| `DOMAIN_DEFENSES_NOT_DECLARED` | issue-oriented branch 未宣告 defenses／exceptions（info） |
+| `DOMAIN_BURDEN_NORMATIVE_SOURCE_REQUIRED` | domain burden 缺少 server-owned normative source |
+| `DOMAIN_BURDEN_ALLOCATION_UNRESOLVED` | burden bearer、shift 或 standard 尚未釐清 |
+| `DOMAIN_DEFENSE_NORMATIVE_SOURCE_REQUIRED` | domain defense 缺少 normative source |
+| `DOMAIN_DEFENSE_UNRESOLVED` | domain defense 的狀態仍 unresolved |
+| `DOMAIN_PROCEDURAL_POSTURE_NOT_DECLARED` | branch 未宣告 branch-specific procedural posture（info） |
+| `DOMAIN_PROCEDURAL_POSTURE_UNRESOLVED` | branch procedural posture 尚未釐清 |
+| `DOMAIN_REFUSAL_CONSTRAINT_NOT_DECLARED` | unresolved domain condition 未宣告對應拒答條件 |
 
 Provider `ERROR`、`NOT_FOUND` 與 degraded／partial 必須分開。外部 outage 不得改寫成不存在；candidate-only 不得改寫成 evidence。
 

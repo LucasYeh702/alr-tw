@@ -934,7 +934,7 @@ class ProviderObligationExecutor:
         elif counter_result.status is CounterAuthorityStatus.BLOCKED:
             warnings.append("COUNTER_AUTHORITY_BLOCKED")
 
-        # v0.8 has no server-owned semantic opposition classifier.  Even an
+        # The current preview has no server-owned semantic opposition classifier.  Even an
         # officially verified judgment remains relation-unclassified, so only
         # a clean scoped miss completes the counter-authority obligation.
         completed = counter_result.status is CounterAuthorityStatus.NOT_FOUND_IN_SCOPE

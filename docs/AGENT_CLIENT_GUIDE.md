@@ -5,7 +5,7 @@ LLM and no agent implementation. The external MCP client supplies the agent
 role; the harness records tool calls, validates citations, computes the trust
 gate, and returns a canonical trace.
 
-## v0.8.0 agent-neutral research flow
+## v0.9.0 agent-neutral research flow
 
 New clients should first call `get_legal_research_capabilities`.
 
@@ -64,7 +64,7 @@ Counter-authority results are bounded lexical candidate discovery followed by
 official verification; they do not establish semantic opposition, global
 absence, or practice-wide consensus.
 
-The v0.8.0 public contracts also expose structural applicability resolution,
+The v0.9.0 public contracts also expose structural applicability resolution,
 authority/judgment lineage, and public-law provider adapters. Use the
 provider-neutral interfaces for explicit source relationships, court/procedure
 metadata, administrative rules or legislative materials. These records remain

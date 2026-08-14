@@ -694,7 +694,7 @@ def test_counter_authority_progress_resumes_across_sqlite_without_resetting_budg
     assert persisted.coverage.partial_reason_codes.count("COUNTER_AUTHORITY_PARTIAL") == 1
     assert (
         persisted.coverage.counter_authority_checked is False
-    )  # relation remains unclassified in v0.8
+    )  # relation remains unclassified in the current preview
     assert first_progress["verification_attempts"] == 2
 
 
@@ -869,7 +869,7 @@ def test_keyword_only_law_and_constitutional_handlers_do_not_claim_verified_cove
         depth=ResearchDepth.QUICK,
     )
 
-    # The constitutional transport is deliberately unavailable.  v0.8 keeps
+    # The constitutional transport is deliberately unavailable.  The current preview keeps
     # that required transient obligation pending for a later operation rather
     # than claiming workflow completion.
     for index in range(3):

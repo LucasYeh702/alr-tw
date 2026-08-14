@@ -1,6 +1,6 @@
 # ALR-TW v0.7.1 Release Audit
 
-> Archived historical release record. It does not describe the current v0.8.0 capability surface.
+> Archived historical release record. It does not describe the current v0.9.0 capability surface.
 
 Release candidate decision: **ACCEPTED FOR LOCAL v0.7.1 PUBLIC PREVIEW**
 

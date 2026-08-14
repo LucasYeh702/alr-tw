@@ -10,8 +10,16 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from alr_tw.contracts.judgment_semantics import (
+    AttributionConfidence,
+    DispositionRelation,
+    JudgmentDisposition,
+    JudgmentSpeaker,
+    JudgmentStance,
+    classify_disposition_text,
+)
 
-PARSER_VERSION = "judgment-parser/v2"
+PARSER_VERSION = "judgment-parser/v3"
 
 
 class JudgmentParseStatus(str, Enum):
@@ -39,6 +47,10 @@ class ParsedJudgmentSection(BaseModel):
     exact_text: str = Field(min_length=1)
     confidence: Literal["high", "medium", "low"]
     eligible_for_claim_support: bool
+    speaker: JudgmentSpeaker = JudgmentSpeaker.UNKNOWN
+    stance: JudgmentStance = JudgmentStance.UNKNOWN
+    relation_to_disposition: DispositionRelation = DispositionRelation.UNKNOWN
+    attribution_confidence: AttributionConfidence = AttributionConfidence.LOW
 
 
 class ParsedJudgment(BaseModel):
@@ -51,6 +63,7 @@ class ParsedJudgment(BaseModel):
     unparsed_remainder: str | None = None
     warnings: list[str] = Field(default_factory=list)
     parser_version: str = PARSER_VERSION
+    disposition_codes: list[JudgmentDisposition] = Field(default_factory=list)
 
 
 _SKIP_TAGS = {
@@ -151,6 +164,40 @@ _COURT_REBUTTAL_MARKERS = (
     "難以採信",
     "不足為據",
     "為無理由",
+)
+_LOWER_COURT_MARKERS = (
+    "原審",
+    "原判決",
+    "原裁定",
+    "前審",
+    "第一審",
+    "第二審",
+)
+_LOWER_COURT_REJECTION_MARKERS = (
+    "應予廢棄",
+    "不足採",
+    "無足採",
+    "無可採",
+    "難以採信",
+    "尚有未洽",
+    "有所違誤",
+    "不無違誤",
+    "非可採",
+    "不可採",
+    "不免率斷",
+)
+_CURRENT_COURT_MARKERS = _COURT_MARKERS + (
+    "本院",
+    "本庭",
+)
+_CURRENT_COURT_ADOPTION_MARKERS = (
+    "並無違誤",
+    "尚無違誤",
+    "並無不合",
+    "尚無不合",
+    "並無不當",
+    "尚無不當",
+    "無何違誤",
 )
 
 
@@ -258,6 +305,29 @@ def parse_judgment_blocks(blocks: list[str], *, canonical_jid: str) -> ParsedJud
         )
 
     has_disposition = any(item.role is JudgmentRole.DISPOSITION for item in sections)
+    disposition_codes = _disposition_codes(sections)
+    attributed_sections: list[ParsedJudgmentSection] = []
+    for item in sections:
+        speaker, stance, relation, attribution_confidence, semantic_eligible = (
+            _paragraph_attribution(
+                item,
+                has_disposition=has_disposition,
+                disposition_codes=disposition_codes,
+            )
+        )
+        attributed_sections.append(
+            item.model_copy(
+                update={
+                    "eligible_for_claim_support": item.eligible_for_claim_support
+                    and semantic_eligible,
+                    "speaker": speaker,
+                    "stance": stance,
+                    "relation_to_disposition": relation,
+                    "attribution_confidence": attribution_confidence,
+                }
+            )
+        )
+    sections = attributed_sections
     has_court_reasoning = any(
         item.eligible_for_claim_support
         and item.role in {JudgmentRole.COURT_HOLDING, JudgmentRole.COURT_REASONING}
@@ -278,8 +348,16 @@ def parse_judgment_blocks(blocks: list[str], *, canonical_jid: str) -> ParsedJud
         warnings.append("JUDGMENT_PARSE_PARTIAL")
     if not has_disposition:
         warnings.append("JUDGMENT_DISPOSITION_MISSING")
+    if not disposition_codes or all(
+        code is JudgmentDisposition.UNKNOWN for code in disposition_codes
+    ):
+        warnings.append("JUDGMENT_DISPOSITION_UNRESOLVED")
     if not has_court_reasoning:
         warnings.append("JUDGMENT_COURT_REASONING_MISSING")
+    if any(item.speaker is JudgmentSpeaker.LOWER_COURT for item in sections):
+        warnings.append("JUDGMENT_LOWER_COURT_ATTRIBUTION_PRESENT")
+    if any(item.speaker is JudgmentSpeaker.UNKNOWN for item in sections):
+        warnings.append("JUDGMENT_ATTRIBUTION_UNCERTAIN")
     if unparsed:
         warnings.append("JUDGMENT_UNCLASSIFIED_TEXT")
 
@@ -290,6 +368,130 @@ def parse_judgment_blocks(blocks: list[str], *, canonical_jid: str) -> ParsedJud
         sections=sections,
         unparsed_remainder="\n".join(unparsed) or None,
         warnings=warnings,
+        disposition_codes=disposition_codes,
+    )
+
+
+def _disposition_codes(
+    sections: list[ParsedJudgmentSection],
+) -> list[JudgmentDisposition]:
+    values: list[JudgmentDisposition] = []
+    for section in sections:
+        if section.role is not JudgmentRole.DISPOSITION:
+            continue
+        for value in classify_disposition_text(section.exact_text):
+            if value not in values:
+                values.append(value)
+    return values or [JudgmentDisposition.UNKNOWN]
+
+
+def _paragraph_attribution(
+    section: ParsedJudgmentSection,
+    *,
+    has_disposition: bool,
+    disposition_codes: list[JudgmentDisposition],
+) -> tuple[
+    JudgmentSpeaker,
+    JudgmentStance,
+    DispositionRelation,
+    AttributionConfidence,
+    bool,
+]:
+    """Assign conservative speaker/stance metadata to a parsed paragraph."""
+
+    compact = re.sub(r"\s+", "", unicodedata.normalize("NFKC", section.exact_text))
+    lower_marked = any(marker in compact for marker in _LOWER_COURT_MARKERS)
+    rejection_marked = any(marker in compact for marker in _LOWER_COURT_REJECTION_MARKERS)
+    court_rebuttal_marked = any(marker in compact for marker in _COURT_REBUTTAL_MARKERS)
+    current_marked = any(marker in compact for marker in _CURRENT_COURT_MARKERS)
+    court_adoption_marked = any(
+        marker in compact for marker in _CURRENT_COURT_ADOPTION_MARKERS
+    )
+    explicit_current_rejection = rejection_marked or (current_marked and court_rebuttal_marked)
+    relation = (
+        DispositionRelation.SUPPORTS_RESULT
+        if has_disposition
+        else DispositionRelation.UNKNOWN
+    )
+    rejection_relation = (
+        DispositionRelation.REASON_FOR_REMAND
+        if JudgmentDisposition.VACATED_REMANDED in disposition_codes
+        else relation
+    )
+
+    if section.role is JudgmentRole.DISPOSITION:
+        return (
+            JudgmentSpeaker.CURRENT_COURT,
+            JudgmentStance.DESCRIBES,
+            DispositionRelation.SUPPORTS_RESULT,
+            AttributionConfidence.HIGH,
+            True,
+        )
+    if section.role is JudgmentRole.PARTY_ARGUMENT:
+        return (
+            JudgmentSpeaker.PARTY,
+            JudgmentStance.DESCRIBES,
+            DispositionRelation.BACKGROUND_ONLY,
+            AttributionConfidence.HIGH,
+            False,
+        )
+    if lower_marked and explicit_current_rejection:
+        return (
+            JudgmentSpeaker.CURRENT_COURT,
+            JudgmentStance.REJECTS,
+            rejection_relation if has_disposition else DispositionRelation.UNKNOWN,
+            AttributionConfidence.MEDIUM if not current_marked else AttributionConfidence.HIGH,
+            has_disposition,
+        )
+    if lower_marked:
+        if current_marked and court_adoption_marked:
+            return (
+                JudgmentSpeaker.CURRENT_COURT,
+                JudgmentStance.ADOPTS,
+                relation,
+                AttributionConfidence.HIGH,
+                has_disposition,
+            )
+        if current_marked:
+            return (
+                JudgmentSpeaker.UNKNOWN,
+                JudgmentStance.UNKNOWN,
+                DispositionRelation.UNKNOWN,
+                AttributionConfidence.LOW,
+                False,
+            )
+        return (
+            JudgmentSpeaker.LOWER_COURT,
+            JudgmentStance.DESCRIBES,
+            DispositionRelation.BACKGROUND_ONLY,
+            AttributionConfidence.HIGH,
+            False,
+        )
+    if section.role in {
+        JudgmentRole.COURT_HOLDING,
+        JudgmentRole.COURT_REASONING,
+    }:
+        return (
+            JudgmentSpeaker.CURRENT_COURT,
+            JudgmentStance.REJECTS if court_rebuttal_marked else JudgmentStance.DESCRIBES,
+            relation,
+            AttributionConfidence.HIGH if current_marked else AttributionConfidence.MEDIUM,
+            has_disposition,
+        )
+    if section.role is JudgmentRole.PROCEDURE:
+        return (
+            JudgmentSpeaker.CURRENT_COURT,
+            JudgmentStance.PROCEDURAL_ONLY,
+            DispositionRelation.BACKGROUND_ONLY,
+            AttributionConfidence.MEDIUM,
+            False,
+        )
+    return (
+        JudgmentSpeaker.UNKNOWN,
+        JudgmentStance.UNKNOWN,
+        DispositionRelation.UNKNOWN,
+        AttributionConfidence.LOW,
+        False,
     )
 
 

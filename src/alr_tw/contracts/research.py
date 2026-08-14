@@ -125,7 +125,7 @@ class CoverageState(BaseModel):
     counter_authority_checked: bool = False
     time_context_checked: bool = False
     limitations: list[str] = Field(default_factory=list)
-    # v0.8 coverage receipt fields.  These are additive so v0.7 payloads remain readable.
+    # Current coverage receipt fields.  These are additive so earlier payloads remain readable.
     coverage_complete: bool = False
     absence_claim_allowed: bool = False
     partial_reason_codes: list[str] = Field(default_factory=list)
@@ -231,7 +231,7 @@ class ResearchRun(BaseModel):
     judgment_recall_incomplete: bool = False
     responsibility: ResearchResponsibility = Field(default_factory=ResearchResponsibility)
     registered_plan: RegisteredResearchPlan | None = None
-    # v0.8 fields.  They are server-owned output; callers must not use them to
+    # Current fields.  They are server-owned output; callers must not use them to
     # bypass evaluate_research_sufficiency().
     workflow_complete: bool = False
     research_sufficiency: ResearchSufficiency = ResearchSufficiency.INSUFFICIENT

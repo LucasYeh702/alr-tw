@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
+from typing import Any
 
 from alr_tw.contracts.civil_analysis import (
     AnalysisValidationSeverity,
@@ -18,6 +19,8 @@ from alr_tw.contracts.civil_analysis import (
 from alr_tw.contracts.legal_analysis import (
     AnalysisCoverageScope,
     CivilSubstantiveAnalysis,
+    DomainDefense,
+    DomainBurdenOfProof,
     LegalAnalysisDecision,
     LegalAnalysisEnvelope,
     LegalAnalysisProfile,
@@ -83,6 +86,49 @@ _CORE_DIMENSIONS: dict[LegalAnalysisProfile, frozenset[str]] = {
             "proportionality",
         }
     ),
+}
+
+_REFUSAL_CODES: dict[LegalAnalysisProfile, dict[str, str]] = {
+    LegalAnalysisProfile.CIVIL_PROCEDURE: {
+        "jurisdiction": "CIVIL_PROCEDURE_JURISDICTION_UNRESOLVED",
+        "standing": "CIVIL_PROCEDURE_STANDING_UNRESOLVED",
+        "procedural_prerequisite": "CIVIL_PROCEDURE_PREREQUISITE_UNRESOLVED",
+        "appeal": "CIVIL_PROCEDURE_APPEAL_POSTURE_UNRESOLVED",
+    },
+    LegalAnalysisProfile.CRIMINAL_SUBSTANTIVE: {
+        "offense_elements": "CRIMINAL_OFFENSE_ELEMENTS_UNRESOLVED",
+        "unlawfulness": "CRIMINAL_UNLAWFULNESS_UNRESOLVED",
+        "culpability": "CRIMINAL_CULPABILITY_UNRESOLVED",
+        "intent_or_negligence": "CRIMINAL_MENS_REA_UNRESOLVED",
+    },
+    LegalAnalysisProfile.CRIMINAL_PROCEDURE: {
+        "proceeding_stage": "CRIMINAL_PROCEDURE_STAGE_UNRESOLVED",
+        "prosecution_prerequisite": "CRIMINAL_PROSECUTION_PREREQUISITE_UNRESOLVED",
+        "evidence_admissibility": "CRIMINAL_EVIDENCE_ADMISSIBILITY_UNRESOLVED",
+        "coercive_measure": "CRIMINAL_COERCIVE_MEASURE_UNRESOLVED",
+    },
+    LegalAnalysisProfile.ADMINISTRATIVE: {
+        "action_classification": "ADMINISTRATIVE_ACTION_CLASSIFICATION_UNRESOLVED",
+        "authority_basis": "ADMINISTRATIVE_AUTHORITY_BASIS_UNRESOLVED",
+        "competence": "ADMINISTRATIVE_COMPETENCE_UNRESOLVED",
+        "procedure": "ADMINISTRATIVE_PROCEDURE_UNRESOLVED",
+        "form": "ADMINISTRATIVE_FORM_UNRESOLVED",
+        "substantive_legality": "ADMINISTRATIVE_SUBSTANTIVE_LEGALITY_UNRESOLVED",
+        "discretion_and_purpose": "ADMINISTRATIVE_DISCRETION_UNRESOLVED",
+        "remedy_type": "ADMINISTRATIVE_REMEDY_TYPE_UNRESOLVED",
+        "standing": "ADMINISTRATIVE_STANDING_UNRESOLVED",
+        "prior_proceeding": "ADMINISTRATIVE_PRIOR_PROCEEDING_UNRESOLVED",
+        "filing_period": "ADMINISTRATIVE_FILING_PERIOD_UNRESOLVED",
+        "remedy_interest": "ADMINISTRATIVE_REMEDY_INTEREST_UNRESOLVED",
+        "proportionality": "ADMINISTRATIVE_PROPORTIONALITY_UNRESOLVED",
+        "legitimate_expectation": "ADMINISTRATIVE_LEGITIMATE_EXPECTATION_UNRESOLVED",
+    },
+    LegalAnalysisProfile.CONSTITUTIONAL_REVIEW: {
+        "review_admissibility": "CONSTITUTIONAL_REVIEW_ADMISSIBILITY_UNRESOLVED",
+        "protected_right": "CONSTITUTIONAL_PROTECTED_RIGHT_UNRESOLVED",
+        "proportionality": "CONSTITUTIONAL_PROPORTIONALITY_UNRESOLVED",
+        "judgment_effect": "CONSTITUTIONAL_JUDGMENT_EFFECT_UNRESOLVED",
+    },
 }
 
 
@@ -251,6 +297,22 @@ def validate_legal_analysis(
                     add=add,
                     support_targets=support_targets,
                 )
+            _validate_domain_branch_extras(
+                profile=profile,
+                branch_path=branch_path,
+                issues=[],
+                burden_of_proof=[],
+                defenses=[],
+                procedural_posture=getattr(branch, "procedural_posture", None),
+                refusal_constraints=getattr(branch, "refusal_constraints", []),
+                source_groups=source_groups,
+                normative_groups=normative_groups,
+                evidence_groups=evidence_groups,
+                fact_groups=fact_groups,
+                support_targets=support_targets,
+                add=add,
+                validate_issue_extras=False,
+            )
             continue
 
         issue_count += len(branch.issues)
@@ -286,6 +348,21 @@ def validate_legal_analysis(
                 support_targets=support_targets,
                 source_required_for_all=True,
             )
+        _validate_domain_branch_extras(
+            profile=profile,
+            branch_path=branch_path,
+            issues=branch.issues,
+            burden_of_proof=getattr(branch, "burden_of_proof", []),
+            defenses=getattr(branch, "defenses", []),
+            procedural_posture=getattr(branch, "procedural_posture", None),
+            refusal_constraints=getattr(branch, "refusal_constraints", []),
+            source_groups=source_groups,
+            normative_groups=normative_groups,
+            evidence_groups=evidence_groups,
+            fact_groups=fact_groups,
+            support_targets=support_targets,
+            add=add,
+        )
 
     for index, fact in enumerate(analysis.facts):
         fact_groups.append((f"facts[{index}].fact_id", [fact.fact_id]))
@@ -525,6 +602,163 @@ def validate_legal_analysis(
     )
 
 
+def _validate_domain_branch_extras(
+    *,
+    profile: LegalAnalysisProfile,
+    branch_path: str,
+    issues: Sequence[Any],
+    burden_of_proof: Sequence[DomainBurdenOfProof],
+    defenses: Sequence[DomainDefense],
+    procedural_posture: Any,
+    refusal_constraints: Sequence[Any],
+    source_groups: list[tuple[str, list[str]]],
+    normative_groups: list[tuple[str, list[str]]],
+    evidence_groups: list[tuple[str, list[str]]],
+    fact_groups: list[tuple[str, list[str]]],
+    support_targets: list[tuple[str, list[str], list[str]]],
+    add: Callable[[str, AnalysisValidationSeverity, str, str], None],
+    validate_issue_extras: bool = True,
+) -> None:
+    """Validate additive burden/defense/procedure fields without trusting them.
+
+    The fields are proposals.  Their references enter the same server-owned
+    source/evidence gates as the legacy issue fields; the refusal declarations
+    are never used to waive a blocker.
+    """
+
+    if validate_issue_extras and not burden_of_proof:
+        add(
+            "DOMAIN_BURDEN_NOT_DECLARED",
+            AnalysisValidationSeverity.INFO,
+            f"{branch_path}.burden_of_proof",
+            "This branch did not declare issue-level burden allocation.",
+        )
+    for index, burden in enumerate(burden_of_proof if validate_issue_extras else []):
+        item_path = f"{branch_path}.burden_of_proof[{index}]"
+        source_path = f"{item_path}.normative_source_ids"
+        source_groups.append((source_path, burden.normative_source_ids))
+        normative_groups.append((source_path, burden.normative_source_ids))
+        if not burden.normative_source_ids:
+            add(
+                "DOMAIN_BURDEN_NORMATIVE_SOURCE_REQUIRED",
+                AnalysisValidationSeverity.BLOCKER,
+                source_path,
+                "A domain burden allocation requires a server-owned normative source.",
+            )
+        unresolved = (
+            burden.burden_bearer in {BurdenBearer.UNKNOWN, BurdenBearer.DISPUTED}
+            or burden.burden_shift
+            in {
+                BurdenShiftStatus.UNKNOWN,
+                BurdenShiftStatus.DISPUTED,
+                BurdenShiftStatus.MAY_SHIFT,
+            }
+            or burden.standard_of_proof is StandardOfProof.UNKNOWN
+        )
+        if unresolved:
+            add(
+                "DOMAIN_BURDEN_ALLOCATION_UNRESOLVED",
+                AnalysisValidationSeverity.QUALIFICATION,
+                item_path,
+                "The domain burden allocation remains unresolved.",
+            )
+            _require_declared_refusal_constraint(
+                refusal_constraints,
+                code=f"{profile.value.upper()}_BURDEN_UNRESOLVED",
+                path=item_path,
+                add=add,
+            )
+
+    if validate_issue_extras and not defenses:
+        add(
+            "DOMAIN_DEFENSES_NOT_DECLARED",
+            AnalysisValidationSeverity.INFO,
+            f"{branch_path}.defenses",
+            "This branch did not declare domain defenses or exceptions.",
+        )
+    for index, defense in enumerate(defenses if validate_issue_extras else []):
+        item_path = f"{branch_path}.defenses[{index}]"
+        source_path = f"{item_path}.normative_source_ids"
+        evidence_path = f"{item_path}.evidence_ids"
+        fact_path = f"{item_path}.fact_ids"
+        source_groups.append((source_path, defense.normative_source_ids))
+        normative_groups.append((source_path, defense.normative_source_ids))
+        evidence_groups.append((evidence_path, defense.evidence_ids))
+        fact_groups.append((fact_path, defense.fact_ids))
+        _validate_determinate_item(
+            status=defense.status,
+            source_ids=defense.normative_source_ids,
+            fact_ids=defense.fact_ids,
+            evidence_ids=defense.evidence_ids,
+            item_path=item_path,
+            source_path=source_path,
+            missing_source_code="DOMAIN_DEFENSE_NORMATIVE_SOURCE_REQUIRED",
+            unresolved_code="DOMAIN_DEFENSE_UNRESOLVED",
+            add=add,
+            support_targets=support_targets,
+            source_required_for_all=True,
+        )
+
+    if procedural_posture is None:
+        add(
+            "DOMAIN_PROCEDURAL_POSTURE_NOT_DECLARED",
+            AnalysisValidationSeverity.INFO,
+            f"{branch_path}.procedural_posture",
+            "This branch did not declare a branch-specific procedural posture.",
+        )
+    else:
+        source_path = f"{branch_path}.procedural_posture.source_ids"
+        fact_path = f"{branch_path}.procedural_posture.fact_ids"
+        source_groups.append((source_path, procedural_posture.source_ids))
+        fact_groups.append((fact_path, procedural_posture.fact_ids))
+        if procedural_posture.stage is ProceduralStage.UNKNOWN:
+            add(
+                "DOMAIN_PROCEDURAL_POSTURE_UNRESOLVED",
+                AnalysisValidationSeverity.QUALIFICATION,
+                f"{branch_path}.procedural_posture.stage",
+                "The branch-specific procedural posture remains unresolved.",
+            )
+            _require_declared_refusal_constraint(
+                refusal_constraints,
+                code=f"{profile.value.upper()}_PROCEDURE_UNRESOLVED",
+                path=f"{branch_path}.procedural_posture",
+                add=add,
+            )
+
+    for index, issue in enumerate(issues):
+        if issue.status not in {
+            ElementAssessmentStatus.UNCERTAIN,
+            ElementAssessmentStatus.DISPUTED,
+        }:
+            continue
+        issue_type = getattr(issue.issue_type, "value", str(issue.issue_type))
+        code = _REFUSAL_CODES.get(profile, {}).get(issue_type)
+        if code is not None:
+            _require_declared_refusal_constraint(
+                refusal_constraints,
+                code=code,
+                path=f"{branch_path}.issues[{index}]",
+                add=add,
+            )
+
+
+def _require_declared_refusal_constraint(
+    constraints: Sequence[Any],
+    *,
+    code: str,
+    path: str,
+    add: Callable[[str, AnalysisValidationSeverity, str, str], None],
+) -> None:
+    if any(item.code == code for item in constraints):
+        return
+    add(
+        "DOMAIN_REFUSAL_CONSTRAINT_NOT_DECLARED",
+        AnalysisValidationSeverity.QUALIFICATION,
+        path,
+        f"Unresolved domain condition should declare refusal constraint {code}.",
+    )
+
+
 def _validate_determinate_item(
     *,
     status: ElementAssessmentStatus,
@@ -540,12 +774,12 @@ def _validate_determinate_item(
     source_required_for_all: bool = False,
 ) -> None:
     if source_required_for_all and not source_ids:
-        add(
-            missing_source_code,
-            AnalysisValidationSeverity.BLOCKER,
-            source_path,
-            "Every domain issue requires a server-owned normative source.",
-        )
+            add(
+                missing_source_code,
+                AnalysisValidationSeverity.BLOCKER,
+                source_path,
+                "Every determinate analysis item requires a server-owned normative source.",
+            )
     if status in {ElementAssessmentStatus.MET, ElementAssessmentStatus.NOT_MET}:
         if not source_ids and not source_required_for_all:
             add(
@@ -563,7 +797,10 @@ def _validate_determinate_item(
             )
         else:
             support_targets.append((item_path, fact_ids, evidence_ids))
-    elif status is ElementAssessmentStatus.UNCERTAIN:
+    elif status in {
+        ElementAssessmentStatus.UNCERTAIN,
+        ElementAssessmentStatus.DISPUTED,
+    }:
         add(
             unresolved_code,
             AnalysisValidationSeverity.QUALIFICATION,

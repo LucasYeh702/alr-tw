@@ -1,4 +1,4 @@
-"""Bounded, provider-neutral applicability resolver coverage for v0.8."""
+"""Bounded, provider-neutral applicability resolver coverage for the current preview."""
 
 from datetime import date
 

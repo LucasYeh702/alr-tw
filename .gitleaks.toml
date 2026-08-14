@@ -1,0 +1,7 @@
+title = "ALR-TW public release secret-scan policy"
+
+[allowlist]
+description = "The historical output-privacy test is a synthetic redaction probe, not a credential. Keep the allowlist limited to that test path."
+paths = [
+  '''^tests/unit/test_v061_output_privacy\\.py$''',
+]
