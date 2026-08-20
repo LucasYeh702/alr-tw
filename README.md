@@ -6,6 +6,8 @@ ALR-TW v0.10.0 是一個讓外部 Agent／LLM 以 MCP 使用台灣法律研究�
 
 它不是法律意見服務，也不是完整台灣法律資料庫。v0.10.0 仍是 public preview；任何輸出都必須由具資格的人員依官方原文、適用時點與個案事實複核。
 
+本 repo 不包含 LLM，也不包含 agent 實作。Repo 內的 demo ranking／示範 ranking 參數只用於展示與測試，不是 production ranking 設定；正式部署的模型、資料集、排序與權重由部署者自行治理。
+
 ## 先看懂 ALR-TW
 
 ALR-TW 的角色不是替 Agent「想出法律答案」，而是把法律研究中容易被忽略的步驟留下紀錄並加上限制：問題理解、來源尋找、官方回查、時點與角色辨識、證據綁定，以及最後的答案驗證。
@@ -43,6 +45,7 @@ Agent 依已驗證證據起草
 - 不承諾指定歷史日期的完整法規版本、普通裁判全域召回率、所有程序裁定正文、完整審級關係或附件／OCR 全覆蓋。
 - 立法院連結的 PDF／DOC 不在本 connector 中解析；立法材料不等於現行有效法條，也不能代表單一立法者意旨。
 - `not_found` 或有限範圍內查不到，不代表全球不存在，也不代表實務一致。
+- 目前尚無 semantic opposition classifier；有限範圍的反方候選查詢不能證明全球沒有反面見解或實務一致。
 
 當來源時點、角色、內容或主張支持不足時，系統會保留限制、要求人工複核或 fail closed，而不是猜測一個完整答案。
 
@@ -56,6 +59,8 @@ Agent 依已驗證證據起草
 
 `ready_for_draft` 只代表研究流程走完，不代表研究充分。最後仍須由
 `validate_legal_answer` 決定草稿是否可以展示。
+
+內建 runtime 的 `provider-neutral` snapshot receipt 介面不代表內建 provider 已經簽發 receipt；只有接入 `receipt-aware` provider adapter 的部署，才可能取得較完整的 receipt 綁定。內建服務的答案姿態最多通常是 `conditional`／`qualified`。`safe_to_draft` 只代表可以進入起草階段，不授權直接展示；`blocked` 或 `refusal_only` 不會帶出 answer body。
 
 ## 主要安全邊界
 
