@@ -10,12 +10,14 @@ from uuid import uuid4
 
 from alr_tw import __version__
 from alr_tw.config import Settings, parse_retention
+from alr_tw.contracts.historical_law import HistoricalLawQuery
 from alr_tw.contracts.legal_analysis import LegalAnalysisEnvelope
 from alr_tw.contracts.interop import (
     DiscoveryMode,
     ResearchPlanProposal,
     interoperability_capabilities,
 )
+from alr_tw.contracts.providers import DataMode, ToolProfile
 from alr_tw.contracts.research import ResearchDepth
 from alr_tw.harness.constants import FinalAction, ToolExecutionMode, TrustFailureReason
 from alr_tw.harness.orchestrator import _trust_gate_trace
@@ -25,6 +27,8 @@ from alr_tw.providers.official import (
     OfficialJudgmentProvider,
     OfficialLawProvider,
 )
+from alr_tw.providers.legislative_history import LegislativeHistoryBackend
+from alr_tw.providers.sdk import PublicLawBackendResult
 from alr_tw.providers.tlr import TlrSemanticRecallProvider
 from alr_tw.research.provider_executor import ProviderObligationExecutor, ProviderSet
 from alr_tw.research.service import ResearchService
@@ -52,6 +56,15 @@ from .tools import (
     validate_citation_tool,
 )
 from .request_normalization import normalize_call_tool_params
+from .tool_catalog import (
+    SERVER_OWNED_TOOL_NAMES,
+    TOOL_CATALOG_BY_NAME,
+    filter_tool_definitions,
+    resolve_tool_profile,
+    tool_is_available,
+    unavailable_tool_details,
+    unavailable_tool_message,
+)
 from ..legal_nlp.privacy import mask_sensitive_text
 from ..legal_nlp.query_normalizer import normalize_query
 
@@ -82,18 +95,11 @@ RECORDED_AGENTIC_TOOLS = {
     "extract_answer_claims",
     "check_claim_support",
 }
-SERVER_OWNED_TOOLS = {
-    "get_legal_research_capabilities",
-    "research_legal_question",
-    "submit_legal_research_plan",
-    "continue_legal_research",
-    "get_legal_research_state",
-    "get_legal_research_finalization",
-    "lookup_legal_source",
-    "validate_legal_analysis",
-    "validate_legal_answer",
-    "purge_research_storage",
-}
+SERVER_OWNED_TOOLS = SERVER_OWNED_TOOL_NAMES
+LEGISLATIVE_HISTORY_SYNTHETIC_REASON = "LEGISLATIVE_HISTORY_UNSUPPORTED_IN_SYNTHETIC_MODE"
+LEGISLATIVE_HISTORY_BACKEND_ERROR = "LEGISLATIVE_HISTORY_BACKEND_ERROR"
+LEGISLATIVE_HISTORY_BACKEND_QUERY_MISMATCH = "LEGISLATIVE_HISTORY_BACKEND_QUERY_MISMATCH"
+LEGISLATIVE_HISTORY_BACKEND_SOURCES_NOT_ALLOWED = "LEGISLATIVE_HISTORY_BACKEND_SOURCES_NOT_ALLOWED"
 
 
 @dataclass
@@ -140,16 +146,41 @@ class McpSession:
         *,
         ready: bool = False,
         research_service: ResearchService | None = None,
+        settings: Settings | None = None,
+        tool_profile: ToolProfile | str | None = None,
+        legislative_history_backend: LegislativeHistoryBackend | None = None,
     ) -> None:
+        self._settings = settings if settings is not None else Settings.from_env()
+        requested_profile = self._settings.tool_profile if tool_profile is None else tool_profile
+        self._tool_profile = resolve_tool_profile(requested_profile)
         self._initialize_seen = ready
         self._ready = ready
         self._agentic_runs: dict[str, AgenticRunState] = {}
         self._active_agentic_run_id: str | None = None
         self._research_service = research_service
+        self._legislative_history_backend = legislative_history_backend
+
+    @property
+    def settings(self) -> Settings:
+        return self._settings
+
+    @property
+    def tool_profile(self) -> ToolProfile:
+        return self._tool_profile
+
+    def available_tool_definitions(self) -> list[dict[str, Any]]:
+        return tool_definitions(self._tool_profile)
+
+    def legislative_history_backend(self) -> LegislativeHistoryBackend:
+        if self._legislative_history_backend is None:
+            from alr_tw.providers.legislative_yuan import LegislativeYuanDataBackend
+
+            self._legislative_history_backend = LegislativeYuanDataBackend(max_results=50)
+        return self._legislative_history_backend
 
     def research_service(self) -> ResearchService:
         if self._research_service is None:
-            settings = Settings.from_env()
+            settings = self._settings
             root = settings.storage_path or Path.home() / ".cache" / "alr-tw"
             store = SqliteStore(root)
             if settings.data_mode.value == "synthetic":
@@ -197,7 +228,7 @@ class McpSession:
             if not self._ready:
                 return error_response(request_id, -32002, "Server not initialized")
             if method == "tools/list":
-                return success_response(request_id, {"tools": tool_definitions()})
+                return success_response(request_id, {"tools": self.available_tool_definitions()})
             if method == "tools/call":
                 return success_response(
                     request_id,
@@ -292,7 +323,12 @@ def initialize_result(params: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def tool_definitions() -> list[dict[str, Any]]:
+def tool_definitions(profile: ToolProfile | str | None = None) -> list[dict[str, Any]]:
+    resolved_profile = Settings.from_env().tool_profile if profile is None else profile
+    return filter_tool_definitions(_all_tool_definitions(), resolved_profile)
+
+
+def _all_tool_definitions() -> list[dict[str, Any]]:
     return _server_owned_tool_definitions() + [
         {
             "name": "agentic_legal_research",
@@ -389,7 +425,7 @@ def tool_definitions() -> list[dict[str, Any]]:
         },
         {
             "name": "get_claim_grounding_policy",
-            "description": "Return the current public claim-grounding contract used by ALR-TW v0.9.1.",
+            "description": "Return the current public claim-grounding contract used by ALR-TW v0.10.0.",
             "inputSchema": {
                 "type": "object",
                 "properties": {},
@@ -736,6 +772,37 @@ def _server_owned_tool_definitions() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "lookup_legislative_history",
+            "description": (
+                "Query bounded official Legislative Yuan datasets for candidate-only "
+                "legislative-history locators. This does not verify normative law or "
+                "fetch linked documents."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "law_name": {"type": "string"},
+                    "law_identifier": {"type": "string"},
+                    "as_of_date": {"type": "string", "format": "date"},
+                    "bounded_scope": {"type": "string"},
+                    "bill_no": {"type": "string"},
+                    "term": {"type": "string"},
+                    "session": {"type": "string"},
+                    "max_results": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                    },
+                },
+                "required": ["as_of_date", "bounded_scope"],
+                "anyOf": [
+                    {"required": ["law_name"]},
+                    {"required": ["law_identifier"]},
+                ],
+                "additionalProperties": False,
+            },
+        },
+        {
             "name": "validate_legal_analysis",
             "description": (
                 "Validate an untrusted multi-branch legal analysis envelope against "
@@ -860,6 +927,14 @@ def call_tool(params: dict[str, Any], *, session: McpSession | None = None) -> d
     normalized_call = normalize_call_tool_params(params)
     name = normalized_call.name
     arguments = normalized_call.arguments
+    profile = session.tool_profile if session is not None else Settings.from_env().tool_profile
+
+    if name in TOOL_CATALOG_BY_NAME and not tool_is_available(name, profile):
+        return _tool_error(
+            "TOOL_NOT_AVAILABLE_IN_PROFILE",
+            unavailable_tool_message(name, profile),
+            unavailable_tool_details(name, profile),
+        )
 
     if name in SERVER_OWNED_TOOLS:
         if session is None:
@@ -981,9 +1056,16 @@ def _call_server_owned_tool(
 ) -> dict[str, Any]:
     if name == "get_legal_research_capabilities":
         _reject_unexpected_keys(arguments, set())
+        available_tool_names = [
+            definition["name"] for definition in session.available_tool_definitions()
+        ]
         return interoperability_capabilities(
-            Settings.from_env().data_mode
+            session.settings.data_mode,
+            active_mcp_tool_profile=session.tool_profile,
+            available_mcp_tool_names=available_tool_names,
         ).model_dump(mode="json")
+    if name == "lookup_legislative_history":
+        return _lookup_legislative_history(arguments, session)
     service = session.research_service()
     if name == "research_legal_question":
         _reject_unexpected_keys(arguments, {"query", "constraints", "client_id", "request_id"})
@@ -1000,7 +1082,7 @@ def _call_server_owned_tool(
                 "retention",
             },
         )
-        settings = Settings.from_env()
+        settings = session.settings
         depth = ResearchDepth(str(constraints.get("research_depth", "standard")))
         as_of_value = constraints.get("as_of_date")
         if as_of_value is not None and not isinstance(as_of_value, str):
@@ -1115,6 +1197,102 @@ def _call_server_owned_tool(
         )
         return result.model_dump(mode="json")
     raise ValueError(f"Unknown server-owned tool: {name}")
+
+
+def _lookup_legislative_history(
+    arguments: dict[str, Any],
+    session: McpSession,
+) -> dict[str, Any]:
+    _reject_unexpected_keys(
+        arguments,
+        {
+            "law_name",
+            "law_identifier",
+            "as_of_date",
+            "bounded_scope",
+            "bill_no",
+            "term",
+            "session",
+            "max_results",
+        },
+    )
+    query = HistoricalLawQuery.model_validate(
+        {
+            **arguments,
+            "query_id": f"ly-{uuid4().hex}",
+            "include_legislative_history": True,
+        }
+    )
+    if session.settings.data_mode is DataMode.SYNTHETIC:
+        return _legislative_history_payload(
+            query,
+            status="blocked",
+            reason_codes=[LEGISLATIVE_HISTORY_SYNTHETIC_REASON],
+            backend_result=None,
+            backend_invoked=False,
+        )
+
+    try:
+        raw_result = session.legislative_history_backend().search(query)
+        backend_result = (
+            raw_result
+            if isinstance(raw_result, PublicLawBackendResult)
+            else PublicLawBackendResult.model_validate(raw_result)
+        )
+    except Exception:
+        return _legislative_history_payload(
+            query,
+            status="error",
+            reason_codes=[LEGISLATIVE_HISTORY_BACKEND_ERROR],
+            backend_result=None,
+            backend_invoked=True,
+        )
+
+    boundary_errors: list[str] = []
+    if backend_result.query_id != query.query_id:
+        boundary_errors.append(LEGISLATIVE_HISTORY_BACKEND_QUERY_MISMATCH)
+    if backend_result.sources:
+        boundary_errors.append(LEGISLATIVE_HISTORY_BACKEND_SOURCES_NOT_ALLOWED)
+    if boundary_errors:
+        return _legislative_history_payload(
+            query,
+            status="error",
+            reason_codes=boundary_errors,
+            backend_result=None,
+            backend_invoked=True,
+        )
+
+    backend_payload = backend_result.model_dump(mode="json")
+    return _legislative_history_payload(
+        query,
+        status=str(backend_payload["status"]),
+        reason_codes=list(backend_result.reason_codes),
+        backend_result=backend_payload,
+        backend_invoked=True,
+    )
+
+
+def _legislative_history_payload(
+    query: HistoricalLawQuery,
+    *,
+    status: str,
+    reason_codes: list[str],
+    backend_result: dict[str, Any] | None,
+    backend_invoked: bool,
+) -> dict[str, Any]:
+    return {
+        "schema_version": "alr-tw.legislative-history-lookup/v1",
+        "query_id": query.query_id,
+        "status": status,
+        "reason_codes": reason_codes,
+        "backend_invoked": backend_invoked,
+        "candidate_only": True,
+        "normative_law_verified": False,
+        "linked_documents_fetched": False,
+        "pdf_doc_parsing": False,
+        "promulgated_version_verified": False,
+        "backend_result": backend_result,
+    }
 
 
 def _summarize_tool_input(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -1369,6 +1547,29 @@ def _tool_success(payload: dict[str, Any]) -> dict[str, Any]:
         "schema_version": "alr-tw.mcp_tool_result/v1",
         "data": payload,
         "error": None,
+    }
+
+
+def _tool_error(code: str, message: str, details: dict[str, Any]) -> dict[str, Any]:
+    payload = {
+        "ok": False,
+        "schema_version": "alr-tw.mcp_tool_result/v1",
+        "data": None,
+        "error": {
+            "code": code,
+            "message": message,
+            "retryable": False,
+            "details": details,
+        },
+    }
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": json.dumps(payload, ensure_ascii=False, indent=2),
+            }
+        ],
+        "isError": True,
     }
 
 

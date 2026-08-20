@@ -5,7 +5,70 @@ LLM and no agent implementation. The external MCP client supplies the agent
 role; the harness records tool calls, validates citations, computes the trust
 gate, and returns a canonical trace.
 
-## v0.9.1 agent-neutral research flow
+## v0.10.0 agent tool profiles and selection
+
+v0.10.0 adds a profile-gated MCP catalog and an optional Legislative Yuan
+locator connector while preserving the server-owned trust boundary.
+
+The MCP catalog classifies tools as `server_owned`, `legacy_compatibility`, or
+`synthetic_demo`. The session resolves one profile at startup:
+
+| Profile | Available tools |
+|---|---|
+| `verified` | `server_owned` only |
+| `compatibility` | `server_owned` plus `legacy_compatibility` |
+| `demo` | all catalog entries, including `synthetic_demo` |
+
+`official_only` and `hybrid_verified` default to `verified`; `synthetic` defaults
+to `demo`. A deployer may explicitly select a profile with
+`ALR_TW_MCP_TOOL_PROFILE`. An unknown value fails closed during startup. The
+same profile gate applies to both `tools/list` and `tools/call`; calling a hidden
+catalog entry directly returns `TOOL_NOT_AVAILABLE_IN_PROFILE`.
+
+### Tool selection matrix
+
+| Use case | First choice | Boundary |
+|---|---|---|
+| Single formal authority lookup | `lookup_legal_source` | Source lookup is not answer validation |
+| Multi-step research | `research_legal_question` and `continue_legal_research` | Continue server-owned obligations by `operation_id` |
+| Analysis validation | `validate_legal_analysis` | Validate the untrusted analysis envelope and references |
+| Answer validation | `validate_legal_answer` | Validate claims against evidence from the same run |
+| Synthetic demo or CI | `agentic_legal_research`, `legal_search`, `run_agentic_demo`, `build_validation_report`, `exact_law_lookup`, `exact_judgment_lookup`, and `exact_constitutional_lookup` | Synthetic fixtures only; never for real cases |
+
+This matrix is deterministic routing guidance and a server gate. It does not
+guarantee that an arbitrary model will select the correct tool. Demo descriptions
+are marked `[DEMO ONLY]`; compatibility entries are marked
+`[LEGACY COMPATIBILITY]`.
+
+External discovery, including a web search when the deployment permits it, is
+not categorically forbidden. Its output may identify candidate identifiers or
+locators only. A formal citation must return through server-owned official
+verification and source promotion; discovery output itself is never evidence.
+
+### Optional Legislative Yuan locator connector
+
+The Legislative Yuan connector is optional, read-only, bounded, and
+candidate-only. It is a locator connector, not a normative-law provider and not
+a live production-ready claim. Its bounded dataset roles are:
+
+| Dataset ID | Locator role | Boundary |
+|---|---|---|
+| `20` | Proposal | Proposal metadata and locator only; it does not directly provide the legislative-reason body |
+| `19` | Article comparison | Candidate comparison material, not effective law |
+| `46` | Committee bill material | Committee-stage candidate only |
+| `8` | Caucus negotiation | Caucus-record candidate only |
+| `48` | Passed third-reading bill | Third-reading candidate only, not a promulgated version |
+
+Linked PDF and DOC files are not parsed. If no formally promulgated version can
+be bound, the result remains `qualified`. Legislative material must not be
+treated as effective statutory text or as the single legislative intent; it
+must return to server-owned official verification before any evidence or final
+answer use. Synthetic mode never calls the connector. In `official_only` or
+`hybrid_verified`, a client explicitly invokes the network lookup by calling
+`lookup_legislative_history`; merely starting the stdio server or listing tools
+does not fetch Legislative Yuan data.
+
+## v0.10.0 agent-neutral research flow
 
 New clients should first call `get_legal_research_capabilities`.
 
@@ -64,7 +127,7 @@ Counter-authority results are bounded lexical candidate discovery followed by
 official verification; they do not establish semantic opposition, global
 absence, or practice-wide consensus.
 
-The v0.9.1 public contracts also expose structural applicability resolution,
+The v0.10.0 public contracts also expose structural applicability resolution,
 authority/judgment lineage, and public-law provider adapters. Use the
 provider-neutral interfaces for explicit source relationships, court/procedure
 metadata, administrative rules or legislative materials. These records remain
@@ -73,7 +136,9 @@ authorize a final answer.
 
 ## MCP Client Config
 
-Use stdio. The public server needs no API keys and makes no network calls.
+Use stdio. The public server needs no API keys. Synthetic mode makes no network
+calls; live modes call official providers only when the client invokes a tool
+whose contract requires retrieval.
 
 ```json
 {
@@ -88,6 +153,9 @@ Use stdio. The public server needs no API keys and makes no network calls.
 ```
 
 ## Legacy synthetic trace flow
+
+This compatibility flow is available only with the `demo` profile. Its tools
+are synthetic and must never be used for a real case or a formal citation.
 
 1. Call `begin_agentic_run` with a public-safe query and keep the returned
    `run_id`.

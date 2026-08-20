@@ -1,18 +1,29 @@
 # Official Providers
 
-ALR-TW v0.9.1 以三個獨立 provider 取得台灣中央法規、普通法院裁判與憲法法庭資料。官方即時內容通過結構、一致性與 freshness 檢查後，會固定成 server-owned evidence；呼叫端不能自行宣告某段文字為官方資料。Provider-neutral snapshot receipt 是可選的 provider 契約，並非內建 runtime 已簽發的保證；目前內建 `ResearchService` 尚未注入或持久化 live-provider receipt，因此服務 finalization 最多為 `conditional`／`qualified`，`ordinary` 保留給 receipt-aware provider adapter。
+ALR-TW v0.10.0 以三個獨立 provider 取得台灣中央法規、普通法院裁判與憲法法庭資料。官方即時內容通過結構、一致性與 freshness 檢查後，會固定成 server-owned evidence；呼叫端不能自行宣告某段文字為官方資料。Provider-neutral snapshot receipt 是可選的 provider 契約，並非內建 runtime 已簽發的保證；目前內建 `ResearchService` 尚未注入或持久化 live-provider receipt，因此服務 finalization 最多為 `conditional`／`qualified`，`ordinary` 保留給 receipt-aware provider adapter。
 
-v0.9.1 另公開行政規則、行政解釋、訴願與立法資料的 provider-neutral
+v0.10.0 另公開行政規則、行政解釋、訴願與立法資料的 provider-neutral
 contracts／SDK，但不在本 repo 內附公法資料 provider、corpus 或 index。部署者
 可用 `PublicLawProviderAdapter` 接入自有來源；所有結果仍須由 server metadata
 binding 與既有 evidence／finalization gates 驗證。
+
+立法院是例外的 locator-only connector：`lookup_legislative_history` 可在 live
+data mode 明示呼叫 ID20、ID19、ID46、ID8 與 ID48 的官方 targeted JSON API，
+但只回 candidate。它不下載 linked PDF／DOC、不產生 normative source，也不證明
+正式公布版本；資料集缺少可驗證日期或唯一關聯時固定維持 partial／qualified。
+ID46 沒有可直接用法規名稱穩定比對的欄位，因此委員會議案 locator 需要 caller
+提供 `bill_no`，或先由同次 ID20 提案結果建立議案編號關聯；ID20 無法建立關聯時
+不會猜測委員會議案。
+官方 host 目前需要 OpenSSL 的 client-only legacy-server-connect 相容旗標；實作只
+對固定 `data.ly.gov.tw` origin 建立該 TLS context，保留 CA／hostname 驗證並禁止
+handshake 後 renegotiation。無法安全建立連線時會 fail closed。
 
 ## 法務部法規 Provider
 
 - 來源：全國法規資料庫官方結構化資料與官方網頁；
 - 能力：法規名稱、基本關鍵詞、精確條文、現行／廢止狀態；
 - 結構化內容與官方網頁內容衝突時，來源降為 `verification_failed`，不得作正式證據；
-- 第一版不承諾指定歷史日期的完整版本、地方自治法規或所有附件解析。
+- v0.10.0 不承諾指定歷史日期的完整版本、地方自治法規或所有附件解析。
 
 ## 司法院普通裁判 Provider
 

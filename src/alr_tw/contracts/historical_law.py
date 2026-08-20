@@ -14,6 +14,7 @@ from collections.abc import Collection
 from datetime import date, datetime
 from enum import Enum
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -37,6 +38,114 @@ class HistoricalLawRecordRole(str, Enum):
     LEGISLATIVE_HISTORY = "legislative_history"
 
 
+class LegislativeMaterialRole(str, Enum):
+    """Typed role of an official Legislative Yuan locator.
+
+    These roles describe the legislative record that was located.  They do
+    not turn a proposal, report, caucus record, or third-reading record into
+    normative law text.
+    """
+
+    PROPOSAL_REASON = "proposal_reason"
+    PROPOSAL_DOCUMENT = "proposal_document"
+    ARTICLE_REASON = "article_reason"
+    ARTICLE_COMPARISON = "article_comparison"
+    COMMITTEE_REPORT = "committee_report"
+    COMMITTEE_BILL = "committee_bill"
+    CAUCUS_RECORD = "caucus_record"
+    THIRD_READING_TEXT = "third_reading_text"
+    THIRD_READING_RECORD = "third_reading_record"
+    PROMULGATED_VERSION_LINK = "promulgated_version_link"
+
+
+class LegislativeStage(str, Enum):
+    """Legislative process stage attached to a locator."""
+
+    PROPOSAL = "proposal"
+    COMMITTEE_REVIEW = "committee_review"
+    CAUCUS = "caucus"
+    SECOND_READING = "second_reading"
+    THIRD_READING = "third_reading"
+    PROMULGATION = "promulgation"
+    UNKNOWN = "unknown"
+
+
+_LEGISLATIVE_HOSTS = {"data.ly.gov.tw", "ppg.ly.gov.tw", "lis.ly.gov.tw"}
+
+
+class LegislativeHistoryRecord(BaseModel):
+    """One bounded, typed Legislative Yuan record or locator.
+
+    ``text`` is populated only from structured JSON fields supplied by the
+    official dataset.  The connector deliberately does not parse linked PDF
+    or DOC files.  A record may therefore be locator-only and remain
+    candidate material until the server-owned source promotion gate accepts
+    it.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal["alr-tw.legislative-history-record/v1"] = (
+        "alr-tw.legislative-history-record/v1"
+    )
+    record_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    role: LegislativeMaterialRole
+    bill_no: str | None = Field(default=None, min_length=1, max_length=128)
+    term: str | None = Field(default=None, min_length=1, max_length=32)
+    session: str | None = Field(default=None, min_length=1, max_length=32)
+    stage: LegislativeStage = LegislativeStage.UNKNOWN
+    document_date: date | None = None
+    source_id: str | None = Field(default=None, pattern=_IDENTIFIER_PATTERN)
+    candidate_id: str | None = Field(default=None, pattern=_IDENTIFIER_PATTERN)
+    locator_url: str | None = Field(default=None, max_length=2000)
+    title: str | None = Field(default=None, max_length=500)
+    text: str | None = Field(default=None, max_length=4000)
+    metadata: dict[str, str | int | bool | None] = Field(default_factory=dict)
+    candidate_only: Literal[True] = True
+
+    @staticmethod
+    def _validate_locator_url(value: str) -> None:
+        try:
+            parsed = urlparse(value)
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError("LEGISLATIVE_HISTORY_LOCATOR_URL_INVALID") from exc
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname is None
+            or parsed.hostname.lower() not in _LEGISLATIVE_HOSTS
+            or parsed.username is not None
+            or parsed.password is not None
+            or port not in {None, 443}
+            or parsed.fragment
+        ):
+            raise ValueError("LEGISLATIVE_HISTORY_LOCATOR_URL_INVALID")
+
+    @model_validator(mode="after")
+    def validate_record(self) -> LegislativeHistoryRecord:
+        if self.source_id is None and self.candidate_id is None:
+            raise ValueError("LEGISLATIVE_HISTORY_SOURCE_OR_CANDIDATE_REQUIRED")
+        if self.locator_url is not None:
+            self._validate_locator_url(self.locator_url)
+        return self
+
+
+# Readable aliases for deployers that use the shorter role/model names.
+LegislativeRecord = LegislativeHistoryRecord
+LegislativeRole = LegislativeMaterialRole
+
+
+def _same_legislative_scope_value(actual: str | None, expected: str) -> bool:
+    """Compare term/session values without treating zero-padding as a mismatch."""
+    if actual is None:
+        return True
+    normalized_actual = actual.strip()
+    normalized_expected = expected.strip()
+    if normalized_actual.isdecimal() and normalized_expected.isdecimal():
+        return int(normalized_actual) == int(normalized_expected)
+    return normalized_actual == normalized_expected
+
+
 class HistoricalLawQuery(BaseModel):
     """Bounded historical-law lookup request.
 
@@ -53,6 +162,9 @@ class HistoricalLawQuery(BaseModel):
     query_id: str = Field(pattern=_IDENTIFIER_PATTERN)
     law_identifier: str | None = Field(default=None, min_length=1, max_length=300)
     law_name: str | None = Field(default=None, min_length=1, max_length=300)
+    bill_no: str | None = Field(default=None, min_length=1, max_length=128)
+    term: str | None = Field(default=None, min_length=1, max_length=32)
+    session: str | None = Field(default=None, min_length=1, max_length=32)
     as_of_date: date
     bounded_scope: str = Field(min_length=1, max_length=500)
     include_legislative_history: bool = True
@@ -62,8 +174,16 @@ class HistoricalLawQuery(BaseModel):
     def validate_query(self) -> HistoricalLawQuery:
         if self.law_identifier is None and self.law_name is None:
             raise ValueError("HISTORICAL_LAW_IDENTIFIER_OR_NAME_REQUIRED")
+        for field_name in ("law_identifier", "law_name"):
+            value = getattr(self, field_name)
+            if value is not None and not value.strip():
+                raise ValueError(f"HISTORICAL_LAW_{field_name.upper()}_REQUIRED")
         if not self.bounded_scope.strip():
             raise ValueError("HISTORICAL_LAW_BOUNDED_SCOPE_REQUIRED")
+        for field_name in ("bill_no", "term", "session"):
+            value = getattr(self, field_name)
+            if value is not None and not value.strip():
+                raise ValueError(f"HISTORICAL_LAW_{field_name.upper()}_REQUIRED")
         return self
 
 
@@ -80,9 +200,16 @@ class HistoricalLawResolution(BaseModel):
     law_identifier: str = Field(min_length=1, max_length=300)
     as_of_date: date
     bounded_scope: str = Field(min_length=1, max_length=500)
+    bill_no: str | None = Field(default=None, min_length=1, max_length=128)
+    term: str | None = Field(default=None, min_length=1, max_length=32)
+    session: str | None = Field(default=None, min_length=1, max_length=32)
     provider_result: PublicLawProviderResult
     normative_source_ids: list[str] = Field(default_factory=list, max_length=50)
     legislative_material_source_ids: list[str] = Field(default_factory=list, max_length=50)
+    legislative_records: list[LegislativeHistoryRecord] = Field(
+        default_factory=list,
+        max_length=50,
+    )
     server_owned: Literal[True] = True
     semantic_entailment_performed: Literal[False] = False
     warnings: list[str] = Field(default_factory=list, max_length=32)
@@ -116,6 +243,30 @@ class HistoricalLawResolution(BaseModel):
             for source_id in legislative
         ):
             raise ValueError("HISTORICAL_LAW_LEGISLATIVE_SOURCE_TYPE_MISMATCH")
+        record_ids = [record.record_id for record in self.legislative_records]
+        if len(record_ids) != len(set(record_ids)):
+            raise ValueError("HISTORICAL_LAW_LEGISLATIVE_RECORD_DUPLICATE")
+        if self.bill_no is not None and any(
+            record.bill_no not in {None, self.bill_no} for record in self.legislative_records
+        ):
+            raise ValueError("HISTORICAL_LAW_BILL_MISMATCH")
+        if self.term is not None and any(
+            not _same_legislative_scope_value(record.term, self.term)
+            for record in self.legislative_records
+        ):
+            raise ValueError("HISTORICAL_LAW_TERM_MISMATCH")
+        if self.session is not None and any(
+            not _same_legislative_scope_value(record.session, self.session)
+            for record in self.legislative_records
+        ):
+            raise ValueError("HISTORICAL_LAW_SESSION_MISMATCH")
+        for record in self.legislative_records:
+            if record.source_id is None:
+                continue
+            if record.source_id in normative:
+                raise ValueError("HISTORICAL_LAW_LEGISLATIVE_RECORD_NORMATIVE_OVERLAP")
+            if record.source_id not in legislative:
+                raise ValueError("HISTORICAL_LAW_LEGISLATIVE_RECORD_SOURCE_NOT_IN_RESULT")
         return self
 
 
@@ -220,6 +371,11 @@ def validate_historical_law_resolution(
 __all__ = [
     "HistoricalLawQuery",
     "HistoricalLawRecordRole",
+    "LegislativeHistoryRecord",
+    "LegislativeMaterialRole",
+    "LegislativeRecord",
+    "LegislativeRole",
+    "LegislativeStage",
     "HistoricalLawResolution",
     "HistoricalLawValidationResult",
     "validate_historical_law_resolution",

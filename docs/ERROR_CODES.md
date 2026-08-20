@@ -1,6 +1,6 @@
 # ALR-TW Error Codes
 
-## v0.9.1 contract codes
+## v0.10.0 contract codes
 
 | Code | Meaning |
 |---|---|
@@ -23,11 +23,17 @@
 | `HISTORICAL_LAW_NORMATIVE_ROLE_MISMATCH` | 法條版本 source role 不是 normative text |
 | `HISTORICAL_LAW_SOURCE_ROLE_INVALID` | Provider 回傳的法條／立法資料分類無法安全驗證 |
 
-## v0.9.1 provider and research codes
+## v0.10.0 provider and research codes
 
 | Code | Meaning |
 |---|---|
 | `CONFIG_MODE_REQUIRED` | Live command 未明確選擇 `official_only`／`hybrid_verified` |
+| `TOOL_NOT_AVAILABLE_IN_PROFILE` | 工具不在目前 session-fixed MCP profile；未執行並回傳替代工具 |
+| `LEGISLATIVE_HISTORY_UNSUPPORTED_IN_SYNTHETIC_MODE` | Synthetic mode 不會連線立法院；請改用 live data mode 或 synthetic fixture 測試 |
+| `LEGISLATIVE_HISTORY_BACKEND_ERROR` | 立法院 backend 執行失敗；未回傳或升格候選資料 |
+| `LEGISLATIVE_HISTORY_BACKEND_QUERY_MISMATCH` | Backend 回應不屬於目前 server-owned query；整份結果丟棄 |
+| `LEGISLATIVE_HISTORY_BACKEND_SOURCES_NOT_ALLOWED` | Candidate-only backend 嘗試回傳 source/evidence promotion；整份結果丟棄 |
+| `LEGISLATIVE_YUAN_*` | 立法院官方資料集的 bounded fetch、schema、時點、去重或範圍原因碼；表示 partial／retry 邊界，不授權 absence、normative law 或 final answer |
 | `INVALID_IDENTIFIER` | JID、正式裁判字號或憲法字號無法正規化 |
 | `AMBIGUOUS_FORMAL_CITATION` | 正式裁判字號對應多個官方 JID，需補民／刑事等類別 |
 | `OFFICIAL_SESSION_REQUIRED` | 某個可選官方來源需要 operator session；普通裁判網站主路徑不使用此碼 |
@@ -85,7 +91,7 @@
 | `COUNTER_AUTHORITY_COVERAGE_INCOMPLETE` | 未執行、未完成或失敗的反面見解搜尋必須揭露 |
 | `PROCEDURAL_POSTURE_UNRESOLVED` | 程序階段尚未確認 |
 
-## v0.9.1 applicability and authority-lineage codes
+## v0.10.0 applicability and authority-lineage codes
 
 | Code | Meaning |
 |---|---|
@@ -115,7 +121,7 @@
 | `AUTHORITY_LINEAGE_NOT_FOUND_IS_BOUNDED_ONLY` | `not_found_in_scope` 僅限 bounded scope，不支持全球不存在主張 |
 | `NEGATIVE_TREATMENT_SEMANTIC_CLASSIFICATION_NOT_PERFORMED` | Provider treatment 尚未經 semantic opposition classifier |
 
-## v0.9.1 public-law provider and SDK codes
+## v0.10.0 public-law provider and SDK codes
 
 | Code | Meaning |
 |---|---|
@@ -176,7 +182,7 @@
 | `SNAPSHOT_RECEIPT_MISSING_LEGACY` | 舊紀錄沒有 receipt；不得據此宣稱 ordinary sufficiency |
 | `ANSWER_REFUSAL_ONLY` | finalization 只允許結構化拒答，不回傳草稿 |
 
-## v0.9.1 semantic-verifier plugin codes
+## v0.10.0 semantic-verifier plugin codes
 
 | Code | Meaning |
 |---|---|
@@ -208,7 +214,7 @@
 | `SEMANTIC_VERIFIER_TARGET_DUPLICATED` | plugin 對同一 target 回傳多筆 finding |
 | `SEMANTIC_VERIFIER_TARGET_COVERAGE_PARTIAL` | completed plugin 結果未涵蓋所有 requested targets |
 
-## v0.9.1 provider conformance and boundary codes
+## v0.10.0 provider conformance and boundary codes
 
 | Code | Meaning |
 |---|---|
@@ -245,7 +251,7 @@
 | DEPLOYER_CREDENTIALS_FORBIDDEN | 公開套件不得含 credentials |
 | DEPLOYER_DEPLOYMENT_PARAMETERS_FORBIDDEN | 公開套件不得含 deployment parameters |
 
-## v0.9.1 legal-analysis domain constraint codes
+## v0.10.0 legal-analysis domain constraint codes
 
 | Code | Meaning |
 |---|---|

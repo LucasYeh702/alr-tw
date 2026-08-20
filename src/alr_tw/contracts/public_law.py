@@ -24,7 +24,7 @@ _OPAQUE_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
 
 
 class PublicLawMaterialType(str, Enum):
-    """Material families covered by the current v0.9.1 public-law contract."""
+    """Material families covered by the current v0.10.0 public-law contract."""
 
     ADMINISTRATIVE_RULE = "administrative_rule"
     ADMINISTRATIVE_REGULATION = "administrative_rule"

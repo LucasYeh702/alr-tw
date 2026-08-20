@@ -72,6 +72,7 @@ from .providers import (
     ProviderCapabilities,
     ProviderHealth,
     ProviderHealthStatus,
+    ToolProfile,
 )
 from .interop import (
     AuthorityLocatorProposal,
@@ -158,6 +159,11 @@ from .historical_law import (
     HistoricalLawRecordRole,
     HistoricalLawResolution,
     HistoricalLawValidationResult,
+    LegislativeHistoryRecord,
+    LegislativeMaterialRole,
+    LegislativeRecord,
+    LegislativeRole,
+    LegislativeStage,
     validate_historical_law_resolution,
 )
 from .semantic_verifier import (
@@ -343,6 +349,11 @@ __all__ = [
     "HistoricalLawRecordRole",
     "HistoricalLawResolution",
     "HistoricalLawValidationResult",
+    "LegislativeHistoryRecord",
+    "LegislativeMaterialRole",
+    "LegislativeRecord",
+    "LegislativeRole",
+    "LegislativeStage",
     "LegalContextProvider",
     "LegalContextResult",
     "LegalContextResultStatus",
@@ -428,6 +439,7 @@ __all__ = [
     "SnapshotReceiptStatus",
     "TemporalApplicabilityStatus",
     "TemporalAssessment",
+    "ToolProfile",
     "TrustStatus",
     "evaluate_research_sufficiency",
     "interoperability_capabilities",

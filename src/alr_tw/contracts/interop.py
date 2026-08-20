@@ -11,7 +11,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .legal_analysis import LegalAnalysisProfile
-from .providers import DataMode
+from .providers import DataMode, ToolProfile
 from .sources import MaterialType
 
 _IDENTIFIER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$"
@@ -240,6 +240,8 @@ class InteroperabilityCapabilities(BaseModel):
         "agent_neutral_legal_research"
     )
     active_data_mode: DataMode
+    active_mcp_tool_profile: ToolProfile | None = None
+    available_mcp_tool_names: list[str] = Field(default_factory=list)
     supported_discovery_modes: list[DiscoveryMode]
     accepted_plan_schema: Literal["alr-tw.research-plan-proposal/v1"] = (
         "alr-tw.research-plan-proposal/v1"
@@ -281,9 +283,16 @@ class InteroperabilityCapabilities(BaseModel):
     limitations: list[str]
 
 
-def interoperability_capabilities(data_mode: DataMode) -> InteroperabilityCapabilities:
+def interoperability_capabilities(
+    data_mode: DataMode,
+    *,
+    active_mcp_tool_profile: ToolProfile | None = None,
+    available_mcp_tool_names: list[str] | None = None,
+) -> InteroperabilityCapabilities:
     return InteroperabilityCapabilities(
         active_data_mode=data_mode,
+        active_mcp_tool_profile=active_mcp_tool_profile,
+        available_mcp_tool_names=list(available_mcp_tool_names or ()),
         supported_discovery_modes=[
             DiscoveryMode.SERVER_MANAGED,
             DiscoveryMode.CLIENT_ASSISTED,

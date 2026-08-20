@@ -1,6 +1,6 @@
 # ALR-TW Trust Model
 
-## v0.9.1 evidence promotion
+## v0.10.0 evidence promotion
 
 Final validation 只讀取該 run 在 server-side SQLite 中已連結、未到期且 `trust_status=evidence_eligible` 的 evidence。MCP caller 即使提交看似完整的 official URL、hash 或 verified time，也只能視為 caller-attested metadata，不能升格為正式證據。
 
@@ -21,7 +21,7 @@ ALR-TW separates source discovery from final citation authority.
 | `synthetic` | Demo and test fixture | No |
 | `unknown` | Missing or unsupported source tier | No |
 
-自 v0.9.1 起，legacy answer／provider-promotion helpers 將收到的 raw citation
+自 v0.10.0 起，legacy answer／provider-promotion helpers 將收到的 raw citation
 mappings 視為 caller-controlled，並忽略 caller 自行宣告的
 `identifier_resolution`。這類 helper 不執行 claim-support validation，因此
 永遠不能設定法律答案的

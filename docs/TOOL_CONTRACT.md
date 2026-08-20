@@ -1,6 +1,6 @@
 # ALR-TW Tool Contract
 
-## v0.9.1 interoperability tools
+## v0.10.0 interoperability tools
 
 | Tool | Required input | Contract |
 |---|---|---|
@@ -22,7 +22,7 @@ hash、`official=true` 或 client trust attestation。整份 analysis 固定為
 `issue_limited` 固定附帶 scope qualification。每個議題都要有 normative
 source，確定的 `met`／`not_met` 結論另須 fact 或 eligible evidence；民法
 每個 element 必須有一筆 burden-of-proof record。
-v0.9.1 另允許五個 issue-oriented 分支攜帶 issue-level
+v0.10.0 另允許五個 issue-oriented 分支攜帶 issue-level
 `burden_of_proof`、`defenses`、branch-specific `procedural_posture` 與
 `refusal_constraints`；民法分支沿用 element-level burden／defense schema。
 這些仍是 `untrusted_client_proposal`，server 會把其 source、fact、evidence
@@ -45,7 +45,7 @@ structure and trust decision，不是 final-answer decision，且固定：
 explicit-allowlist synthetic fixture provider；live context 未確認時 fail
 closed。
 
-## v0.9.1 provider-neutral applicability and source contracts
+## v0.10.0 provider-neutral applicability and source contracts
 
 除 MCP research tools 外，公開套件提供可替換的 provider contracts／facades：
 
@@ -59,7 +59,7 @@ closed。
 production 參數。candidate、server-owned source 與 evidence 的信任層級仍由既有
 verification／finalization gates 決定。
 
-## v0.9.1 provider contracts
+## v0.10.0 provider contracts
 
 `HistoricalLawQuery`／`HistoricalLawResolution`／
 `validate_server_historical_law` 提供立法院／其他官方歷史法規 provider 的
@@ -74,7 +74,7 @@ adapter，不內建立法院 endpoint、token、資料庫、索引或 production
 metadata issuer、source promoter、完整時點 scope 或法條版本時，結果維持
 blocked／qualified，不能宣稱歷史法規已確認。
 
-## v0.9.1 semantic-verifier plugin contract
+## v0.10.0 semantic-verifier plugin contract
 
 公開套件提供 `alr-tw.semantic-verifier-request/v1`、
 `alr-tw.semantic-verifier-result/v1` 與
@@ -90,7 +90,7 @@ schema 錯誤、foreign／stale reference 或 authority sentinel 偽造一律
 blocked，不會被解讀為 `uncertain` 或 scoped absence。核心 runtime 不依賴
 任何模型、prompt、embedding 或 semantic provider。
 
-## v0.9.1 provider conformance and optional sidecar boundary
+## v0.10.0 provider conformance and optional sidecar boundary
 
 validate_provider_conformance 對 common ProviderResult 執行同一套
 provider-neutral gate：server_source_ids、server_evidence_ids 與對應
@@ -113,7 +113,26 @@ credentials、private data 與 deployment parameters 均不得 bundled；公開 
 
 詳見 [Agent-neutral interoperability contract](INTEROPERABILITY_CONTRACT.md)。
 
-## v0.9.1 server-managed tools
+## v0.10.0 MCP tool profiles
+
+MCP tool exposure 與 provider data mode 分開建模，但在沒有明示 override 時使用
+安全預設。Session 啟動時只解析一次設定，後續 `tools/list`、`tools/call` 與
+`get_legal_research_capabilities` 都使用同一份 catalog 與 profile：
+
+| Profile | 預設使用情境 | 暴露工具 |
+|---|---|---|
+| `verified` | `official_only`、`hybrid_verified` | server-owned tools |
+| `compatibility` | 明示遷移需求 | server-owned + legacy compatibility tools |
+| `demo` | `synthetic`、CI、教學 | 全部工具，包括 synthetic fixtures |
+
+部署者可用 `ALR_TW_MCP_TOOL_PROFILE` 明示選擇。未知值會在 session 啟動時
+fail closed。工具若不在 active profile，不只從 `tools/list` 隱藏；直接或 client
+快取後的 `tools/call` 也會以 `TOOL_NOT_AVAILABLE_IN_PROFILE` 拒絕，且不執行
+底層工具。Capabilities 回應的 `active_mcp_tool_profile` 與
+`available_mcp_tool_names` 是 machine-readable discovery metadata，不是 evidence
+或 trust decision。
+
+## v0.10.0 server-managed tools
 
 | Tool | Required input | Contract |
 |---|---|---|
@@ -122,6 +141,7 @@ credentials、private data 與 deployment parameters 均不得 bundled；公開 
 | `get_legal_research_state` | `run_id` | 唯讀；無 provider call、無 TTL extension |
 | `get_legal_research_finalization` | `run_id` | 回傳 server-owned `research_sufficiency`、Coverage v2、可選 provider snapshot receipts、answer mode、blockers 與 qualifications；這是 pre-draft／`safe_to_draft` 姿態，不授權呈現答案；structured refusal 由答案驗證拒答路徑回傳 |
 | `lookup_legal_source` | `text` | 精確來源 lookup；可選 run/operation linkage；`claim_verified=false` |
+| `lookup_legislative_history` | `law_name` 或 `law_identifier`，以及 `as_of_date`、`bounded_scope`；可選 `bill_no`、`term`、`session`、`max_results` | 僅在 live data mode 對立法院官方資料集執行有界限的 candidate-only locator 查詢；不下載 linked PDF／DOC、不驗證現行法條或正式公布版本；synthetic mode 固定 fail closed |
 | `validate_legal_answer` | `run_id`, `answer_text`, `operation_id` | 只用 server-owned evidence；核心主張應提供 optional `claim_bindings`；回 `validated`, `qualified`, `blocked` |
 | `purge_research_storage` | `scope`, `confirm` | `scope=run` 需 `run_id`；同步清除 managed records |
 
@@ -142,10 +162,10 @@ All MCP tool results are wrapped in:
 }
 ```
 
-## v0.9.1 answer validation
+## v0.10.0 answer validation
 
 `claim_bindings` 是 optional array；每筆包含 `claim_id`、`claim_text`、
-`claim_type`、`importance`、至少一個同 run 的 `evidence_ids`，以及 v0.9.1
+`claim_type`、`importance`、至少一個同 run 的 `evidence_ids`，以及 v0.10.0
 可選的 `issue_ids` 與 `citation_occurrences`。允許的 `claim_type` 是
 `law_rule`、`court_view`、`disposition`、`fact`、`procedure`、`limitation`。
 
@@ -178,7 +198,7 @@ fixture 不能支撐法律答案，counter `not_found_in_scope` 不能證明全�
 反面見解或實務一致。
 
 Snapshot receipt 是 provider-neutral contract，不表示 bundled provider 已簽發
-receipt。v0.9.1 內建 `ResearchService` 尚未注入或持久化 live-provider generation
+receipt。v0.10.0 內建 `ResearchService` 尚未注入或持久化 live-provider generation
 receipt，因此 built-in live output 最多為 `conditional`／`qualified`；`ordinary`
 只保留給 receipt-aware provider adapter 完成同一 run 的 server-owned binding。
 

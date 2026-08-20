@@ -9,11 +9,14 @@ source promoter remain the only trust gates.
 
 from __future__ import annotations
 
+import json
 from typing import Protocol, runtime_checkable
 
 from alr_tw.contracts.historical_law import (
     HistoricalLawQuery,
     HistoricalLawResolution,
+    LegislativeHistoryRecord,
+    LegislativeMaterialRole,
 )
 from alr_tw.contracts.public_law import (
     PublicLawMaterialType,
@@ -100,7 +103,15 @@ class LegislativeHistoryProviderAdapter:
         public_request = PublicLawSearchRequest(
             query_id=query.query_id,
             query=" ".join(
-                value for value in (query.law_identifier, query.law_name) if value
+                value
+                for value in (
+                    query.law_identifier,
+                    query.law_name,
+                    query.bill_no,
+                    query.term,
+                    query.session,
+                )
+                if value
             ),
             material_types=[
                 PublicLawMaterialType.HISTORICAL_STATUTE,
@@ -143,21 +154,31 @@ class LegislativeHistoryProviderAdapter:
             for source in result.sources
             if source.material_type is PublicLawMaterialType.LEGISLATIVE_MATERIAL
         ]
+        records, record_error = self._records_from_candidates(result)
+        warnings = [] if normative else ["HISTORICAL_LAW_NORMATIVE_SOURCE_MISSING"]
+        if records and not any(
+            record.role is LegislativeMaterialRole.PROMULGATED_VERSION_LINK for record in records
+        ):
+            warnings.append("HISTORICAL_LAW_PROMULGATED_VERSION_MISSING")
+        if record_error is not None:
+            warnings.append(record_error)
         try:
+            if record_error is not None:
+                raise ValueError(record_error)
             return HistoricalLawResolution(
                 query_id=query.query_id,
                 provider_id=self._provider_id,
                 law_identifier=query.law_identifier or query.law_name or "unknown",
                 as_of_date=query.as_of_date,
                 bounded_scope=query.bounded_scope,
+                bill_no=query.bill_no,
+                term=query.term,
+                session=query.session,
                 provider_result=result,
                 normative_source_ids=normative,
                 legislative_material_source_ids=legislative,
-                warnings=(
-                    []
-                    if normative
-                    else ["HISTORICAL_LAW_NORMATIVE_SOURCE_MISSING"]
-                ),
+                legislative_records=records,
+                warnings=warnings,
             )
         except ValueError:
             blocked = result.model_copy(
@@ -179,9 +200,40 @@ class LegislativeHistoryProviderAdapter:
                 law_identifier=query.law_identifier or query.law_name or "unknown",
                 as_of_date=query.as_of_date,
                 bounded_scope=query.bounded_scope,
+                bill_no=query.bill_no,
+                term=query.term,
+                session=query.session,
                 provider_result=blocked,
-                warnings=["HISTORICAL_LAW_SOURCE_ROLE_INVALID"],
+                warnings=[
+                    "HISTORICAL_LAW_SOURCE_ROLE_INVALID" if record_error is None else record_error
+                ],
             )
+
+    @staticmethod
+    def _records_from_candidates(
+        result: PublicLawProviderResult,
+    ) -> tuple[list[LegislativeHistoryRecord], str | None]:
+        records: list[LegislativeHistoryRecord] = []
+        for candidate in result.candidates:
+            raw = candidate.metadata.get("legislative_record")
+            if raw is None:
+                encoded = candidate.metadata.get("legislative_record_json")
+                if not isinstance(encoded, str):
+                    continue
+                try:
+                    raw = json.loads(encoded)
+                except (TypeError, ValueError):
+                    return [], "HISTORICAL_LAW_RECORD_JSON_INVALID"
+            if raw is None:
+                continue
+            try:
+                record = LegislativeHistoryRecord.model_validate(raw)
+            except (TypeError, ValueError) as exc:
+                return [], f"HISTORICAL_LAW_RECORD_SCHEMA_INVALID:{type(exc).__name__}"
+            if record.candidate_id != candidate.candidate_id:
+                return [], "HISTORICAL_LAW_RECORD_CANDIDATE_MISMATCH"
+            records.append(record)
+        return records, None
 
     @staticmethod
     def _capability_query() -> HistoricalLawQuery:

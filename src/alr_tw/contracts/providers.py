@@ -14,6 +14,14 @@ class DataMode(str, Enum):
     HYBRID_VERIFIED = "hybrid_verified"
 
 
+class ToolProfile(str, Enum):
+    """MCP tool exposure profile, independent from the provider data mode."""
+
+    VERIFIED = "verified"
+    COMPATIBILITY = "compatibility"
+    DEMO = "demo"
+
+
 class ProviderCapabilities(BaseModel):
     """Machine-readable limits for a source provider.
 

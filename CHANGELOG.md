@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.10.0 - 2026-08-20
+
+### Added
+
+- 新增單一 MCP tool catalog 與 `verified`、`compatibility`、`demo` 三種
+  tool profile；capabilities 會回報 session 實際 profile 與可用工具名稱。
+- 新增 server-owned `lookup_legislative_history` 與 optional、唯讀且有界限的
+  立法院開放資料 connector，將議案提案、法律條文對照表、委員會議案、
+  黨團協商及三讀議案建模為 typed、candidate-only legislative locators。
+- 新增 Agent 工具選型指南與可複製的 agent-neutral `templates/AGENTS.md`。
+
+### Changed
+
+- `official_only` 與 `hybrid_verified` 預設只列出 server-owned tools；
+  `synthetic` 預設保留完整 demo surface。需要舊工具的部署可明示設定
+  `ALR_TW_MCP_TOOL_PROFILE=compatibility` 或 `demo`。
+- Synthetic fixture tools 與 legacy compatibility tools 在 description 首行
+  分別標示 `[DEMO ONLY]` 與 `[LEGACY COMPATIBILITY]`，並導向對應的
+  server-owned tools。
+
+### Security
+
+- MCP `tools/list` 與 `tools/call` 共用同一個 session-fixed profile gate；
+  隱藏工具的直接或快取呼叫固定回
+  `TOOL_NOT_AVAILABLE_IN_PROFILE`，未知 profile 在啟動時 fail closed。
+- 立法院 connector 不接受 caller 任意 URL，限制 HTTPS official hosts、
+  redirect、timeout、payload size、JSON shape、結果數及查詢範圍。
+- `data.ly.gov.tw` 目前需要 legacy-server-connect TLS 相容；connector 僅對固定
+  官方 origin 使用該 client-side 初始連線旗標，仍保留 CA／hostname 驗證並
+  禁止連線建立後重新協商。
+- 立法資料維持 candidate-only；linked PDF／DOC 不在本版解析，也不能取代
+  正式公布法規、server-owned evidence promotion 或答案驗證。
+
+### Known limitations
+
+- 立法院資料集的屆期、欄位與文件日期覆蓋不一致；缺少可驗證時點、正式公布
+  版本或唯一議案關聯時，結果維持 partial／qualified，不能由 scoped miss
+  推論不存在立法理由或沿革。
+- 本版不提供關係文書 PDF／DOC 解析、完整歷史法規版本庫或 production SLA。
+
 ## 0.9.1 - 2026-08-14
 
 ### Security

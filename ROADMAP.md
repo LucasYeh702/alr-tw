@@ -1,14 +1,14 @@
 # Roadmap
 
-## Current release: v0.9.1
+## Current release: v0.10.0
 
-v0.9.1 是 agent-neutral、provider-neutral 的台灣法律研究驗證 harness，已完成
+v0.10.0 是 agent-neutral、provider-neutral 的台灣法律研究驗證 harness，已完成
 研究充分性、Coverage v2、finalization、歷史法規、裁判語境安全與可插拔 sidecar
 契約。它不是完整台灣
 法律資料庫，也不提供法律意見或 production SLA；真實資料 provider 由部署者
 依公開契約自行接入。
 
-目前 v0.9.1 已具備的核心能力：
+目前 v0.10.0 已具備的核心能力：
 
 - `workflow_complete`、`research_sufficiency` 與 `answer_mode` 分離；
   `ready_for_draft` 僅表示流程階段，不代表答案可直接呈現；
@@ -42,6 +42,98 @@ Provider-neutral snapshot receipt 目前只是公開契約與一致性檢查介�
 `ResearchService` 尚未簽發或持久化 live-provider receipt，因此服務輸出最多為
 `conditional`／`qualified`；`ordinary` 保留給 receipt-aware provider adapter
 完成同一 run 的 server-owned receipt binding 後使用。
+
+## v0.10.0：官方立法 locator 與 Agent 工具面收斂
+
+v0.10.0 完成兩個分離驗收的 lane：加入有界限的立法院官方資料 locator
+connector，以及降低 MCP client 誤選 synthetic／legacy 工具的 Agent
+Experience（AX）防呆。兩者都維持既有 server-owned trust boundary；本版仍不作
+完整立法沿革、文件解析或 production-ready 承諾。
+
+### Lane A：MCP 工具分類、導流與模式收斂
+
+v0.9.1 的 `tools/list` 在 `synthetic`、`official_only` 與 `hybrid_verified`
+三種 data mode 都回傳同一組 24 個工具：10 個 server-owned research tools 與
+14 個 legacy／compatibility tools。14 個工具並非全部都是寫死的 mock；其中
+包含 synthetic fixture lookup、legacy trace flow、policy introspection 與 claim helpers，
+不應未分類就一律以 demo 命名或移除。
+
+已實作：
+
+- 建立單一、可測試的 tool catalog，將工具明確分為 `server_owned`、
+  `legacy_compatibility` 與 `synthetic_demo`；`tools/list`、`tools/call`、文件與
+  capabilities 使用同一分類，不維護多套可漂移的清單。
+- synthetic fixture 工具的 description 首行加上穩定的
+  `[DEMO ONLY]` 標記、不可用於真實案件的說明，並指向
+  `lookup_legal_source`、`research_legal_question` 或其他對應的
+  server-owned 工具；legacy flow 另以 `[LEGACY COMPATIBILITY]` 標示。
+- 新增與 data mode 分離、且由 session 啟動時一次解析的 MCP tool
+  profile，包含 `verified`、`compatibility` 與 `demo`：
+  `official_only`／`hybrid_verified` 預設為 `verified`，`synthetic` 預設為
+  `demo`，未知 profile 在啟動時 fail closed。
+- 未列於當前 profile 的工具不只從 `tools/list` 隱藏；直接或快取後的
+  `tools/call` 也應回傳穩定的 `TOOL_NOT_AVAILABLE_IN_PROFILE` 與建議
+  替代工具，不得形成只管 discovery、不管 invocation 的假邊界。
+- 保留明示 opt-in 的 migration profile，但不宣稱這是零破壞性變更。
+  live mode 的預設 `tools/list` 會改變，應在 changelog、client guide 與
+  release notes 說明升級方式。
+
+文件與 AX 驗收：
+
+- 在 README 與 `docs/AGENT_CLIENT_GUIDE.md` 新增 Agent 工具選型矩陣，
+  分開單一法源查證、多步驟研究、分析結構驗證、答案驗證與
+  demo／CI 情境，並列出每個選擇的 trust effect。
+- 提供 optional、agent-neutral 的 `templates/AGENTS.md`，但不宣稱某一
+  IDE／模型為唯一支援目標，也不全面禁止外部 discovery。外部搜尋結果
+  只能作 candidate，正式引用仍必須回到 server-owned 官方驗證鏈。
+- 建立工具選擇回歸 fixtures，至少覆蓋「查某法第 X 條」、「查正式裁判」、
+  「進行完整爭點研究」與「執行 synthetic demo」。驗收可證明工具面
+  與錯誤路由為 deterministic，但不宣稱任意 LLM 的工具選擇正確率
+  可達 100%。
+
+### Lane B：立法院官方立法資料 locator connector
+
+本版已實作：
+
+- 在既有 `LegislativeHistoryBackend` 與 `LegislativeHistoryProviderAdapter`
+  契約上實作 optional、唯讀的官方 connector，不把 endpoint、credential、
+  全量 corpus 或 deployment state 寫入公開 contract。
+- 以立法院開放資料 ID20、ID19、ID46、ID8 與 ID48 的 targeted JSON API
+  建立結構化 locator；linked PDF／DOC 不在本版下載或解析。
+- 查詢需明示 `as_of_date`、法規識別碼或名稱與 bounded scope。Typed roles
+  分開 `proposal_document`、`article_comparison`、`committee_bill`、
+  `caucus_record` 與 `third_reading_record`；只有未來實際解析相應正文時才可
+  使用 `proposal_reason`、`committee_report` 或 `third_reading_text`。
+- 不接受 caller 提供的任意 URL。Connector 檢查 HTTPS official host allowlist、
+  redirect、content type、回應大小與 JSON schema；locator 一律先當 candidate，
+  本版 connector 本身不簽發 evidence 或正式公布版本。
+- 議案文件、條文對照、委員會議案、黨團協商與三讀紀錄不得互相代替。只有
+  立法資料而沒有可綁定的正式公布法版本時，結果維持
+  `qualified`，不得宣稱該理由就是最終有效條文的單一「立法者意旨」。
+- 立法院開放資料的屆期範圍與較早期沿革查詢要分開報告；API timeout、
+  文書缺漏、無法建立唯一關聯或官方來源衝突時 fail closed，不用
+  `not_found` 推論「沒有立法理由」。
+
+本版驗收：
+
+- 合成 contract tests 覆蓋多提案併案、不同階段理由衝突、缺少最終公布版本、
+  惡意／跨網域 URL、redirect、過大或異常 payload、timeout 與較早沿革缺口。
+- optional live smoke 分開報告各 dataset 的 HTTP／schema 可用性與 candidate
+  數；外部服務 timeout 或空集合不作為離線 CI 的通過條件，也不改寫成完整
+  `not_found`。
+- README、tool contract 與資料來源顯名同步，並將「功能已實作」、
+  「live 已驗證」與「production ready」分開陳述。
+
+後續版本再評估官方關係文書 PDF／DOC 解析、hash／snapshot binding、正式公布
+版本關聯、較早期立法沿革與多議案併案圖；完成前不得把 locator 宣稱為已取得的
+立法理由正文。
+
+### v0.10.0 共同非目標
+
+- 不宣稱內建 provider 已覆蓋所有台灣法規、裁判、立法沿革或 OCR；
+- 不把 tool description、AGENTS 範本或模型選擇測試當成 runtime trust gate；
+- 不以立法資料取代現行有效法條、正式公布版本或答案層級的
+  claim／citation validation。
 
 ## 已知限制
 

@@ -16,6 +16,14 @@ from alr_tw.providers.legislative_history import (
     LegislativeHistoryBackend,
     LegislativeHistoryProviderAdapter,
 )
+from alr_tw.providers.legislative_yuan import (
+    LegislativeYuanBackend,
+    LegislativeYuanConnector,
+    LegislativeYuanDataBackend,
+    LegislativeYuanHttpClient,
+    LegislativeYuanHttpTransport,
+    LegislativeYuanProviderAdapter,
+)
 from alr_tw.providers.receipt_adapter import (
     ProviderReceiptIssuer,
     ReceiptAwareProviderAdapter,
@@ -35,6 +43,12 @@ __all__ = [
     "PublicLawSourcePromoter",
     "LegislativeHistoryBackend",
     "LegislativeHistoryProviderAdapter",
+    "LegislativeYuanBackend",
+    "LegislativeYuanConnector",
+    "LegislativeYuanDataBackend",
+    "LegislativeYuanHttpClient",
+    "LegislativeYuanHttpTransport",
+    "LegislativeYuanProviderAdapter",
     "ProviderReceiptIssuer",
     "ReceiptAwareProviderAdapter",
     "ReceiptAwareProviderEnvelope",
