@@ -1,6 +1,6 @@
 # Evaluation Methodology
 
-This v0.9.0 repository includes a small synthetic test set only. Synthetic
+This v0.9.1 repository includes a small synthetic test set only. Synthetic
 records are contract fixtures and cannot support a legal answer.
 
 The evaluation checks:

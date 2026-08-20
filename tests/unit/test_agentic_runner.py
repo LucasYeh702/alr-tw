@@ -15,14 +15,16 @@ def test_agentic_legal_research_traces_tool_decisions_and_final_gate():
         "answer_validation",
     ]
     assert [item["source_tier"] for item in result["evidence"]] == [
-        "official",
+        "synthetic",
         "external_semantic_recall",
     ]
-    assert [item["source_id"] for item in result["evidence"] if item["citation_use"] == "allow_final"] == [
+    assert [item["source_id"] for item in result["evidence"] if item["citation_use"] == "demo_only"] == [
         "official-demo-law-184"
     ]
-    assert result["trust_gate"]["safe_to_present"] is True
-    assert result["final_action"] == "answer"
+    assert result["trust_gate"]["safe_to_present"] is False
+    assert result["trust_gate"]["validation_summary"]["demo_only"] is True
+    assert result["final_action"] == "refuse"
+    assert result["answer"] is None
 
 
 def test_agentic_legal_research_fails_closed_without_final_citation():

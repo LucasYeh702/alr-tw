@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.9.1 - 2026-08-14
+
+### Security
+
+- Legacy `answer_with_validation()` 現將 raw citation mappings 一律視為
+  caller-controlled，且移除 caller 自行宣告的 `identifier_resolution`；僅靠
+  `source_tier=official`、URL、hash 或偽造的 `hash_match` 不再能取得
+  `final_eligible` 或 `safe_to_present=true`。
+- Legacy metadata validation 不再將 `support=not_checked` 誤標為
+  `claim_support_level=source_verified`。法律答案呈現仍須使用 server-owned
+  `ResearchService.validate_legal_answer`。
+
+### Changed
+
+- `SyntheticOfficialAdapter` 保留相容名稱，但其 manifest 與 records 改為
+  `synthetic`／`demo_only`；legacy agentic demo 現會 fail closed，且不回傳可呈現
+  answer body。
+- 新增 caller-attested official URL、偽造 resolver 狀態、legacy trust gate 與
+  synthetic demo-only 的回歸測試；公開 MCP 的 caller-attestation 拒絕行為維持不變。
+
 ## 0.9.0 - 2026-08-14
 
 ### Added
@@ -31,7 +51,7 @@
 - 新增公開發布用 repository-scoped secret-scan policy，將 synthetic redaction
   fixture 的例外範圍限制在單一測試檔案。
 
-以下版本段落是歷史變更紀錄，不代表目前 v0.9.0 的能力或公開宣稱。
+以下版本段落是歷史變更紀錄，不代表目前 v0.9.1 的能力或公開宣稱。
 
 ## 0.8.0 - 2026-08-08
 

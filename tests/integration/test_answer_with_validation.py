@@ -10,7 +10,7 @@ def test_answer_validation_summary_tracks_rejected_and_unverifiable_citations():
         ],
     )
 
-    assert result["validation_summary"]["has_final_citation"] is True
+    assert result["validation_summary"]["has_final_citation"] is False
     assert result["validation_summary"]["has_rejected_citation"] is True
     assert result["validation_summary"]["has_unverifiable_citation"] is True
     assert result["validation_summary"]["safe_to_present"] is False

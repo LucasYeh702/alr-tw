@@ -99,6 +99,12 @@ def run_agentic_legal_research(query: str) -> dict[str, Any]:
         for candidate, verification in zip(candidates, verifications, strict=True)
         if verification["citation_use"] == "allow_final"
     ]
+    demo_citations = [
+        candidate.to_dict()
+        for candidate, verification in zip(candidates, verifications, strict=True)
+        if verification["citation_use"] == "demo_only"
+    ]
+    presentation_citations = final_citations or demo_citations
     tool_trace.append(
         _trace_step(
             "citation_validation",
@@ -109,16 +115,23 @@ def run_agentic_legal_research(query: str) -> dict[str, Any]:
                 "candidate_only_count": sum(
                     1 for item in verifications if item["citation_use"] == "allow_candidate_only"
                 ),
+                "demo_only_count": sum(
+                    1 for item in verifications if item["citation_use"] == "demo_only"
+                ),
             },
         )
     )
 
-    answer = "Synthetic answer guarded by official-grounded citation validation."
+    answer = "Synthetic demo output; it is not a presentable legal answer."
     coverage: dict[str, str | dict[str, object]] = {
         "has_laws": "present" if candidates else "absent",
         "has_judgments": "not_checked",
     }
-    trust_gate = evaluate_trust_gate(answer=answer, citations=final_citations, coverage=coverage)
+    trust_gate = evaluate_trust_gate(
+        answer=answer,
+        citations=presentation_citations,
+        coverage=coverage,
+    )
     tool_trace.append(
         _trace_step(
             "trust_gate",
@@ -130,7 +143,7 @@ def run_agentic_legal_research(query: str) -> dict[str, Any]:
         )
     )
 
-    wrapped_answer = answer_with_validation(answer, final_citations)
+    wrapped_answer = answer_with_validation(answer, presentation_citations)
     tool_trace.append(
         _trace_step(
             "answer_validation",

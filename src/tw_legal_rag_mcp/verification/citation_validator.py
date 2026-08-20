@@ -120,6 +120,28 @@ def validate_citation(
     }
 
 
+def validate_untrusted_citation(
+    citation: dict[str, Any],
+    require_final: bool = False,
+    config: SourcePolicyConfig = DEFAULT_SOURCE_POLICY_CONFIG,
+) -> dict[str, Any]:
+    """Validate caller/provider metadata without trusting server-owned state.
+
+    ``identifier_resolution`` is deliberately removed because only a governed
+    resolver may establish a hash match. A raw mapping cannot carry that trust
+    decision across the Python API boundary.
+    """
+
+    untrusted_citation = dict(citation)
+    untrusted_citation.pop("identifier_resolution", None)
+    return validate_citation(
+        untrusted_citation,
+        require_final=require_final,
+        config=config,
+        caller_controlled=True,
+    )
+
+
 def is_final_citation(validation: dict[str, Any]) -> bool:
     return (
         validation.get("status") == CitationStatus.EXISTS.value

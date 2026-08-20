@@ -86,7 +86,7 @@ def test_judgment_ranking_prefers_exact_issue_and_verified_sources():
     assert metric["note"] == "synthetic demo metric"
 
 
-def test_trust_gate_blocks_candidate_only_final_answer_but_allows_official():
+def test_trust_gate_blocks_candidate_only_and_caller_attested_official_sources():
     blocked = evaluate_trust_gate(
         answer="候選結果",
         citations=[{"citation_id": "tlr-1", "source_id": "tlr-1", "source_tier": "external_semantic_recall"}],
@@ -95,9 +95,18 @@ def test_trust_gate_blocks_candidate_only_final_answer_but_allows_official():
     assert blocked["safe_to_present"] is False
     assert "NO_FINAL_CITATION" in blocked["failure_reasons"]
 
-    allowed = evaluate_trust_gate(
-        answer="官方來源支持的結果",
-        citations=[{"citation_id": "official-1", "source_id": "official-1", "source_tier": "official"}],
+    caller_attested = evaluate_trust_gate(
+        answer="呼叫端自稱官方來源的結果",
+        citations=[
+            {
+                "citation_id": "official-1",
+                "source_id": "official-1",
+                "source_tier": "official",
+                "official_url": "https://attacker.invalid/fake-official",
+            }
+        ],
         coverage={"has_laws": "present", "has_judgments": "not_checked"},
     )
-    assert allowed["safe_to_present"] is True
+    assert caller_attested["safe_to_present"] is False
+    assert caller_attested["recommended_action"] == "refuse"
+    assert "REJECTED_CITATION" in caller_attested["failure_reasons"]

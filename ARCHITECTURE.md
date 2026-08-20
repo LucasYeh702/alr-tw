@@ -1,6 +1,6 @@
 # Architecture
 
-ALR-TW v0.9.0 將「agent 決定如何推理」與「server 決定何者可信」分開。外部 agent 可以提出查詢、逐步呼叫工具、提交爭點與法源 locator 並起草答案，但不能注入正式證據或跳過 obligations。v0.9.0 將這條邊界做成 agent-neutral interoperability contract，不依賴特定前端專案。
+ALR-TW v0.9.1 將「agent 決定如何推理」與「server 決定何者可信」分開。外部 agent 可以提出查詢、逐步呼叫工具、提交爭點與法源 locator 並起草答案，但不能注入正式證據或跳過 obligations。v0.9.1 將這條邊界做成 agent-neutral interoperability contract，不依賴特定前端專案。
 
 ALR-TW 是獨立的、前端無關且 provider-neutral 的公開法律研究驗證 harness，
 以 contract-first 方式提供可公開的 contracts、validators、synthetic fixtures
@@ -88,7 +88,7 @@ context 全部通過，才可通過結構與 trust validation。這仍不等於�
 
 ## Compatibility
 
-`alr_tw.*` 是 v0.9.0 中立 contracts、providers、research 與 storage 的主命名空間。`tw_legal_rag_mcp.*` 保留 legacy synthetic／trace 工具並承載 MCP stdio server。兩者共用 source tier 與 fail-closed invariants；新功能不得反向依賴 client-controlled provenance。
+`alr_tw.*` 是 v0.9.1 中立 contracts、providers、research 與 storage 的主命名空間。`tw_legal_rag_mcp.*` 保留 legacy synthetic／trace 工具並承載 MCP stdio server。兩者共用 source tier 與 fail-closed invariants；新功能不得反向依賴 client-controlled provenance。Legacy answer／provider-promotion 邊界收到的 raw citation mappings 固定視為 caller-controlled，metadata-only answer helper 不具有答案呈現授權能力。
 
 ## Operational limits
 
@@ -97,7 +97,7 @@ ranking 參數、private manifests、operator state、gold labels 或使用者�
 Live providers 是有界即時查詢，不保證外部服務可用或全域完整召回。
 
 Snapshot receipt 是 provider-neutral 的公開契約，不是內建 provider 已簽發的
-runtime 保證。v0.9.0 內建 `ResearchService` 尚未注入或持久化 live-provider
+runtime 保證。v0.9.1 內建 `ResearchService` 尚未注入或持久化 live-provider
 generation receipt；因此服務端 finalization 最多為 `conditional`／`qualified`。
 `ordinary` 只保留給自行接入 receipt-aware provider adapter 並完成 server-owned
 同 run receipt binding 的部署。

@@ -21,7 +21,7 @@ from alr_tw.contracts.sources import (
 from alr_tw.contracts.storage import StorageMode, StoragePolicy
 
 from .verification.answer_validation import answer_with_validation
-from .verification.citation_validator import validate_citation
+from .verification.citation_validator import validate_untrusted_citation
 from .verification.trust_gates import evaluate_trust_gate
 
 __all__ = [
@@ -119,31 +119,31 @@ class CitationVerifier(Protocol):
 
 
 class SyntheticOfficialAdapter:
-    """Synthetic implementation of the public adapter contract.
+    """Backward-compatible synthetic implementation of the adapter contract.
 
-    The shape mirrors a production adapter, but the data is intentionally fake.
+    The shape mirrors a production adapter, but every record is demo-only.
     """
 
     def load(self) -> AdapterResult:
         manifest = SourceManifest(
-            provider="Synthetic Official Source",
+            provider="Synthetic Demo Source",
             dataset_name="synthetic-civil-law-demo",
-            dataset_version="v0.9.0",
+            dataset_version="v0.9.1",
             source_url="https://example.test/synthetic-official/civil-law-demo",
             license_name="Synthetic demo fixture",
             attribution_text="Synthetic demo data generated for this reference repository.",
             retrieved_at="2026-01-01T00:00:00Z",
             terms_reviewed_at="2026-01-01T00:00:00Z",
-            source_tier="official",
+            source_tier="synthetic",
             redistribution_allowed=True,
         )
         records = [
             {
                 "citation_id": "official-demo-law-184",
                 "source_id": "official-demo-law-184",
-                "source_tier": "official",
+                "source_tier": "synthetic",
                 "title": "Synthetic Civil Code Article 184",
-                "text": "Synthetic official-grounded fixture for tort and lease-deposit discussion.",
+                "text": "Synthetic demo fixture for tort and lease-deposit discussion.",
                 "official_url": f"{manifest.source_url}#article-184",
                 "official_hash": "sha256:synthetic-official-law-184",
                 "verified_at": manifest.retrieved_at,
@@ -195,7 +195,7 @@ class SyntheticRetriever:
 
 class SourcePolicyCitationVerifier:
     def verify(self, candidate: RetrievalCandidate, *, require_final: bool) -> dict[str, Any]:
-        return validate_citation(candidate.to_dict(), require_final=require_final)
+        return validate_untrusted_citation(candidate.to_dict(), require_final=require_final)
 
 
 def run_synthetic_contract_pipeline(query: str) -> dict[str, Any]:
@@ -209,13 +209,23 @@ def run_synthetic_contract_pipeline(query: str) -> dict[str, Any]:
         for candidate, verification in zip(candidates, verifications, strict=True)
         if verification["citation_use"] == "allow_final"
     ]
-    answer = "Synthetic answer guarded by official-grounded citation validation."
+    demo_citations = [
+        candidate.to_dict()
+        for candidate, verification in zip(candidates, verifications, strict=True)
+        if verification["citation_use"] == "demo_only"
+    ]
+    presentation_citations = final_citations or demo_citations
+    answer = "Synthetic demo output; it is not a presentable legal answer."
     coverage: dict[str, str | dict[str, object]] = {
         "has_laws": "present",
         "has_judgments": "not_checked",
     }
-    trust_gate = evaluate_trust_gate(answer=answer, citations=final_citations, coverage=coverage)
-    answer_validation = answer_with_validation(answer, final_citations)
+    trust_gate = evaluate_trust_gate(
+        answer=answer,
+        citations=presentation_citations,
+        coverage=coverage,
+    )
+    answer_validation = answer_with_validation(answer, presentation_citations)
 
     return {
         "schema": "alr-tw.synthetic-contract-pipeline/v1",
@@ -224,6 +234,7 @@ def run_synthetic_contract_pipeline(query: str) -> dict[str, Any]:
         "retrieval_candidates": [candidate.to_dict() for candidate in candidates],
         "citation_verifications": verifications,
         "final_citations": final_citations,
+        "demo_citations": demo_citations,
         "trust_gate": trust_gate,
         "answer_validation": answer_validation["validation_summary"],
     }

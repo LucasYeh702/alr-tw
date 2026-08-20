@@ -8,10 +8,12 @@ Security review focuses on the default branch and latest public-preview release.
 
 Do not publish vulnerabilities, secrets, private paths, real case facts, or personal data in an issue. Use GitHub private vulnerability reporting or a Security Advisory when available. Otherwise open a minimal issue asking for a private contact, without exploit details.
 
-## v0.9.0 trust boundary
+## v0.9.1 trust boundary
 
 - MCP caller input is untrusted, including `source_tier`, URLs, hashes, timestamps, answer text, and identifiers.
 - Caller-attested `official` or `verified_cache` metadata cannot establish final eligibility.
+- Legacy Python answer validation treats every raw citation mapping as caller-controlled,
+  discards caller-declared resolver status, and cannot authorize answer presentation.
 - Only server-fetched official snapshots or resolver-backed matching hashes may enter final evidence.
 - TLR and other external recall results are candidate-only.
 - Official HTTP uses HTTPS host allowlists, redirect validation, timeouts, response-size limits, and schema guards.

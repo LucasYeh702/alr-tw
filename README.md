@@ -2,7 +2,7 @@
 
 [繁體中文](README.zh-TW.md) | [English](README.en.md)
 
-ALR-TW v0.9.0 是台灣法律研究安全 harness 的 agent-neutral public preview。它讓外部 agent／LLM 透過 MCP 建立研究 run、提出爭點與法源 locator，但把資料來源、研究義務、證據升格、答案驗證與清除權限留在 server 端。設計採台灣大陸法系視角：法規時點優先，普通裁判依審級與案件角色處理，憲法法庭多數意見與個別意見分離。
+ALR-TW v0.9.1 是台灣法律研究安全 harness 的 agent-neutral public preview。它讓外部 agent／LLM 透過 MCP 建立研究 run、提出爭點與法源 locator，但把資料來源、研究義務、證據升格、答案驗證與清除權限留在 server 端。設計採台灣大陸法系視角：法規時點優先，普通裁判依審級與案件角色處理，憲法法庭多數意見與個別意見分離。
 
 本專案已整合並在 `hybrid_verified` 模式使用 [TLR（Taiwan Legal RAG）](https://github.com/aa0101181514/tw-legal-rag)進行普通裁判候選召回，再由 ALR-TW 回到司法院官方來源驗證。TLR 不會被直接當成正式引用來源。
 
@@ -10,9 +10,9 @@ ALR-TW v0.9.0 是台灣法律研究安全 harness 的 agent-neutral public previ
 
 本 repo 不包含 LLM，也不包含 agent 實作。規劃、工具選擇與自然語言推理由外部呼叫端提供；ALR-TW 只負責可稽核工具與確定性閘門。Repo 內的示範 ranking 參數僅供測試，不是 production ranking 設定。
 
-> v0.9.0 仍是 public preview。任何答案仍須由具資格的人員依官方原文、時點與個案事實複核。
+> v0.9.1 仍是 public preview。任何答案仍須由具資格的人員依官方原文、時點與個案事實複核。
 
-> 目前 `main` 工作樹是 v0.9.0；仍不代表完整 production 法律判斷能力。
+> 目前 `main` 工作樹是 v0.9.1；仍不代表完整 production 法律判斷能力。
 
 ## Agentic RAG 能力
 
@@ -29,7 +29,7 @@ User query
   -> validated | qualified | blocked
 ```
 
-v0.9.0 提供的主要能力包括：
+v0.9.1 提供的主要能力包括：
 
 - query understanding：正規化問題、辨識法律引用及研究限制；
 - privacy screen：在查詢可能送往 TLR 前先檢查敏感資訊；
@@ -64,7 +64,7 @@ server 會以 `research_sufficiency`（`sufficient`、`qualified`、`insufficien
 加官方逐筆驗證，尚無 semantic opposition classifier，不得據此主張全球不存在反面
 見解或實務一致。
 
-目前的 v0.9.0 contracts 另提供 optional semantic verifier sidecar、
+目前的 v0.9.1 contracts 另提供 optional semantic verifier sidecar、
 provider conformance、receipt-aware adapter 與 deployer boundary validator：sidecar
 只能 shadow／advisory 回報，provider source／evidence 必須通過獨立 server binding
 與 snapshot consistency，部署者自備 corpus、模型、credentials 與 deployment
@@ -74,7 +74,7 @@ semantic entailment 或法律答案授權。
 ### Snapshot receipt 與內建 runtime 限制
 
 Provider-neutral snapshot receipt 是公開的 provider 契約與一致性檢查介面，
-不表示本套內建 provider 已簽發 receipt。v0.9.0 內建 `ResearchService` 尚未把
+不表示本套內建 provider 已簽發 receipt。v0.9.1 內建 `ResearchService` 尚未把
 live provider 的 snapshot generation receipt 注入或持久化；因此內建服務的
 `get_legal_research_finalization`／`get_legal_research_state` 輸出最多是
 `conditional`／`qualified`（通常帶 `SNAPSHOT_RECEIPT_MISSING_LEGACY`），不應宣稱
@@ -160,7 +160,7 @@ alr-tw doctor --live
 
 秘密不會顯示在 `doctor` 輸出，也不應寫入 `.env.example`、trace 或 SQLite。
 
-## v0.9.0 MCP tools
+## v0.9.1 MCP tools
 
 | Tool | 用途 |
 |---|---|
@@ -330,7 +330,7 @@ chunking 參數、gold labels 及未匿名化案件資料。
 
 ## 如何接入真實資料
 
-v0.9.0 提供官方 live providers 與 TLR clean-room adapter。receipt 是可選的
+v0.9.1 提供官方 live providers 與 TLR clean-room adapter。receipt 是可選的
 provider-neutral 介面；若 adapter 尚未簽發並持久化 receipt，內建服務只能維持
 `conditional`／`qualified`。建議部署順序如下：
 
@@ -363,15 +363,15 @@ Choose data mode
 
 ### Applicability、authority lineage 與公法材料
 
-v0.9.0 提供 provider-neutral 的 applicability resolver、authority／lineage
+v0.9.1 提供 provider-neutral 的 applicability resolver、authority／lineage
 contract、公法材料 contract 與 provider SDK。這些介面只處理 server-owned
 metadata、來源角色、時點、程序及 bounded 關係；它們不從來源文字推導法律
 效果，也不執行 semantic opposition 或 semantic entailment。部署者仍須自行
 提供合規的資料 provider，並由 ALR-TW 驗證 source／evidence binding。
 
-## v0.9.0 能力摘要
+## v0.9.1 能力摘要
 
-v0.9.0 在既有安全邊界上加入 Coverage v2、研究充分性 evaluator、
+v0.9.1 在既有安全邊界上加入 Coverage v2、研究充分性 evaluator、
 server-owned finalization／structured refusal、snapshot receipt、bounded
 counter-authority、applicability、authority／lineage、公法材料 contracts 與
 provider SDK 介面。所有 analysis 都是 `untrusted_client_proposal`；

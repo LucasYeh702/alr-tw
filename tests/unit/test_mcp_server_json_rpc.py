@@ -48,7 +48,7 @@ def test_mcp_initialize_returns_server_metadata():
     assert response["result"]["protocolVersion"] == "2024-11-05"
     assert response["result"]["serverInfo"] == {
         "name": "alr-tw",
-        "version": "0.9.0",
+        "version": "0.9.1",
     }
     assert response["result"]["capabilities"] == {"tools": {}}
 
@@ -190,7 +190,8 @@ def test_mcp_tools_call_runs_agentic_legal_research():
     assert payload["ok"] is True
     assert payload["schema_version"] == "alr-tw.mcp_tool_result/v1"
     assert payload["data"]["schema_version"] == "alr-tw.agentic_trace/v1"
-    assert payload["data"]["final_action"] == "answer"
+    assert payload["data"]["final_action"] == "refuse"
+    assert payload["data"]["answer"] is None
 
 
 def test_mcp_tools_call_runs_agentic_demo_trace():

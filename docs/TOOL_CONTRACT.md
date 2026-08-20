@@ -1,6 +1,6 @@
 # ALR-TW Tool Contract
 
-## v0.9.0 interoperability tools
+## v0.9.1 interoperability tools
 
 | Tool | Required input | Contract |
 |---|---|---|
@@ -22,7 +22,7 @@ hash、`official=true` 或 client trust attestation。整份 analysis 固定為
 `issue_limited` 固定附帶 scope qualification。每個議題都要有 normative
 source，確定的 `met`／`not_met` 結論另須 fact 或 eligible evidence；民法
 每個 element 必須有一筆 burden-of-proof record。
-v0.9.0 另允許五個 issue-oriented 分支攜帶 issue-level
+v0.9.1 另允許五個 issue-oriented 分支攜帶 issue-level
 `burden_of_proof`、`defenses`、branch-specific `procedural_posture` 與
 `refusal_constraints`；民法分支沿用 element-level burden／defense schema。
 這些仍是 `untrusted_client_proposal`，server 會把其 source、fact、evidence
@@ -45,7 +45,7 @@ structure and trust decision，不是 final-answer decision，且固定：
 explicit-allowlist synthetic fixture provider；live context 未確認時 fail
 closed。
 
-## v0.9.0 provider-neutral applicability and source contracts
+## v0.9.1 provider-neutral applicability and source contracts
 
 除 MCP research tools 外，公開套件提供可替換的 provider contracts／facades：
 
@@ -59,7 +59,7 @@ closed。
 production 參數。candidate、server-owned source 與 evidence 的信任層級仍由既有
 verification／finalization gates 決定。
 
-## v0.9.0 provider contracts
+## v0.9.1 provider contracts
 
 `HistoricalLawQuery`／`HistoricalLawResolution`／
 `validate_server_historical_law` 提供立法院／其他官方歷史法規 provider 的
@@ -74,7 +74,7 @@ adapter，不內建立法院 endpoint、token、資料庫、索引或 production
 metadata issuer、source promoter、完整時點 scope 或法條版本時，結果維持
 blocked／qualified，不能宣稱歷史法規已確認。
 
-## v0.9.0 semantic-verifier plugin contract
+## v0.9.1 semantic-verifier plugin contract
 
 公開套件提供 `alr-tw.semantic-verifier-request/v1`、
 `alr-tw.semantic-verifier-result/v1` 與
@@ -90,7 +90,7 @@ schema 錯誤、foreign／stale reference 或 authority sentinel 偽造一律
 blocked，不會被解讀為 `uncertain` 或 scoped absence。核心 runtime 不依賴
 任何模型、prompt、embedding 或 semantic provider。
 
-## v0.9.0 provider conformance and optional sidecar boundary
+## v0.9.1 provider conformance and optional sidecar boundary
 
 validate_provider_conformance 對 common ProviderResult 執行同一套
 provider-neutral gate：server_source_ids、server_evidence_ids 與對應
@@ -113,7 +113,7 @@ credentials、private data 與 deployment parameters 均不得 bundled；公開 
 
 詳見 [Agent-neutral interoperability contract](INTEROPERABILITY_CONTRACT.md)。
 
-## v0.9.0 server-managed tools
+## v0.9.1 server-managed tools
 
 | Tool | Required input | Contract |
 |---|---|---|
@@ -142,10 +142,10 @@ All MCP tool results are wrapped in:
 }
 ```
 
-## v0.9.0 answer validation
+## v0.9.1 answer validation
 
 `claim_bindings` 是 optional array；每筆包含 `claim_id`、`claim_text`、
-`claim_type`、`importance`、至少一個同 run 的 `evidence_ids`，以及 v0.9.0
+`claim_type`、`importance`、至少一個同 run 的 `evidence_ids`，以及 v0.9.1
 可選的 `issue_ids` 與 `citation_occurrences`。允許的 `claim_type` 是
 `law_rule`、`court_view`、`disposition`、`fact`、`procedure`、`limitation`。
 
@@ -178,7 +178,7 @@ fixture 不能支撐法律答案，counter `not_found_in_scope` 不能證明全�
 反面見解或實務一致。
 
 Snapshot receipt 是 provider-neutral contract，不表示 bundled provider 已簽發
-receipt。v0.9.0 內建 `ResearchService` 尚未注入或持久化 live-provider generation
+receipt。v0.9.1 內建 `ResearchService` 尚未注入或持久化 live-provider generation
 receipt，因此 built-in live output 最多為 `conditional`／`qualified`；`ordinary`
 只保留給 receipt-aware provider adapter 完成同一 run 的 server-owned binding。
 

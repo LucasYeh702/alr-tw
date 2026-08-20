@@ -1,4 +1,8 @@
-from tw_legal_rag_mcp.contracts import run_synthetic_contract_pipeline
+from tw_legal_rag_mcp.contracts import (
+    RetrievalCandidate,
+    SourcePolicyCitationVerifier,
+    run_synthetic_contract_pipeline,
+)
 from tw_legal_rag_mcp.verification.trust_gates import evaluate_trust_gate
 
 
@@ -7,26 +11,50 @@ def test_synthetic_contract_pipeline_exposes_production_shape_without_parameters
 
     assert result["schema"] == "alr-tw.synthetic-contract-pipeline/v1"
     assert result["source_manifest"]["schema"] == "alr-tw.source-manifest/v1"
-    assert result["source_manifest"]["provider"] == "Synthetic Official Source"
+    assert result["source_manifest"]["provider"] == "Synthetic Demo Source"
     assert result["adapter_result"]["schema"] == "alr-tw.adapter-result/v1"
     assert result["adapter_result"]["status"] == "loaded"
 
     candidates = result["retrieval_candidates"]
     assert [candidate["source_tier"] for candidate in candidates] == [
-        "official",
+        "synthetic",
         "external_semantic_recall",
     ]
     assert all(candidate["schema"] == "alr-tw.retrieval-candidate/v1" for candidate in candidates)
 
     verifications = result["citation_verifications"]
-    assert verifications[0]["citation_use"] == "allow_final"
+    assert verifications[0]["citation_use"] == "demo_only"
     assert verifications[1]["citation_use"] == "allow_candidate_only"
     assert verifications[1]["status"] == "unverifiable"
 
-    assert [citation["source_id"] for citation in result["final_citations"]] == ["official-demo-law-184"]
-    assert result["trust_gate"]["safe_to_present"] is True
-    assert result["answer_validation"]["has_final_citation"] is True
-    assert result["answer_validation"]["safe_to_present"] is True
+    assert result["final_citations"] == []
+    assert [citation["source_id"] for citation in result["demo_citations"]] == [
+        "official-demo-law-184"
+    ]
+    assert result["trust_gate"]["safe_to_present"] is False
+    assert "NO_FINAL_CITATION" in result["trust_gate"]["failure_reasons"]
+    assert result["answer_validation"]["has_final_citation"] is False
+    assert result["answer_validation"]["demo_only"] is True
+    assert result["answer_validation"]["safe_to_present"] is False
+
+
+def test_legacy_verifier_rejects_provider_attested_official_candidate():
+    candidate = RetrievalCandidate(
+        citation_id="fake-official",
+        source_id="fake-official",
+        source_tier="official",
+        title="Caller-authored source",
+        snippet="Untrusted provider output",
+        score=1.0,
+        manifest_id="untrusted-provider",
+        official_url="https://attacker.invalid/fake-official",
+    )
+
+    validation = SourcePolicyCitationVerifier().verify(candidate, require_final=True)
+
+    assert validation["citation_use"] == "reject"
+    assert validation["citation_eligibility"] == "rejected"
+    assert validation["error_code"] == "CALLER_ATTESTED_SOURCE"
 
 
 def test_candidate_only_contract_results_fail_closed_when_no_final_citation():

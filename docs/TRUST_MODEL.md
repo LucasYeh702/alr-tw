@@ -1,6 +1,6 @@
 # ALR-TW Trust Model
 
-## v0.9.0 evidence promotion
+## v0.9.1 evidence promotion
 
 Final validation 只讀取該 run 在 server-side SQLite 中已連結、未到期且 `trust_status=evidence_eligible` 的 evidence。MCP caller 即使提交看似完整的 official URL、hash 或 verified time，也只能視為 caller-attested metadata，不能升格為正式證據。
 
@@ -21,9 +21,13 @@ ALR-TW separates source discovery from final citation authority.
 | `synthetic` | Demo and test fixture | No |
 | `unknown` | Missing or unsupported source tier | No |
 
-Legacy Python contracts may expose metadata validation helpers, but the v0.9.0
-MCP boundary does not trust caller-supplied metadata. Byte-level verification
-must happen in a server-owned provider or governed resolver.
+自 v0.9.1 起，legacy answer／provider-promotion helpers 將收到的 raw citation
+mappings 視為 caller-controlled，並忽略 caller 自行宣告的
+`identifier_resolution`。這類 helper 不執行 claim-support validation，因此
+永遠不能設定法律答案的
+`safe_to_present=true`；正式呈現授權必須由 server-owned
+`ResearchService.validate_legal_answer` 產生。Byte-level verification 必須發生在
+server-owned provider 或 governed resolver。
 
 ## Identifier-Backed Verified Cache (Opt-In)
 

@@ -1,14 +1,14 @@
 # Roadmap
 
-## Current release: v0.9.0
+## Current release: v0.9.1
 
-v0.9.0 是 agent-neutral、provider-neutral 的台灣法律研究驗證 harness，已完成
+v0.9.1 是 agent-neutral、provider-neutral 的台灣法律研究驗證 harness，已完成
 研究充分性、Coverage v2、finalization、歷史法規、裁判語境安全與可插拔 sidecar
 契約。它不是完整台灣
 法律資料庫，也不提供法律意見或 production SLA；真實資料 provider 由部署者
 依公開契約自行接入。
 
-目前 v0.9.0 已具備的核心能力：
+目前 v0.9.1 已具備的核心能力：
 
 - `workflow_complete`、`research_sufficiency` 與 `answer_mode` 分離；
   `ready_for_draft` 僅表示流程階段，不代表答案可直接呈現；
@@ -35,6 +35,8 @@ v0.9.0 是 agent-neutral、provider-neutral 的台灣法律研究驗證 harness�
   程序、行政法與憲法審查；既有工具與 payload 維持 additive compatibility；
 - public-boundary lint 禁止將未公開資料、私有部署細節、secrets 或 production
   參數帶入公開套件。
+- legacy raw citation mappings 固定為 caller-controlled；metadata-only helper
+  不再授權答案呈現，synthetic records 固定為 demo-only。
 
 Provider-neutral snapshot receipt 目前只是公開契約與一致性檢查介面。內建
 `ResearchService` 尚未簽發或持久化 live-provider receipt，因此服務輸出最多為

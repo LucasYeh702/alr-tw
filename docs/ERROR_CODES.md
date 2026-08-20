@@ -1,6 +1,6 @@
 # ALR-TW Error Codes
 
-## v0.9.0 contract codes
+## v0.9.1 contract codes
 
 | Code | Meaning |
 |---|---|
@@ -23,7 +23,7 @@
 | `HISTORICAL_LAW_NORMATIVE_ROLE_MISMATCH` | 法條版本 source role 不是 normative text |
 | `HISTORICAL_LAW_SOURCE_ROLE_INVALID` | Provider 回傳的法條／立法資料分類無法安全驗證 |
 
-## v0.9.0 provider and research codes
+## v0.9.1 provider and research codes
 
 | Code | Meaning |
 |---|---|
@@ -85,7 +85,7 @@
 | `COUNTER_AUTHORITY_COVERAGE_INCOMPLETE` | 未執行、未完成或失敗的反面見解搜尋必須揭露 |
 | `PROCEDURAL_POSTURE_UNRESOLVED` | 程序階段尚未確認 |
 
-## v0.9.0 applicability and authority-lineage codes
+## v0.9.1 applicability and authority-lineage codes
 
 | Code | Meaning |
 |---|---|
@@ -115,7 +115,7 @@
 | `AUTHORITY_LINEAGE_NOT_FOUND_IS_BOUNDED_ONLY` | `not_found_in_scope` 僅限 bounded scope，不支持全球不存在主張 |
 | `NEGATIVE_TREATMENT_SEMANTIC_CLASSIFICATION_NOT_PERFORMED` | Provider treatment 尚未經 semantic opposition classifier |
 
-## v0.9.0 public-law provider and SDK codes
+## v0.9.1 public-law provider and SDK codes
 
 | Code | Meaning |
 |---|---|
@@ -176,7 +176,7 @@
 | `SNAPSHOT_RECEIPT_MISSING_LEGACY` | 舊紀錄沒有 receipt；不得據此宣稱 ordinary sufficiency |
 | `ANSWER_REFUSAL_ONLY` | finalization 只允許結構化拒答，不回傳草稿 |
 
-## v0.9.0 semantic-verifier plugin codes
+## v0.9.1 semantic-verifier plugin codes
 
 | Code | Meaning |
 |---|---|
@@ -208,7 +208,7 @@
 | `SEMANTIC_VERIFIER_TARGET_DUPLICATED` | plugin 對同一 target 回傳多筆 finding |
 | `SEMANTIC_VERIFIER_TARGET_COVERAGE_PARTIAL` | completed plugin 結果未涵蓋所有 requested targets |
 
-## v0.9.0 provider conformance and boundary codes
+## v0.9.1 provider conformance and boundary codes
 
 | Code | Meaning |
 |---|---|
@@ -245,7 +245,7 @@
 | DEPLOYER_CREDENTIALS_FORBIDDEN | 公開套件不得含 credentials |
 | DEPLOYER_DEPLOYMENT_PARAMETERS_FORBIDDEN | 公開套件不得含 deployment parameters |
 
-## v0.9.0 legal-analysis domain constraint codes
+## v0.9.1 legal-analysis domain constraint codes
 
 | Code | Meaning |
 |---|---|
