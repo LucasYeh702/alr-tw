@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import Enum
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -109,6 +111,74 @@ class CounterAuthorityStatus(str, Enum):
     PROVIDER_ERROR = "provider_error"
 
 
+class CounterAuthorityRelation(str, Enum):
+    """External reasoner's proposed relation to one bounded issue."""
+
+    SUPPORTING = "supporting"
+    OPPOSING = "opposing"
+    DISTINGUISHING = "distinguishing"
+    UNRELATED = "unrelated"
+    UNCERTAIN = "uncertain"
+
+
+class CounterAuthorityRelationAssessment(BaseModel):
+    """Untrusted relation proposal; all references are verified server-side."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    issue_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    proposition: str = Field(min_length=1, max_length=2000)
+    relation: CounterAuthorityRelation
+    source_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    evidence_ids: list[str] = Field(min_length=1, max_length=64)
+    model_id: str = Field(min_length=1, max_length=200)
+    prompt_version: str = Field(min_length=1, max_length=200)
+    rationale: str = Field(min_length=1, max_length=8000)
+
+    @model_validator(mode="after")
+    def validate_relation_references(self) -> CounterAuthorityRelationAssessment:
+        if len(self.evidence_ids) != len(set(self.evidence_ids)):
+            raise ValueError("counter-authority evidence IDs must be unique")
+        return self
+
+
+class CounterAuthorityRelationReceipt(BaseModel):
+    """Server-validated, immutable receipt for an external relation judgment."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal["alr-tw.counter-authority-relation-receipt/v1"] = (
+        "alr-tw.counter-authority-relation-receipt/v1"
+    )
+    receipt_id: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    run_id: str = Field(min_length=1, max_length=200)
+    analysis_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    issue_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    proposition: str = Field(min_length=1, max_length=2000)
+    relation: CounterAuthorityRelation
+    source_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    evidence_ids: list[str] = Field(min_length=1, max_length=64)
+    model_id: str = Field(min_length=1, max_length=200)
+    prompt_version: str = Field(min_length=1, max_length=200)
+    rationale: str = Field(min_length=1, max_length=8000)
+    validated_at: datetime
+    content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    evidence_hashes: dict[str, str] = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def validate_receipt_hashes(self) -> CounterAuthorityRelationReceipt:
+        if set(self.evidence_hashes) != set(self.evidence_ids):
+            raise ValueError("receipt evidence hashes must match evidence IDs")
+        if any(
+            re.fullmatch(r"sha256:[0-9a-f]{64}", value) is None
+            for value in self.evidence_hashes.values()
+        ):
+            raise ValueError("receipt evidence hashes must be sha256 digests")
+        if self.validated_at.tzinfo is None or self.validated_at.utcoffset() is None:
+            raise ValueError("receipt validated_at must be timezone-aware")
+        return self
+
+
 class CivilClaim(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -193,12 +263,24 @@ class CounterAuthorityAssessment(BaseModel):
     status: CounterAuthorityStatus
     scope_description: str | None = Field(default=None, max_length=1000)
     source_ids: list[str] = Field(default_factory=list, max_length=64)
+    relations: list[CounterAuthorityRelationAssessment] = Field(
+        default_factory=list,
+        max_length=64,
+    )
     absence_established: Literal[False] = False
 
     @model_validator(mode="after")
     def validate_counter_authority_scope(self) -> CounterAuthorityAssessment:
         if self.status is CounterAuthorityStatus.FOUND and not self.source_ids:
             raise ValueError("found counter-authority requires at least one source_id")
+        relation_keys = [(item.issue_id, item.source_id) for item in self.relations]
+        if len(relation_keys) != len(set(relation_keys)):
+            raise ValueError("counter-authority permits one relation per issue and source")
+        relation_source_ids = [item.source_id for item in self.relations]
+        if any(source_id not in self.source_ids for source_id in relation_source_ids):
+            raise ValueError("counter-authority relation source must appear in source_ids")
+        if self.relations and self.status is not CounterAuthorityStatus.FOUND:
+            raise ValueError("counter-authority relations require found status")
         if (
             self.status is CounterAuthorityStatus.NOT_FOUND_IN_SCOPE
             and not (self.scope_description or "").strip()

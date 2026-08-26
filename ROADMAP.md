@@ -1,14 +1,14 @@
 # Roadmap
 
-## Current release: v0.10.0
+## Current release: v0.10.1
 
-v0.10.0 是 agent-neutral、provider-neutral 的台灣法律研究驗證 harness，已完成
+v0.10.1 是 agent-neutral、provider-neutral 的台灣法律研究驗證 harness，已完成
 研究充分性、Coverage v2、finalization、歷史法規、裁判語境安全與可插拔 sidecar
 契約。它不是完整台灣
 法律資料庫，也不提供法律意見或 production SLA；真實資料 provider 由部署者
 依公開契約自行接入。
 
-目前 v0.10.0 已具備的核心能力：
+目前 v0.10.1 已具備的核心能力：
 
 - `workflow_complete`、`research_sufficiency` 與 `answer_mode` 分離；
   `ready_for_draft` 僅表示流程階段，不代表答案可直接呈現；
@@ -43,9 +43,9 @@ Provider-neutral snapshot receipt 目前只是公開契約與一致性檢查介�
 `conditional`／`qualified`；`ordinary` 保留給 receipt-aware provider adapter
 完成同一 run 的 server-owned receipt binding 後使用。
 
-## v0.10.0：官方立法 locator 與 Agent 工具面收斂
+## v0.10.1：官方立法 locator 與 Agent 工具面收斂
 
-v0.10.0 完成兩個分離驗收的 lane：加入有界限的立法院官方資料 locator
+v0.10.1 完成兩個分離驗收的 lane：加入有界限的立法院官方資料 locator
 connector，以及降低 MCP client 誤選 synthetic／legacy 工具的 Agent
 Experience（AX）防呆。兩者都維持既有 server-owned trust boundary；本版仍不作
 完整立法沿革、文件解析或 production-ready 承諾。
@@ -128,7 +128,7 @@ v0.9.1 的 `tools/list` 在 `synthetic`、`official_only` 與 `hybrid_verified`
 版本關聯、較早期立法沿革與多議案併案圖；完成前不得把 locator 宣稱為已取得的
 立法理由正文。
 
-### v0.10.0 共同非目標
+### v0.10.1 共同非目標
 
 - 不宣稱內建 provider 已覆蓋所有台灣法規、裁判、立法沿革或 OCR；
 - 不把 tool description、AGENTS 範本或模型選擇測試當成 runtime trust gate；

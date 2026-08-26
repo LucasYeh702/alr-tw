@@ -10,6 +10,7 @@ import unicodedata
 from uuid import uuid4
 
 from alr_tw.contracts.legal_analysis import LegalAnalysisEnvelope
+from alr_tw.contracts.civil_analysis import CounterAuthorityRelation
 from alr_tw.contracts.finalization import (
     FinalizationBlocker,
     FinalizationContract,
@@ -1335,11 +1336,68 @@ class ResearchService:
                 server_sources=sources,
                 server_evidence=evidence,
                 legal_context=legal_context,
+                server_run_id=run_id,
                 validated_at=timestamp,
             )
+            receipts = validation.counter_authority_relation_receipts
+            for receipt in receipts:
+                self.store.save_counter_authority_relation_receipt(receipt)
+
+            opposing_receipts = [
+                receipt
+                for receipt in receipts
+                if receipt.relation is CounterAuthorityRelation.OPPOSING
+            ]
+            counter_status = run.coverage.counter_authority_status
+            if receipts:
+                coverage = run.coverage.model_copy(
+                    update={
+                        "counter_authority_relation_receipt_ids": sorted(
+                            {
+                                *run.coverage.counter_authority_relation_receipt_ids,
+                                *(receipt.receipt_id for receipt in receipts),
+                            }
+                        ),
+                    }
+                )
+                run = run.model_copy(update={"coverage": coverage, "updated_at": timestamp})
+            if opposing_receipts:
+                counter_status = "found_verified"
+                classified_codes = {
+                    "COUNTER_AUTHORITY_RELATION_UNCLASSIFIED",
+                    "COUNTER_AUTHORITY_PARTIAL",
+                }
+                coverage = run.coverage.model_copy(
+                    update={
+                        "counter_authority_checked": True,
+                        "counter_authority_status": counter_status,
+                        "limitations": sorted(
+                            set(run.coverage.limitations) - classified_codes
+                        ),
+                        "partial_reason_codes": sorted(
+                            set(run.coverage.partial_reason_codes) - classified_codes
+                        ),
+                        "receipt_reference": opposing_receipts[0].receipt_id,
+                    }
+                )
+                run = self._refresh_sufficiency(
+                    run.model_copy(update={"coverage": coverage, "updated_at": timestamp})
+                )
+            if receipts:
+                self.store.save_run(run)
             result = {
                 **validation.model_dump(mode="json"),
                 "run_id": run_id,
+                "counter_authority_status": counter_status,
+                "counter_authority_coverage": (
+                    "complete"
+                    if (
+                        run.coverage.counter_authority_coverage_complete
+                        if run.coverage.counter_authority_coverage_complete is not None
+                        else run.coverage.coverage_complete
+                    )
+                    else "partial"
+                ),
                 "legal_context": {
                     "schema_version": legal_context.schema_version,
                     "provider_id": legal_context.provider_id,

@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
+import hashlib
+import json
 from typing import Any
 
 from alr_tw.contracts.civil_analysis import (
     AnalysisValidationSeverity,
     BurdenBearer,
     BurdenShiftStatus,
+    CounterAuthorityRelationReceipt,
     CounterAuthorityStatus,
     ElementAssessmentStatus,
     FindingState,
@@ -33,7 +36,12 @@ from alr_tw.contracts.legal_context import (
     LegalValidityStatus,
     TemporalApplicabilityStatus,
 )
-from alr_tw.contracts.sources import EvidenceSpan, SourceRecord, TrustStatus
+from alr_tw.contracts.sources import (
+    EvidenceSpan,
+    MaterialType,
+    SourceRecord,
+    TrustStatus,
+)
 
 _SUPPORTIVE_FACT_STATES = {
     FindingState.ADMITTED,
@@ -139,6 +147,7 @@ def validate_legal_analysis(
     server_evidence: Sequence[EvidenceSpan],
     legal_context: LegalContextResult,
     server_fact_states: Mapping[str, FindingState] | None = None,
+    server_run_id: str | None = None,
     validated_at: datetime | None = None,
 ) -> LegalAnalysisValidationResult:
     """Validate all selected branches without performing substantive legal reasoning."""
@@ -151,6 +160,7 @@ def validate_legal_analysis(
     sources = {source.source_id: source for source in server_sources}
     evidence = {item.evidence_id: item for item in server_evidence}
     fact_states = dict(server_fact_states or {})
+    relation_receipt_inputs: list[dict[str, Any]] = []
     contexts = {record.source_id: record for record in legal_context.records}
     findings: list[LegalAnalysisValidationFinding] = []
     seen_findings: set[tuple[str, str]] = set()
@@ -395,6 +405,53 @@ def validate_legal_analysis(
     )
     fact_groups.append(("procedural_posture.fact_ids", analysis.procedural_posture.fact_ids))
 
+    for index, relation in enumerate(analysis.counter_authority.relations):
+        path = f"counter_authority.relations[{index}]"
+        source = sources.get(relation.source_id)
+        relation_evidence: list[EvidenceSpan] = []
+        if source is not None and source.material_type is not MaterialType.JUDGMENT:
+            add(
+                "COUNTER_AUTHORITY_RELATION_SOURCE_NOT_JUDGMENT",
+                AnalysisValidationSeverity.BLOCKER,
+                f"{path}.source_id",
+                "A counter-authority relation receipt requires a judgment source.",
+            )
+        if (
+            source is not None
+            and source.normalized_content_hash
+            != EvidenceSpan.hash_text(source.normalized_text)
+        ):
+            add(
+                "COUNTER_AUTHORITY_RELATION_CONTENT_HASH_MISMATCH",
+                AnalysisValidationSeverity.BLOCKER,
+                f"{path}.source_id",
+                "The server-owned judgment content hash does not match its normalized text.",
+            )
+        for evidence_id in relation.evidence_ids:
+            evidence_span = evidence.get(evidence_id)
+            if evidence_span is None:
+                continue
+            relation_evidence.append(evidence_span)
+            if evidence_span.source_id != relation.source_id:
+                add(
+                    "COUNTER_AUTHORITY_RELATION_EVIDENCE_SOURCE_MISMATCH",
+                    AnalysisValidationSeverity.BLOCKER,
+                    f"{path}.evidence_ids",
+                    "Relation evidence must belong to the referenced judgment source.",
+                )
+            if not evidence_span.eligible_for_claim_support:
+                add(
+                    "COUNTER_AUTHORITY_RELATION_EVIDENCE_INELIGIBLE",
+                    AnalysisValidationSeverity.BLOCKER,
+                    f"{path}.evidence_ids",
+                    "Relation evidence must be eligible for claim support.",
+                )
+        if source is not None and len(relation_evidence) == len(relation.evidence_ids):
+            relation_receipt_inputs.append(
+                {"relation": relation, "source": source, "evidence": relation_evidence}
+            )
+        evidence_groups.append((f"{path}.evidence_ids", relation.evidence_ids))
+
     for path, source_ids in source_groups:
         for source_id in source_ids:
             source = sources.get(source_id)
@@ -578,6 +635,44 @@ def validate_legal_analysis(
     else:
         decision = LegalAnalysisDecision.VALIDATED
 
+    relation_receipts: list[CounterAuthorityRelationReceipt] = []
+    if decision is not LegalAnalysisDecision.BLOCKED and server_run_id is not None:
+        for item in relation_receipt_inputs:
+            relation = item["relation"]
+            source = item["source"]
+            evidence_items = item["evidence"]
+            receipt_payload = {
+                "run_id": server_run_id,
+                "analysis_id": analysis.analysis_id,
+                "issue_id": relation.issue_id,
+                "proposition": relation.proposition,
+                "relation": relation.relation.value,
+                "source_id": relation.source_id,
+                "evidence_ids": relation.evidence_ids,
+                "model_id": relation.model_id,
+                "prompt_version": relation.prompt_version,
+                "rationale": relation.rationale,
+                "validated_at": timestamp.isoformat(),
+                "content_hash": source.content_hash,
+                "evidence_hashes": {
+                    evidence_span.evidence_id: evidence_span.text_hash
+                    for evidence_span in evidence_items
+                },
+            }
+            encoded = json.dumps(
+                receipt_payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            relation_receipts.append(
+                CounterAuthorityRelationReceipt(
+                    receipt_id="sha256:"
+                    + hashlib.sha256(encoded.encode("utf-8")).hexdigest(),
+                    **receipt_payload,
+                )
+            )
+
     return LegalAnalysisValidationResult(
         analysis_id=analysis.analysis_id,
         profiles=profiles,
@@ -587,6 +682,7 @@ def validate_legal_analysis(
         findings=findings,
         blockers=blockers,
         qualifications=qualifications,
+        counter_authority_relation_receipts=relation_receipts,
         coverage={
             "profiles": [profile.value for profile in profiles],
             "branches": len(analysis.analyses),

@@ -14,6 +14,7 @@ from threading import RLock
 from typing import Any
 
 from alr_tw.contracts.providers import ProviderCandidate
+from alr_tw.contracts.civil_analysis import CounterAuthorityRelationReceipt
 from alr_tw.contracts.research import ResearchRun
 from alr_tw.contracts.sources import EvidenceSpan, SourceRecord
 from alr_tw.contracts.storage import CleanupResult, OperationRecordResult, PurgeResult
@@ -77,9 +78,18 @@ CREATE TABLE IF NOT EXISTS cache_entries (
     expires_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS counter_authority_relation_receipts (
+    receipt_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES research_runs(run_id) ON DELETE CASCADE,
+    payload_json TEXT NOT NULL,
+    validated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_research_runs_expires ON research_runs(expires_at);
 CREATE INDEX IF NOT EXISTS idx_source_records_expires ON source_records(expires_at);
 CREATE INDEX IF NOT EXISTS idx_evidence_run ON evidence_spans(run_id);
+CREATE INDEX IF NOT EXISTS idx_counter_relation_run
+    ON counter_authority_relation_receipts(run_id);
 """
 
 
@@ -376,6 +386,53 @@ class SqliteStore:
                 (run_id,),
             ).fetchall()
         return [ProviderCandidate.model_validate_json(row["payload_json"]) for row in rows]
+
+    def save_counter_authority_relation_receipt(
+        self,
+        receipt: CounterAuthorityRelationReceipt,
+    ) -> None:
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._require_run(connection, receipt.run_id)
+            existing = connection.execute(
+                "SELECT payload_json FROM counter_authority_relation_receipts WHERE receipt_id = ?",
+                (receipt.receipt_id,),
+            ).fetchone()
+            payload = receipt.model_dump_json()
+            if existing is not None and existing["payload_json"] != payload:
+                raise ValueError("relation receipt ID is immutable")
+            connection.execute(
+                """
+                INSERT INTO counter_authority_relation_receipts(
+                    receipt_id, run_id, payload_json, validated_at
+                ) VALUES (?, ?, ?, ?)
+                ON CONFLICT(receipt_id) DO NOTHING
+                """,
+                (
+                    receipt.receipt_id,
+                    receipt.run_id,
+                    payload,
+                    receipt.validated_at.isoformat(),
+                ),
+            )
+            connection.commit()
+
+    def list_counter_authority_relation_receipts(
+        self,
+        run_id: str,
+    ) -> list[CounterAuthorityRelationReceipt]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT payload_json FROM counter_authority_relation_receipts
+                WHERE run_id = ? ORDER BY validated_at, receipt_id
+                """,
+                (run_id,),
+            ).fetchall()
+        return [
+            CounterAuthorityRelationReceipt.model_validate_json(row["payload_json"])
+            for row in rows
+        ]
 
     def get_operation(self, run_id: str, operation_id: str) -> dict[str, Any] | None:
         with self._connection() as connection:

@@ -123,6 +123,12 @@ class CoverageState(BaseModel):
     judgment_checked: bool = False
     constitutional_checked: bool = False
     counter_authority_checked: bool = False
+    counter_authority_status: str = "not_searched"
+    # ``None`` preserves v1 persisted runs; consumers fall back to the legacy
+    # aggregate coverage flag until a new counter-authority execution writes
+    # the split receipt explicitly.
+    counter_authority_coverage_complete: bool | None = None
+    counter_authority_relation_receipt_ids: list[str] = Field(default_factory=list)
     time_context_checked: bool = False
     limitations: list[str] = Field(default_factory=list)
     # Current coverage receipt fields.  These are additive so earlier payloads remain readable.
@@ -146,6 +152,7 @@ class CoverageState(BaseModel):
             "timeout_reason_codes",
             "selected_provider_scope",
             "successful_provider_scope",
+            "counter_authority_relation_receipt_ids",
         ):
             values = getattr(self, field_name)
             if len(values) != len(set(values)):

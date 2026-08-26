@@ -425,7 +425,7 @@ def _all_tool_definitions() -> list[dict[str, Any]]:
         },
         {
             "name": "get_claim_grounding_policy",
-            "description": "Return the current public claim-grounding contract used by ALR-TW v0.10.0.",
+            "description": "Return the current public claim-grounding contract used by ALR-TW v0.10.1.",
             "inputSchema": {
                 "type": "object",
                 "properties": {},

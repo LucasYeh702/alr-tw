@@ -584,7 +584,14 @@ def build_finalization_from_run(
     counter_required = ResearchObligationKind.COUNTER_AUTHORITY in required_obligations
     counter_complete = (
         not counter_required
-        or (coverage.counter_authority_checked and coverage.coverage_complete)
+        or (
+            coverage.counter_authority_checked
+            and (
+                coverage.counter_authority_coverage_complete
+                if coverage.counter_authority_coverage_complete is not None
+                else coverage.coverage_complete
+            )
+        )
     )
     time_required = ResearchObligationKind.LEGAL_TIME_CONTEXT in required_obligations
     time_context_complete = not time_required or coverage.time_context_checked

@@ -697,6 +697,8 @@ class ProviderObligationExecutor:
             coverage = run.coverage.model_copy(
                 update={
                     "counter_authority_checked": False,
+                    "counter_authority_status": CounterAuthorityStatus.UNSUPPORTED.value,
+                    "counter_authority_coverage_complete": False,
                     "limitations": sorted(set(run.coverage.limitations + [limitation])),
                 }
             )
@@ -748,6 +750,8 @@ class ProviderObligationExecutor:
                 coverage = run.coverage.model_copy(
                     update={
                         "counter_authority_checked": False,
+                        "counter_authority_status": CounterAuthorityStatus.BLOCKED.value,
+                        "counter_authority_coverage_complete": False,
                         "limitations": sorted(
                             set(run.coverage.limitations + [limitation])
                         ),
@@ -943,6 +947,8 @@ class ProviderObligationExecutor:
             limitations.extend(counter_result.reason_codes)
         coverage_updates: dict[str, Any] = {
             "counter_authority_checked": completed,
+            "counter_authority_status": counter_result.status.value,
+            "counter_authority_coverage_complete": counter_result.coverage_complete,
             "limitations": sorted(set(limitations)),
         }
         # Coverage v2 fields are additive.  Keeping these updates in the
@@ -983,6 +989,7 @@ class ProviderObligationExecutor:
                 "verification_budget_exhausted": (
                     counter_result.verification_budget_exhausted
                 ),
+                "coverage_complete": counter_result.coverage_complete,
                 "relation_status": counter_result.relation_status.value,
                 "absence_claim_allowed": counter_result.absence_claim_allowed,
                 "global_consensus_claim_allowed": (

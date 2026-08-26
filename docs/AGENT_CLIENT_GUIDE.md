@@ -5,9 +5,9 @@ LLM and no agent implementation. The external MCP client supplies the agent
 role; the harness records tool calls, validates citations, computes the trust
 gate, and returns a canonical trace.
 
-## v0.10.0 agent tool profiles and selection
+## v0.10.1 agent tool profiles and selection
 
-v0.10.0 adds a profile-gated MCP catalog and an optional Legislative Yuan
+v0.10.1 adds a profile-gated MCP catalog and an optional Legislative Yuan
 locator connector while preserving the server-owned trust boundary.
 
 The MCP catalog classifies tools as `server_owned`, `legacy_compatibility`, or
@@ -68,7 +68,7 @@ answer use. Synthetic mode never calls the connector. In `official_only` or
 `lookup_legislative_history`; merely starting the stdio server or listing tools
 does not fetch Legislative Yuan data.
 
-## v0.10.0 agent-neutral research flow
+## v0.10.1 agent-neutral research flow
 
 New clients should first call `get_legal_research_capabilities`.
 
@@ -127,7 +127,7 @@ Counter-authority results are bounded lexical candidate discovery followed by
 official verification; they do not establish semantic opposition, global
 absence, or practice-wide consensus.
 
-The v0.10.0 public contracts also expose structural applicability resolution,
+The v0.10.1 public contracts also expose structural applicability resolution,
 authority/judgment lineage, and public-law provider adapters. Use the
 provider-neutral interfaces for explicit source relationships, court/procedure
 metadata, administrative rules or legislative materials. These records remain

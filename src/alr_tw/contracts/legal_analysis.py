@@ -16,6 +16,7 @@ from .civil_analysis import (
     CivilDefense,
     CivilElement,
     CounterAuthorityAssessment,
+    CounterAuthorityRelationReceipt,
     ElementAssessmentStatus,
     ElementBurdenOfProof,
     EvidenceAssessment,
@@ -430,4 +431,8 @@ class LegalAnalysisValidationResult(BaseModel):
     findings: list[LegalAnalysisValidationFinding] = Field(default_factory=list)
     blockers: list[str] = Field(default_factory=list)
     qualifications: list[str] = Field(default_factory=list)
+    counter_authority_relation_receipts: list[CounterAuthorityRelationReceipt] = Field(
+        default_factory=list,
+        max_length=64,
+    )
     coverage: dict[str, int | str | list[str]] = Field(default_factory=dict)

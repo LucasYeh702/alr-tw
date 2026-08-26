@@ -1,6 +1,6 @@
 # Public / Private Boundary
 
-## v0.10.0 public boundary
+## v0.10.1 public boundary
 
 ALR-TW is an independent, public-safe provider-neutral harness. The public
 package contains provider contracts, stateless validators, deterministic trust

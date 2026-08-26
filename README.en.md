@@ -2,7 +2,7 @@
 
 [繁體中文](README.zh-TW.md) | English
 
-ALR-TW v0.10.0 is the agent-neutral public preview of the Taiwan-law research safety harness. An external agent or LLM may create and advance a research run over MCP and propose issues or authority locators, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
+ALR-TW v0.10.1 is the agent-neutral public preview of the Taiwan-law research safety harness. An external agent or LLM may create and advance a research run over MCP and propose issues or authority locators, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
 
 In `hybrid_verified` mode, this project uses [TLR (Taiwan Legal RAG)](https://github.com/aa0101181514/tw-legal-rag) to recall ordinary-judgment candidates, then asks ALR-TW to verify them against Judicial Yuan official full text. TLR results are not final citation evidence by themselves.
 
@@ -10,9 +10,9 @@ This project is neither legal advice nor a complete Taiwan legal database.
 
 This repository does not ship an LLM or agent implementation. Planning, tool selection, and natural-language reasoning come from the external caller; ALR-TW supplies auditable tools and deterministic gates. The demo ranking parameters are illustrative test settings, not production ranking configuration.
 
-> v0.10.0 remains a public preview. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
+> v0.10.1 remains a public preview. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
 
-> The current `main` working tree is v0.10.0; it does not claim complete
+> The current `main` working tree is v0.10.1; it does not claim complete
 > production legal reasoning.
 
 ## Agentic RAG capabilities
@@ -30,7 +30,7 @@ User query
   -> validated | qualified | blocked
 ```
 
-The v0.10.0 surface provides legacy `hlExportPDF` and
+The v0.10.1 surface provides legacy `hlExportPDF` and
 `/EXPORTFILE/ExportToPdf.aspx` compatibility, official identity verification
 for five-part TLR document IDs, agent-neutral interoperability, and one unified
 legal-analysis envelope with composable branches for civil substantive law,
@@ -38,7 +38,7 @@ civil procedure, substantive criminal law, criminal procedure, administrative
 law, and constitutional review. The administrative branch contains separate
 legality and remedy tracks.
 These checks validate structure and trust references, not semantic entailment.
-The v0.10.0 surface also includes a provider-neutral applicability resolver for
+The v0.10.1 surface also includes a provider-neutral applicability resolver for
 explicit special/general, superior/inferior, and successor/version metadata;
 authority and judgment-lineage contracts for court level, procedural posture,
 appeal/review edges, and bounded negative-treatment results; and public-law
@@ -56,7 +56,7 @@ support a legal answer. Counter-authority remains bounded lexical candidate
 discovery followed by official verification; there is no semantic opposition
 classifier and no basis for global absence or consensus claims.
 
-The current v0.10.0 contracts also provide an optional semantic
+The current v0.10.1 contracts also provide an optional semantic
 verifier sidecar, common provider conformance, a receipt-aware adapter, and a
 deployer boundary validator. Sidecars remain shadow/advisory-only; provider
 source/evidence references require independent server binding and snapshot
@@ -68,7 +68,7 @@ semantic entailment or legal-answer authorization.
 
 The provider-neutral snapshot receipt is a public provider contract and
 consistency check; it does not mean that the bundled providers issue receipts.
-In v0.10.0 the bundled `ResearchService` does not inject or persist live-provider
+In v0.10.1 the bundled `ResearchService` does not inject or persist live-provider
 snapshot-generation receipts. Its live finalization output is therefore at most
 `conditional` or `qualified` (normally with `SNAPSHOT_RECEIPT_MISSING_LEGACY`),
 not `ordinary`. `ordinary` is reserved for deployments using a receipt-aware
@@ -145,7 +145,7 @@ Ordinary-judgment lookup does not require a Judicial Yuan API token. In a live m
 
 Secrets are redacted from `doctor` output and must not be committed, traced, or persisted in SQLite.
 
-## v0.10.0 MCP tools
+## v0.10.1 MCP tools
 
 | Tool | Purpose |
 |---|---|

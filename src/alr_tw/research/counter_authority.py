@@ -218,6 +218,7 @@ class CounterAuthorityResult(BaseModel):
     verified_evidence_ids: tuple[str, ...] = ()
     verification_attempts: int = Field(default=0, ge=0)
     verification_budget_exhausted: bool = False
+    coverage_complete: bool = False
     relation_status: CounterAuthorityRelationStatus = (
         CounterAuthorityRelationStatus.UNCLASSIFIED
     )
@@ -705,6 +706,7 @@ def execute_bounded_counter_authority(
         verified_evidence_ids=verified_evidence_ids,
         verification_attempts=verification_attempts,
         verification_budget_exhausted=verification_budget_exhausted,
+        coverage_complete=bool(all_clean and not verification_budget_exhausted),
         relation_status=(
             CounterAuthorityRelationStatus.UNCLASSIFIED
             if verified_source_ids

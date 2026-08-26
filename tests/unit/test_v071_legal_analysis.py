@@ -233,6 +233,59 @@ def _server_context(now: datetime) -> tuple[SourceRecord, EvidenceSpan]:
     return source, evidence
 
 
+def _counter_judgment_context(now: datetime) -> tuple[SourceRecord, EvidenceSpan]:
+    text = "本院認為系爭要件不應採取主張中的解釋。"
+    digest = EvidenceSpan.hash_text(text)
+    source = SourceRecord(
+        source_id="source-counter-judgment",
+        source_key="judgment:counter:fixture",
+        source_version_id="judgment:counter:fixture:v1",
+        material_type=MaterialType.JUDGMENT,
+        provider_id="synthetic-judgment",
+        source_tier=SourceTier.OFFICIAL,
+        trust_status=TrustStatus.EVIDENCE_ELIGIBLE,
+        official_identifier="DEMO,130,測,1,20990101,1",
+        official_url="https://example.test/judgment/counter",
+        citation="合成法院115年度民字第1號判決",
+        fetched_at=now,
+        verified_at=now,
+        expires_at=now + timedelta(hours=24),
+        content_hash=digest,
+        normalized_content_hash=digest,
+        normalized_text=text,
+        metadata={"synthetic_fixture": True},
+    )
+    evidence = EvidenceSpan.from_exact_text(
+        evidence_id="evidence-counter-judgment",
+        source_id=source.source_id,
+        section_id="reasoning-1",
+        section_type="court_reasoning",
+        exact_text=text,
+        eligible_for_claim_support=True,
+    )
+    return source, evidence
+
+
+def _with_counter_relation(payload: dict, *, relation: str = "opposing") -> dict:
+    payload["counter_authority"] = {
+        "status": "found",
+        "source_ids": ["source-counter-judgment"],
+        "relations": [
+            {
+                "issue_id": "issue-offense",
+                "proposition": "是否符合合成法律要件？",
+                "relation": relation,
+                "source_id": "source-counter-judgment",
+                "evidence_ids": ["evidence-counter-judgment"],
+                "model_id": "external-reasoner-fixture",
+                "prompt_version": "counter-relation-v1",
+                "rationale": "裁判理由直接否定待檢驗命題。",
+            }
+        ],
+    }
+    return payload
+
+
 def _ready_service(tmp_path: Path) -> tuple[ResearchService, str, datetime]:
     now = datetime.now(UTC)
     store = SqliteStore(tmp_path / "cache")
@@ -532,6 +585,128 @@ def test_research_service_validates_multi_branch_analysis_on_same_run(tmp_path):
     assert result["profiles"] == ["civil_substantive", "civil_procedure"]
     assert result["run_id"] == run_id
     assert result["legal_context"]["status"] == "complete"
+
+
+def test_verified_opposing_relation_persists_receipt_and_completes_obligation(tmp_path):
+    service, run_id, now = _ready_service(tmp_path)
+    source, evidence = _counter_judgment_context(now)
+    service.store.save_source(run_id, source)
+    service.store.save_evidence(run_id, evidence)
+    run = service.get_run(run_id)
+    assert run is not None
+    coverage = run.coverage.model_copy(
+        update={
+            "counter_authority_checked": False,
+            "counter_authority_status": "partial",
+            "counter_authority_coverage_complete": False,
+            "limitations": [
+                "COUNTER_AUTHORITY_RELATION_UNCLASSIFIED",
+                "COUNTER_AUTHORITY_PARTIAL",
+                "COUNTER_AUTHORITY_VERIFICATION_BUDGET_TRUNCATED",
+            ],
+            "partial_reason_codes": [
+                "COUNTER_AUTHORITY_RELATION_UNCLASSIFIED",
+                "COUNTER_AUTHORITY_PARTIAL",
+                "COUNTER_AUTHORITY_VERIFICATION_BUDGET_TRUNCATED",
+            ],
+        }
+    )
+    service.store.save_run(run.model_copy(update={"coverage": coverage}))
+
+    analysis = LegalAnalysisEnvelope.model_validate(
+        _with_counter_relation(_analysis_payload())
+    )
+    result = service.validate_legal_analysis(
+        run_id,
+        "validate-opposing-relation",
+        analysis,
+        now=now,
+    )
+
+    assert result["counter_authority_status"] == "found_verified"
+    assert result["counter_authority_coverage"] == "partial"
+    assert len(result["counter_authority_relation_receipts"]) == 1
+    receipt = result["counter_authority_relation_receipts"][0]
+    assert receipt["relation"] == "opposing"
+    assert receipt["content_hash"] == source.content_hash
+    assert receipt["evidence_hashes"] == {evidence.evidence_id: evidence.text_hash}
+    stored_receipts = service.store.list_counter_authority_relation_receipts(run_id)
+    assert [item.receipt_id for item in stored_receipts] == [receipt["receipt_id"]]
+    updated = service.get_run(run_id)
+    assert updated is not None
+    assert updated.coverage.counter_authority_checked is True
+    assert updated.coverage.counter_authority_status == "found_verified"
+    assert "COUNTER_AUTHORITY_RELATION_UNCLASSIFIED" not in updated.coverage.limitations
+    assert "COUNTER_AUTHORITY_VERIFICATION_BUDGET_TRUNCATED" in updated.coverage.limitations
+
+
+def test_verified_unrelated_relation_is_not_counter_authority(tmp_path):
+    service, run_id, now = _ready_service(tmp_path)
+    source, evidence = _counter_judgment_context(now)
+    service.store.save_source(run_id, source)
+    service.store.save_evidence(run_id, evidence)
+    analysis = LegalAnalysisEnvelope.model_validate(
+        _with_counter_relation(_analysis_payload(), relation="unrelated")
+    )
+
+    result = service.validate_legal_analysis(
+        run_id,
+        "validate-unrelated-relation",
+        analysis,
+        now=now,
+    )
+
+    assert result["counter_authority_status"] != "found_verified"
+    updated = service.get_run(run_id)
+    assert updated is not None
+    assert updated.coverage.counter_authority_checked is False
+
+
+@pytest.mark.parametrize(
+    ("invalid_kind", "expected_code"),
+    [
+        ("missing", "ANALYSIS_EVIDENCE_NOT_SERVER_OWNED"),
+        ("ineligible", "COUNTER_AUTHORITY_RELATION_EVIDENCE_INELIGIBLE"),
+        ("expired", "ANALYSIS_SOURCE_STALE"),
+    ],
+)
+def test_relation_receipt_rejects_invalid_or_expired_evidence(
+    tmp_path,
+    invalid_kind,
+    expected_code,
+):
+    service, run_id, now = _ready_service(tmp_path)
+    source, evidence = _counter_judgment_context(now)
+    if invalid_kind == "ineligible":
+        evidence = evidence.model_copy(update={"eligible_for_claim_support": False})
+    elif invalid_kind == "expired":
+        source = source.model_copy(
+            update={
+                "fetched_at": now - timedelta(hours=2),
+                "verified_at": now - timedelta(hours=2),
+                "expires_at": now - timedelta(hours=1),
+            }
+        )
+    service.store.save_source(run_id, source)
+    service.store.save_evidence(run_id, evidence)
+    payload = _with_counter_relation(_analysis_payload())
+    if invalid_kind == "missing":
+        payload["counter_authority"]["relations"][0]["evidence_ids"] = [
+            "missing-evidence"
+        ]
+    analysis = LegalAnalysisEnvelope.model_validate(payload)
+
+    result = service.validate_legal_analysis(
+        run_id,
+        "reject-foreign-relation-evidence",
+        analysis,
+        now=now,
+    )
+
+    assert result["decision"] == "blocked"
+    assert expected_code in result["blockers"]
+    assert result["counter_authority_relation_receipts"] == []
+    assert service.store.list_counter_authority_relation_receipts(run_id) == []
 
 
 def test_managed_service_rejects_client_self_certified_fact_state(tmp_path):

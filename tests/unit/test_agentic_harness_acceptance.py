@@ -76,7 +76,7 @@ def test_agentic_harness_name_is_backed_by_graph_tools_and_scenarios():
 def test_acceptance_doc_states_current_claim_boundary():
     text = Path("docs/AGENTIC_HARNESS_ACCEPTANCE.md").read_text(encoding="utf-8")
 
-    assert "v0.10.0" in text
+    assert "v0.10.1" in text
     assert "server-owned" in text
     assert "Coverage v2" in text
     assert "不可宣稱" in text or "不宣稱" in text

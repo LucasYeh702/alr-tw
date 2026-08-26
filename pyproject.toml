@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alr-tw"
-version = "0.10.0"
+version = "0.10.1"
 description = "Agent-neutral legal research verification runtime for Taiwan law."
 requires-python = ">=3.11"
 dependencies = [
