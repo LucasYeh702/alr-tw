@@ -100,6 +100,7 @@ def test_catalog_covers_all_tool_definitions_with_behavioral_categories() -> Non
     assert TOOL_CATALOG_BY_NAME["begin_agentic_run"].category is ToolCategory.LEGACY_COMPATIBILITY
     assert TOOL_CATALOG_BY_NAME["validate_citation"].category is ToolCategory.LEGACY_COMPATIBILITY
     assert TOOL_CATALOG_BY_NAME["research_legal_question"].category is ToolCategory.SERVER_OWNED
+    assert TOOL_CATALOG_BY_NAME["inspect_judgment_lineage"].category is ToolCategory.SERVER_OWNED
     assert TOOL_CATALOG_BY_NAME["lookup_legislative_history"].category is ToolCategory.SERVER_OWNED
 
 

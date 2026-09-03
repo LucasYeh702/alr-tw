@@ -24,7 +24,7 @@ _OPAQUE_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
 
 
 class PublicLawMaterialType(str, Enum):
-    """Material families covered by the current v0.10.1 public-law contract."""
+    """Material families covered by the current v0.11.0 public-law contract."""
 
     ADMINISTRATIVE_RULE = "administrative_rule"
     ADMINISTRATIVE_REGULATION = "administrative_rule"
@@ -120,9 +120,11 @@ class PublicLawProviderCapabilities(BaseModel):
     provider_id: str = Field(pattern=_OPAQUE_PATTERN)
     material_types: list[PublicLawMaterialType] = Field(min_length=1, max_length=5)
     keyword_search: bool = True
+    semantic_recall: bool = False
     exact_lookup: bool = False
     historical_versions: bool = False
     server_verification: bool = False
+    external_query_transfer: bool = False
     max_results: int = Field(default=50, ge=1, le=50)
 
     @model_validator(mode="after")

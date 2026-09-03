@@ -2,17 +2,22 @@
 
 [繁體中文](README.zh-TW.md) | English
 
-ALR-TW v0.10.1 is the agent-neutral public preview of the Taiwan-law research safety harness. An external agent or LLM may create and advance a research run over MCP and propose issues or authority locators, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
+ALR-TW v0.11.0 is the agent-neutral public preview of the Taiwan-law research safety harness. An external agent or LLM may create and advance a research run over MCP and propose issues or authority locators, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
 
-In `hybrid_verified` mode, this project uses [TLR (Taiwan Legal RAG)](https://github.com/aa0101181514/tw-legal-rag) to recall ordinary-judgment candidates, then asks ALR-TW to verify them against Judicial Yuan official full text. TLR results are not final citation evidence by themselves.
+In `hybrid_verified` mode, this project uses [TLR (Taiwan Legal RAG)](https://github.com/aa0101181514/tw-legal-rag) to recall ordinary-judgment candidates, then asks ALR-TW to verify them against Judicial Yuan official full text. The TLR provider can also return typed administrative-interpretation candidates and read long judgment text through bounded paging. No TLR result is final citation evidence by itself.
+
+For a judgment already verified in the same research run,
+`inspect_judgment_lineage` can also read TLR's database-recorded upper/lower
+history candidates and verify each bounded related decision through the
+configured official judgment provider.
 
 This project is neither legal advice nor a complete Taiwan legal database.
 
 This repository does not ship an LLM or agent implementation. Planning, tool selection, and natural-language reasoning come from the external caller; ALR-TW supplies auditable tools and deterministic gates. The demo ranking parameters are illustrative test settings, not production ranking configuration.
 
-> v0.10.1 remains a public preview. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
+> v0.11.0 remains a public preview. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
 
-> The current `main` working tree is v0.10.1; it does not claim complete
+> The current `main` working tree is v0.11.0; it does not claim complete
 > production legal reasoning.
 
 ## Agentic RAG capabilities
@@ -30,7 +35,7 @@ User query
   -> validated | qualified | blocked
 ```
 
-The v0.10.1 surface provides legacy `hlExportPDF` and
+The v0.11.0 surface provides legacy `hlExportPDF` and
 `/EXPORTFILE/ExportToPdf.aspx` compatibility, official identity verification
 for five-part TLR document IDs, agent-neutral interoperability, and one unified
 legal-analysis envelope with composable branches for civil substantive law,
@@ -38,7 +43,7 @@ civil procedure, substantive criminal law, criminal procedure, administrative
 law, and constitutional review. The administrative branch contains separate
 legality and remedy tracks.
 These checks validate structure and trust references, not semantic entailment.
-The v0.10.1 surface also includes a provider-neutral applicability resolver for
+The v0.11.0 surface also includes a provider-neutral applicability resolver for
 explicit special/general, superior/inferior, and successor/version metadata;
 authority and judgment-lineage contracts for court level, procedural posture,
 appeal/review edges, and bounded negative-treatment results; and public-law
@@ -56,7 +61,7 @@ support a legal answer. Counter-authority remains bounded lexical candidate
 discovery followed by official verification; there is no semantic opposition
 classifier and no basis for global absence or consensus claims.
 
-The current v0.10.1 contracts also provide an optional semantic
+The current v0.11.0 contracts also provide an optional semantic
 verifier sidecar, common provider conformance, a receipt-aware adapter, and a
 deployer boundary validator. Sidecars remain shadow/advisory-only; provider
 source/evidence references require independent server binding and snapshot
@@ -68,7 +73,7 @@ semantic entailment or legal-answer authorization.
 
 The provider-neutral snapshot receipt is a public provider contract and
 consistency check; it does not mean that the bundled providers issue receipts.
-In v0.10.1 the bundled `ResearchService` does not inject or persist live-provider
+In v0.11.0 the bundled `ResearchService` does not inject or persist live-provider
 snapshot-generation receipts. Its live finalization output is therefore at most
 `conditional` or `qualified` (normally with `SNAPSHOT_RECEIPT_MISSING_LEGACY`),
 not `ordinary`. `ordinary` is reserved for deployments using a receipt-aware
@@ -81,17 +86,22 @@ An external agent may plan research and draft an answer, but it cannot declare a
 
 ## Optional external integration examples
 
-These are non-normative examples, not ALR-TW distribution components:
+The deployer may choose the recall or locator data layer. The current integration
+paths are:
 
 | Project | Optional role | ALR-TW boundary |
 |---|---|---|
-| [TLR (Taiwan Legal RAG)](https://github.com/aa0101181514/tw-legal-rag) | Semantic candidate recall for ordinary judgments | Already supported through `hybrid_verified`; every result remains candidate-only until ALR-TW verifies Judicial Yuan official full text |
+| [TLR (Taiwan Legal RAG)](https://github.com/aa0101181514/tw-legal-rag) | Semantic candidate recall for ordinary judgments and administrative interpretations; bounded judgment-text paging | Ordinary judgments are supported through `hybrid_verified`; administrative materials require a deployer-supplied official public-law verifier. Every TLR result remains candidate-only |
+| `mcp-taiwan-legal-db` or another compatible legal-data service | External candidate or locator source | The frontend or deployer calls it and submits selected locators through a `client_assisted` research plan; evidence exists only after ALR-TW official verification |
 
-If a frontend has already called TLR, that run should submit the selected
-judgment locators so ALR-TW does not repeat the same recall.
-Listing an example does not make either project a core dependency, co-distributed
-component, or trusted evidence source. Each project retains independent code,
-versions, configuration, and licensing.
+If a frontend has already called TLR or another data service, that run should
+submit the selected locators through a `client_assisted` research plan so
+ALR-TW does not repeat the same recall. External results remain candidates until
+official identity, content, and source/evidence binding have been verified.
+
+Deployments may also set `ALR_TW_LOCAL_PORTAL_ROOT` to use an existing compatible
+read-only local judgment provider. Candidate and verified-cache requirements are
+documented in [Official Providers](docs/OFFICIAL_PROVIDERS.md).
 
 ## Safety boundary
 
@@ -145,7 +155,7 @@ Ordinary-judgment lookup does not require a Judicial Yuan API token. In a live m
 
 Secrets are redacted from `doctor` output and must not be committed, traced, or persisted in SQLite.
 
-## v0.10.1 MCP tools
+## v0.11.0 MCP tools
 
 | Tool | Purpose |
 |---|---|
@@ -156,6 +166,8 @@ Secrets are redacted from `doctor` output and must not be committed, traced, or 
 | `get_legal_research_state` | Read run state without network activity or TTL extension |
 | `get_legal_research_finalization` | Return server-owned research sufficiency, Coverage v2, snapshot receipts, and answer posture |
 | `lookup_legal_source` | Exact lookup for a law article, Constitutional identifier, JID, or formal judgment citation |
+| `inspect_judgment_lineage` | Inspect TLR-recorded upper/lower history for a same-run verified six-part JID and officially verify up to 1–20 related decisions |
+| `lookup_legislative_history` | Explicitly query bounded, candidate-only Legislative Yuan locators in a live mode |
 | `validate_legal_analysis` | Validate six composable branches, civil element-level burdens, server-owned references, and legal context |
 | `validate_legal_answer` | Validate a draft only against evidence owned by that run |
 | `purge_research_storage` | Synchronously purge one run or all managed storage |
@@ -188,7 +200,13 @@ Every tool result uses a fixed envelope:
 - Ordinary judgments: parse the official search pages to resolve a JID, then download and parse full text directly from the official `data.aspx` page.
 - Constitutional materials: judgments, substantive rulings, legacy interpretations, and available individual opinions.
 
-The first release does not promise complete historical statute versions, exhaustive ordinary-judgment recall, every procedural ruling, complete case-history graphs, or full attachment/OCR coverage. See [Official Providers](docs/OFFICIAL_PROVIDERS.md).
+The project does not promise complete historical statute versions, exhaustive
+ordinary-judgment recall, every procedural ruling, complete case-history graphs,
+or full attachment/OCR coverage. `inspect_judgment_lineage` is limited to TLR's
+database-recorded relations and the official-verification budget. No upper
+record does not establish finality, and disposition classification does not
+semantically compare the courts' opinions. See [Official Providers](docs/OFFICIAL_PROVIDERS.md)
+and [TLR Provider](docs/TLR_PROVIDER.md).
 
 ## Final decisions
 
@@ -286,7 +304,7 @@ Choose data mode
 
 - Statutes: the Ministry of Justice official source is the authority layer. Prefer exact lookup for an explicit law and article; block or require human review when a historical version cannot be established.
 - Ordinary judgments: ALR-TW does not use a Judicial Yuan API. It parses the public judgment search page to obtain a JID, then downloads the official detail page. Search failure, site blocking, parse failure, and confirmed absence remain distinct states.
-- TLR: [TLR](https://github.com/aa0101181514/tw-legal-rag) improves ordinary-judgment candidate recall only. A hit must be resolved against the Judicial Yuan official source. `mcp-taiwan-legal-db` is a public behavioral reference, not a dependency; the provider, transport, parser, and evidence pipeline are independent implementations.
+- TLR: [TLR](https://github.com/aa0101181514/tw-legal-rag) improves ordinary-judgment and administrative-interpretation candidate recall. Judgment hits must be resolved against the Judicial Yuan official source; administrative hits require an ALR-TW-governed official public-law adapter. Hit excerpts, paged TLR text, and provider status metadata never become evidence.
 - Constitutional materials: holdings, majority reasons, concurrences, and dissents retain separate roles. An individual opinion cannot be presented as majority reasoning.
 
 Applicability, authority/lineage, and public-law contracts are provider-neutral

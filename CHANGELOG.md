@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.11.0 - 2026-09-03
+
+### Added
+
+- TLR provider 新增行政函釋／稅務函釋語意候選召回，投影為
+  `PublicLawCandidate`；不建立 source、server metadata 或 evidence，效力狀態與
+  查無結果都維持外部 provider 的 bounded metadata。
+- TLR 普通裁判候選新增 `hit_excerpt` 投影與有界長全文分頁；回傳每頁 offset、
+  全文總字數、截斷狀態及續讀 offset。完整讀取 TLR 文本仍固定
+  `evidence_eligible=false`，正式 evidence 只由 ALR-TW 官方驗證產生。
+- 新增 server-owned `inspect_judgment_lineage`：以 TLR `/v1/fulltext` 的
+  `case_history.upper/lower` 作 bounded 歷審候選，再由目前設定的官方裁判
+  provider 逐筆回查正文並分類上訴駁回、維持、廢棄發回或廢棄改判。
+- 歷審結果綁定既有 `AuthorityLineageContract`；只有 TLR 的廢棄標記與官方
+  上級審主文分類同時成立時，才回報 confirmed reversal。查無上級審不推論
+  裁判確定，也不宣稱已完成前後審見解的語義比較。
+- 新增可選的唯讀本機裁判 provider；搜尋結果維持 candidate-only，精確查詢
+  會檢查 catalog binding 與正文 hash，未符合本機快取條件時回查官方來源。
+
+### Changed
+
+- 資料層說明改為可選接入：部署者可使用 TLR，或由前端呼叫相容法律資料
+  服務，再以 `client_assisted` 提交候選 locator；正式 evidence 仍由 ALR-TW 驗證。
+- 統一套件、MCP 與現行文件的版本標示，補齊本機裁判 provider 的共用介面型別。
+
 ## 0.10.1 - 2026-08-26
 
 ### Fixed
@@ -256,7 +281,7 @@
 - 六個 MCP tools：建立、繼續、讀取、精確來源查詢、答案驗證、清除；
 - 法務部中央法規、司法院普通裁判、憲法法庭官方 providers；
 - JID 與正式裁判字號的官方精確解析；
-- clean-room TLR candidate-only provider 與本地 privacy gate；
+- TLR candidate-only provider 與本地 privacy gate；
 - official live snapshot evidence promotion、expiry 與 claim-support validation；
 - `alr-tw doctor`、`alr-tw purge` 與 live-mode 設定。
 

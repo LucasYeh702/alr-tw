@@ -29,6 +29,13 @@ from alr_tw.providers.receipt_adapter import (
     ReceiptAwareProviderAdapter,
     ReceiptAwareProviderEnvelope,
 )
+from alr_tw.providers.local_portal import (
+    LOCAL_PORTAL_PROVIDER_ID,
+    LOCAL_PORTAL_ROOT_ENV,
+    LocalPortalJudgmentProvider,
+    build_local_portal_judgment_provider,
+    local_portal_root_from_env,
+)
 
 __all__ = [
     "BoundedPublicLawProviderAdapter",
@@ -52,4 +59,9 @@ __all__ = [
     "ProviderReceiptIssuer",
     "ReceiptAwareProviderAdapter",
     "ReceiptAwareProviderEnvelope",
+    "LOCAL_PORTAL_PROVIDER_ID",
+    "LOCAL_PORTAL_ROOT_ENV",
+    "LocalPortalJudgmentProvider",
+    "build_local_portal_judgment_provider",
+    "local_portal_root_from_env",
 ]

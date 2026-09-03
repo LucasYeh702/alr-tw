@@ -1,13 +1,13 @@
-# ALR-TW v0.10.1 Acceptance
+# ALR-TW v0.11.0 Acceptance
 
-ALR-TW v0.10.1 可宣稱為「台灣法律 Agentic RAG / MCP research safety
+ALR-TW v0.11.0 可宣稱為「台灣法律 Agentic RAG / MCP research safety
 harness 公開預覽」。它提供 server-owned research state、agent-neutral
 interoperability、官方來源 providers、TLR candidate-only recall、evidence
 promotion、六種可併用法律分析分支的結構／信任驗證、claim validation、
 short-lived storage 與 purge；並提供 provider-neutral applicability、
 authority／judgment-lineage、公法材料 contracts 及可替換 provider SDK。
 
-v0.10.1 另加入 semantic verifier sidecar、provider conformance、
+v0.11.0 同時提供 semantic verifier sidecar、provider conformance、
 receipt-aware adapter 與 deployer boundary contracts。它們只驗證結構、信任、
 snapshot 與公開邊界；sidecar／部署者 provider 不能建立 evidence、改變 source
 trust、授權 finalization，也不會把模型、corpus、credentials 或 production
@@ -41,7 +41,7 @@ parameters 打包進公開套件。
 - synthetic fixtures 僅供 demo／契約測試，不得支撐法律答案；
 - blocked 不包含 answer body；
 - CLI/MCP purge 同一實作；
-- v0.10.1 contract、既有工具與 payload 的 additive compatibility、build 與 stdio smoke 應通過；
+- v0.11.0 contract、既有工具與 payload 的 additive compatibility、build 與 stdio smoke 應通過；
 - 公開邊界掃描無秘密、真實資料或 local-sensitive artifacts。
 
 ## 可接受的 qualified 狀態

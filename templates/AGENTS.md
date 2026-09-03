@@ -16,6 +16,9 @@ IDE、模型或 agent framework；server 的工具清單與 trust gate 才是權
 ## Tool selection
 
 - 單一正式法源查證：使用 `lookup_legal_source`。
+- 要引用同一 run 已驗證裁判的見解前：在有 TLR provider 的部署使用
+  `inspect_judgment_lineage` 檢查 bounded 上下級審與官方主文；查無上級審
+  不等於裁判確定，結果也不代表已比較前後審見解。
 - 多步驟法律研究：使用 `research_legal_question`，再依
   `continue_legal_research` 的 `operation_id` 繼續。
 - 結構化分析驗證：使用 `validate_legal_analysis`。

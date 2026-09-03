@@ -27,6 +27,7 @@ from alr_tw.providers.official import (
     OfficialJudgmentProvider,
     OfficialLawProvider,
 )
+from alr_tw.providers.local_portal import build_local_portal_judgment_provider
 from alr_tw.providers.legislative_history import LegislativeHistoryBackend
 from alr_tw.providers.sdk import PublicLawBackendResult
 from alr_tw.providers.tlr import TlrSemanticRecallProvider
@@ -189,7 +190,14 @@ class McpSession:
                 providers = ProviderSet(
                     laws=OfficialLawProvider(),
                     constitutional=OfficialConstitutionalProvider(),
-                    judgments=OfficialJudgmentProvider(),
+                    judgments=(
+                        build_local_portal_judgment_provider(
+                            settings.local_portal_root,
+                            official_provider=OfficialJudgmentProvider(),
+                        )
+                        if settings.local_portal_root is not None
+                        else OfficialJudgmentProvider()
+                    ),
                     tlr=(
                         TlrSemanticRecallProvider(
                             settings.tlr_base_url,
@@ -425,7 +433,7 @@ def _all_tool_definitions() -> list[dict[str, Any]]:
         },
         {
             "name": "get_claim_grounding_policy",
-            "description": "Return the current public claim-grounding contract used by ALR-TW v0.10.1.",
+            "description": "Return the current public claim-grounding contract used by ALR-TW v0.11.0.",
             "inputSchema": {
                 "type": "object",
                 "properties": {},
@@ -768,6 +776,38 @@ def _server_owned_tool_definitions() -> list[dict[str, Any]]:
                     "operation_id": {"type": "string"},
                 },
                 "required": ["text"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "inspect_judgment_lineage",
+            "description": (
+                "Inspect TLR database-recorded upper and lower case history for an "
+                "already server-verified judgment, then officially verify a bounded "
+                "set of related decisions and classify their dispositions. An absent "
+                "upper-court record does not establish finality, and semantic opinion "
+                "comparison is not performed."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "run_id": {"type": "string"},
+                    "jid": {
+                        "type": "string",
+                        "description": (
+                            "Six-part canonical JID of a judgment already verified "
+                            "in this research run."
+                        ),
+                    },
+                    "operation_id": {"type": "string"},
+                    "max_related_nodes": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 20,
+                        "default": 8,
+                    },
+                },
+                "required": ["run_id", "jid", "operation_id"],
                 "additionalProperties": False,
             },
         },
@@ -1150,6 +1190,20 @@ def _call_server_owned_tool(
             run_id=run_value,
             operation_id=operation_value,
         )
+    if name == "inspect_judgment_lineage":
+        _reject_unexpected_keys(
+            arguments,
+            {"run_id", "jid", "operation_id", "max_related_nodes"},
+        )
+        max_related_nodes = arguments.get("max_related_nodes", 8)
+        if isinstance(max_related_nodes, bool) or not isinstance(max_related_nodes, int):
+            raise ValueError("max_related_nodes must be an integer")
+        return service.inspect_judgment_lineage(
+            _required_string(arguments, "run_id"),
+            _required_string(arguments, "jid"),
+            _required_string(arguments, "operation_id"),
+            max_related_nodes=max_related_nodes,
+        )
     if name == "validate_legal_analysis":
         _reject_unexpected_keys(
             arguments,
@@ -1312,6 +1366,27 @@ def _summarize_tool_input(tool_name: str, arguments: dict[str, Any]) -> dict[str
 
 
 def _summarize_tool_output(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if tool_name == "inspect_judgment_lineage":
+        treatment = payload.get("treatment_summary")
+        return {
+            "status": payload.get("status"),
+            "jid": payload.get("jid"),
+            "history_entry_count": payload.get("history_entry_count"),
+            "official_verified_related_count": payload.get(
+                "official_verified_related_count"
+            ),
+            "confirmed_reversal": (
+                treatment.get("officially_confirmed_reversal")
+                if isinstance(treatment, dict)
+                else None
+            ),
+            "verified_appeal_dismissal": (
+                treatment.get("officially_verified_appeal_dismissal")
+                if isinstance(treatment, dict)
+                else None
+            ),
+            "current_holding_use": payload.get("current_holding_use"),
+        }
     if tool_name == "validate_citation":
         return {
             "citation_id": payload.get("citation_id"),

@@ -1,6 +1,6 @@
 # ALR-TW Error Codes
 
-## v0.10.1 contract codes
+## v0.11.0 contract codes
 
 | Code | Meaning |
 |---|---|
@@ -23,7 +23,7 @@
 | `HISTORICAL_LAW_NORMATIVE_ROLE_MISMATCH` | 法條版本 source role 不是 normative text |
 | `HISTORICAL_LAW_SOURCE_ROLE_INVALID` | Provider 回傳的法條／立法資料分類無法安全驗證 |
 
-## v0.10.1 provider and research codes
+## v0.11.0 provider and research codes
 
 | Code | Meaning |
 |---|---|
@@ -45,6 +45,16 @@
 | `LEGACY_JUDGMENT_IDENTIFIER_UNRESOLVED` | 五段式舊判決查詢頁未提供可核對的官方識別標記；不得猜測版本尾碼 |
 | `LEGACY_JUDGMENT_IDENTIFIER_AMBIGUOUS` | 六段式請求只取得五段式官方標記，無法唯一驗證版本尾碼 |
 | `TLR_UNAVAILABLE` | TLR timeout、HTTP 或 schema failure |
+| `TLR_RESULT_TOKEN_INVALID_OR_EXPIRED` | TLR `/v1/fulltext` 的 bounded result handle 已失效；lineage executor 只會重新執行一次安全的 exact-style TLR search |
+| `TLR_DOCUMENT_NOT_FOUND` | TLR 無法在本次 bounded scope 取得目標文書／歷審 metadata；不是官方裁判不存在 |
+| `TLR_FULLTEXT_*` | TLR 長全文的 handle、offset、頁數上限、跨頁 identity／總長或截斷狀態不一致；候選全文不建立 source／evidence |
+| `TLR_PUBLIC_LAW_SCHEMA_CHANGED` | TLR 行政函釋候選回應不符合 bounded public-law schema；結果為 retry-required，不升格 |
+| `TLR_PUBLIC_LAW_NOT_FOUND_IS_BOUNDED_ONLY` | 本次 TLR 行政函釋召回為空；不代表函釋不存在，也不允許 scoped absence claim |
+| `TLR_PUBLIC_LAW_STATUS_REQUIRES_OFFICIAL_VERIFICATION` | TLR 回傳的函釋效力狀態只是外部 metadata；必須由 ALR-TW 官方 public-law adapter 重新驗證 |
+| `TLR_LINEAGE_PROVIDER_UNAVAILABLE` | 本 data mode／deployment 沒有啟用 TLR lineage provider |
+| `JUDGMENT_LINEAGE_ROOT_SOURCE_NOT_IN_RUN` | Root JID 尚未在同一 run 取得 server-owned official／verified-cache source |
+| `JUDGMENT_LINEAGE_ROOT_SOURCE_STALE` | Root judgment source 已過期，不能用來展開歷審 |
+| `JUDGMENT_LINEAGE_*` | 歷審 root 或關聯節點的 identity、official source tier、freshness、evidence binding、重複或方向檢查失敗；該節點不升格，且不推論裁判確定 |
 | `SEMANTIC_RECALL_DEGRADED` | 外部召回失敗，effective mode 已降為 official-only |
 | `PRIVACY_EXTERNAL_QUERY_BLOCKED` | 查詢為 sensitive／uncertain，禁止送外部 |
 | `CALLER_ATTESTED_SOURCE` | Caller metadata 不能自我證明 final eligibility |
@@ -91,7 +101,7 @@
 | `COUNTER_AUTHORITY_COVERAGE_INCOMPLETE` | 未執行、未完成或失敗的反面見解搜尋必須揭露 |
 | `PROCEDURAL_POSTURE_UNRESOLVED` | 程序階段尚未確認 |
 
-## v0.10.1 applicability and authority-lineage codes
+## v0.11.0 applicability and authority-lineage codes
 
 | Code | Meaning |
 |---|---|
@@ -121,7 +131,7 @@
 | `AUTHORITY_LINEAGE_NOT_FOUND_IS_BOUNDED_ONLY` | `not_found_in_scope` 僅限 bounded scope，不支持全球不存在主張 |
 | `NEGATIVE_TREATMENT_SEMANTIC_CLASSIFICATION_NOT_PERFORMED` | Provider treatment 尚未經 semantic opposition classifier |
 
-## v0.10.1 public-law provider and SDK codes
+## v0.11.0 public-law provider and SDK codes
 
 | Code | Meaning |
 |---|---|
@@ -182,7 +192,7 @@
 | `SNAPSHOT_RECEIPT_MISSING_LEGACY` | 舊紀錄沒有 receipt；不得據此宣稱 ordinary sufficiency |
 | `ANSWER_REFUSAL_ONLY` | finalization 只允許結構化拒答，不回傳草稿 |
 
-## v0.10.1 semantic-verifier plugin codes
+## v0.11.0 semantic-verifier plugin codes
 
 | Code | Meaning |
 |---|---|
@@ -214,7 +224,7 @@
 | `SEMANTIC_VERIFIER_TARGET_DUPLICATED` | plugin 對同一 target 回傳多筆 finding |
 | `SEMANTIC_VERIFIER_TARGET_COVERAGE_PARTIAL` | completed plugin 結果未涵蓋所有 requested targets |
 
-## v0.10.1 provider conformance and boundary codes
+## v0.11.0 provider conformance and boundary codes
 
 | Code | Meaning |
 |---|---|
@@ -251,7 +261,7 @@
 | DEPLOYER_CREDENTIALS_FORBIDDEN | 公開套件不得含 credentials |
 | DEPLOYER_DEPLOYMENT_PARAMETERS_FORBIDDEN | 公開套件不得含 deployment parameters |
 
-## v0.10.1 legal-analysis domain constraint codes
+## v0.11.0 legal-analysis domain constraint codes
 
 | Code | Meaning |
 |---|---|

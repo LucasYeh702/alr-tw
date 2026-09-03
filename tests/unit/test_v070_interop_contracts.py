@@ -71,6 +71,10 @@ def test_capability_contract_is_agent_neutral_and_preserves_server_ownership():
     assert "legal analysis proposals remain untrusted until server validation" in (
         capabilities.limitations
     )
+    assert any(
+        "absent upper record does not establish finality" in limitation
+        for limitation in capabilities.limitations
+    )
     assert all(
         "civil analysis proposals" not in limitation
         and "cross-domain legal analysis proposals" not in limitation

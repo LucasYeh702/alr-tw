@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Callable, Coroutine, TypeVar
 from urllib.parse import parse_qs, unquote, urlsplit
 
@@ -16,24 +17,43 @@ from alr_tw.contracts.providers import (
     ProviderResult,
     ProviderResultStatus,
 )
+from alr_tw.contracts.authority_lineage import NegativeTreatmentStatus
 from alr_tw.contracts.interop import AuthorityLocatorProposal, DiscoveryMode
 from alr_tw.contracts.research import (
     ResearchObligation,
     ResearchObligationKind,
     ResearchRun,
 )
-from alr_tw.contracts.sources import EvidenceSpan, MaterialType, SourceRecord, TrustStatus
+from alr_tw.contracts.sources import (
+    EvidenceSpan,
+    MaterialType,
+    SourceRecord,
+    SourceTier,
+    TrustStatus,
+)
+from alr_tw.providers.local_portal import JudgmentProviderPort
 from alr_tw.providers.official import (
     OfficialConstitutionalProvider,
     OfficialJudgmentProvider,
     OfficialLawProvider,
 )
-from alr_tw.providers.tlr import TlrSemanticRecallProvider, screen_external_query
+from alr_tw.providers.tlr import (
+    TlrCaseHistoryRecord,
+    TlrSemanticRecallProvider,
+    screen_external_query,
+)
 from alr_tw.research.judgment_identity import (
     ResolvedJudgmentIdentity,
     direct_judgment_identity,
     rank_and_dedupe_judgment_identities,
     resolve_judgment_candidate,
+)
+from alr_tw.research.judgment_lineage import (
+    VerifiedLineageSource,
+    build_lineage_contract,
+    disposition_codes,
+    evidence_summary,
+    verified_node_payload,
 )
 from alr_tw.research.counter_authority import (
     CounterAuthorityStatus,
@@ -78,7 +98,7 @@ def _compact_identifier(value: str) -> str:
 class ProviderSet:
     laws: OfficialLawProvider
     constitutional: OfficialConstitutionalProvider
-    judgments: OfficialJudgmentProvider
+    judgments: JudgmentProviderPort
     tlr: TlrSemanticRecallProvider | None = None
 
 
@@ -157,6 +177,227 @@ class ProviderObligationExecutor:
             "source": source.model_dump(mode="json") if source is not None else None,
             "evidence": [item.model_dump(mode="json") for item in evidence_items],
             "claim_verified": False,
+        }
+
+    def inspect_judgment_lineage(
+        self,
+        run_id: str,
+        jid: str,
+        *,
+        max_related_nodes: int = 8,
+    ) -> dict[str, Any]:
+        """Inspect one verified judgment's TLR history and verify related nodes officially."""
+
+        normalized_jid = OfficialJudgmentProvider.normalize_jid(jid)
+        if normalized_jid is None:
+            return self._lineage_blocked(jid, "INVALID_IDENTIFIER")
+        if not 1 <= max_related_nodes <= 20:
+            raise ValueError("max_related_nodes must be between 1 and 20")
+
+        run_sources = self.store.list_sources(run_id)
+        root_source = self._lineage_root_source(run_sources, normalized_jid)
+        if root_source is None:
+            return self._lineage_blocked(
+                normalized_jid,
+                "JUDGMENT_LINEAGE_ROOT_SOURCE_NOT_IN_RUN",
+            )
+        now = datetime.now(UTC)
+        if root_source.expires_at <= now:
+            return self._lineage_blocked(normalized_jid, "JUDGMENT_LINEAGE_ROOT_SOURCE_STALE")
+        if self.providers.tlr is None:
+            return self._lineage_blocked(normalized_jid, "TLR_LINEAGE_PROVIDER_UNAVAILABLE")
+
+        candidates = self.store.list_candidates(run_id)
+        origin_candidate_id = root_source.metadata.get("origin_candidate_id")
+        candidate = self._lineage_candidate(
+            candidates,
+            normalized_jid,
+            preferred_candidate_id=(
+                str(origin_candidate_id) if isinstance(origin_candidate_id, str) else None
+            ),
+        )
+        provider_calls: list[dict[str, Any]] = []
+        history_result, history = self._fetch_lineage_history(
+            root_source,
+            normalized_jid,
+            candidate,
+            provider_calls,
+        )
+        if history is None:
+            error_code = (
+                history_result.error_code.value
+                if history_result.error_code is not None
+                else "TLR_CASE_HISTORY_UNAVAILABLE"
+            )
+            return {
+                **self._lineage_blocked(normalized_jid, error_code),
+                "provider_calls": provider_calls,
+            }
+        if history.root_canonical_jid not in {None, normalized_jid}:
+            return {
+                **self._lineage_blocked(normalized_jid, "TLR_CASE_HISTORY_ROOT_MISMATCH"),
+                "provider_calls": provider_calls,
+            }
+
+        root_evidence = tuple(
+            item
+            for item in self.store.list_evidence(run_id)
+            if item.source_id == root_source.source_id
+        )
+        selected_entries = list(history.entries[:max_related_nodes])
+        truncated = len(history.entries) > len(selected_entries)
+        verified: list[VerifiedLineageSource] = []
+        verified_identities: dict[str, str] = {}
+        verification_by_doc_id: dict[str, dict[str, Any]] = {}
+        for entry in selected_entries:
+            identifier = entry.canonical_jid or entry.provider_document_id
+
+            def fetch_related(
+                identifier: str = identifier,
+            ) -> tuple[ProviderResult, SourceRecord | None, list[EvidenceSpan]]:
+                return _run(self.providers.judgments.exact_lookup(identifier))
+
+            result, source, evidence = fetch_related()
+            provider_calls.append(self._provider_call(result))
+            verification_error = self._lineage_verification_error(
+                result,
+                source,
+                evidence,
+                entry.provider_document_id,
+                root_jid=normalized_jid,
+                now=now,
+            )
+            if verification_error is None and source is not None:
+                identity_key = (
+                    OfficialJudgmentProvider.normalize_jid(
+                        source.official_identifier or ""
+                    )
+                    or source.source_id
+                )
+                previous_direction = verified_identities.get(identity_key)
+                if previous_direction is not None:
+                    verification_error = (
+                        "JUDGMENT_LINEAGE_OFFICIAL_DIRECTION_CONFLICT"
+                        if previous_direction != entry.direction
+                        else "JUDGMENT_LINEAGE_DUPLICATE_OFFICIAL_IDENTITY"
+                    )
+            if verification_error is not None or source is None:
+                verification_by_doc_id[entry.provider_document_id] = {
+                    "direction": entry.direction,
+                    "provider_history": entry.model_dump(mode="json"),
+                    "official_verification_status": "failed",
+                    "error_code": verification_error,
+                    "disposition_codes": [],
+                    "all_evidence_ids": [],
+                    "disposition_evidence_ids": [],
+                    "court_view_evidence_ids": [],
+                }
+                continue
+            verified_identities[identity_key] = entry.direction
+            self.store.save_source(run_id, source)
+            for evidence_item in evidence:
+                self.store.save_evidence(run_id, evidence_item)
+            item = VerifiedLineageSource(
+                history=entry,
+                source=source,
+                evidence=tuple(evidence),
+            )
+            verified.append(item)
+            verification_by_doc_id[entry.provider_document_id] = verified_node_payload(
+                entry,
+                source,
+                evidence,
+            )
+
+        related_nodes: list[dict[str, Any]] = []
+        for entry in history.entries:
+            payload = verification_by_doc_id.get(entry.provider_document_id)
+            if payload is None:
+                payload = {
+                    "direction": entry.direction,
+                    "provider_history": entry.model_dump(mode="json"),
+                    "official_verification_status": "not_attempted_budget",
+                    "error_code": "JUDGMENT_LINEAGE_VERIFICATION_BUDGET_TRUNCATED",
+                    "disposition_codes": [],
+                    "all_evidence_ids": [],
+                    "disposition_evidence_ids": [],
+                    "court_view_evidence_ids": [],
+                }
+            related_nodes.append(payload)
+
+        contract, validation = build_lineage_contract(
+            run_id=run_id,
+            root_source=root_source,
+            root_evidence=root_evidence,
+            history=history,
+            related=verified,
+            max_related_nodes=max_related_nodes,
+        )
+        limitations = list(contract.limitations)
+        failed_count = len(selected_entries) - len(verified)
+        if failed_count:
+            limitations.append("JUDGMENT_LINEAGE_OFFICIAL_VERIFICATION_INCOMPLETE")
+        if truncated:
+            limitations.append("JUDGMENT_LINEAGE_VERIFICATION_BUDGET_TRUNCATED")
+        verified_upper_dispositions = sorted(
+            {
+                code
+                for item in verified
+                if item.history.direction == "upper"
+                for code in disposition_codes(item.source, item.evidence)
+                if code != "unknown"
+            }
+        )
+        return {
+            "schema_version": "alr-tw.judgment-lineage-inspection/v1",
+            "status": "qualified",
+            "run_id": run_id,
+            "jid": normalized_jid,
+            "root": {
+                "source_id": root_source.source_id,
+                "official_identifier": root_source.official_identifier,
+                "citation": root_source.citation,
+                "official_url": root_source.official_url,
+                "disposition_codes": disposition_codes(root_source, root_evidence),
+                **evidence_summary(root_evidence),
+            },
+            "provider_history": history.model_dump(mode="json"),
+            "related_nodes": related_nodes,
+            "authority_lineage": contract.model_dump(mode="json"),
+            "authority_lineage_validation": validation,
+            "treatment_summary": {
+                "upper_record_count": sum(
+                    item.direction == "upper" for item in history.entries
+                ),
+                "lower_record_count": sum(
+                    item.direction == "lower" for item in history.entries
+                ),
+                "upper_vacated_marker_count": sum(
+                    item.direction == "upper" and item.vacated_marker
+                    for item in history.entries
+                ),
+                "official_upper_disposition_codes": verified_upper_dispositions,
+                "officially_verified_appeal_dismissal": (
+                    "appeal_dismissed" in verified_upper_dispositions
+                ),
+                "officially_verified_affirmance": (
+                    "affirmed" in verified_upper_dispositions
+                ),
+                "officially_confirmed_reversal": any(
+                    record.status is NegativeTreatmentStatus.REVERSED
+                    for record in contract.negative_treatments
+                ),
+                "establishes_finality": False,
+            },
+            "official_verified_related_count": len(verified),
+            "official_verification_failed_count": failed_count,
+            "history_entry_count": len(history.entries),
+            "truncated": truncated,
+            "max_related_nodes": max_related_nodes,
+            "establishes_finality": False,
+            "semantic_opinion_comparison_performed": False,
+            "provider_calls": provider_calls,
+            "limitations": sorted(set(limitations)),
         }
 
     @staticmethod
@@ -1105,6 +1346,222 @@ class ProviderObligationExecutor:
             "source_count": len(result.source_ids),
             "evidence_count": len(result.evidence_ids),
             "candidate_count": len(result.candidates),
+        }
+
+    def _fetch_lineage_history(
+        self,
+        root_source: SourceRecord,
+        jid: str,
+        candidate: ProviderCandidate | None,
+        provider_calls: list[dict[str, Any]],
+    ) -> tuple[ProviderResult, TlrCaseHistoryRecord | None]:
+        assert self.providers.tlr is not None
+        if candidate is not None:
+            doc_id = self._candidate_doc_id(candidate)
+            result_handle = candidate.metadata.get("result_token")
+            if (
+                doc_id is not None
+                and isinstance(result_handle, str)
+                and result_handle.strip()
+            ):
+                result, history = _run(
+                    self.providers.tlr.case_history(doc_id, result_handle)
+                )
+                provider_calls.append(self._provider_call(result))
+                if result.error_code is not ProviderErrorCode.TLR_RESULT_TOKEN_INVALID_OR_EXPIRED:
+                    return result, history
+
+        refresh_query = root_source.citation
+        if candidate is not None:
+            for value in (
+                candidate.identity.formal_citation
+                if candidate.identity is not None
+                else None,
+                candidate.title,
+            ):
+                if isinstance(value, str) and value.strip():
+                    refresh_query = value.strip()
+                    break
+        search_result, _, _ = _run(
+            self.providers.tlr.search(refresh_query, top_k=10)
+        )
+        provider_calls.append(self._provider_call(search_result))
+        if search_result.status is ProviderResultStatus.ERROR:
+            return search_result, None
+        refreshed = self._lineage_candidate(search_result.candidates, jid)
+        if refreshed is None:
+            return (
+                ProviderResult(
+                    status=ProviderResultStatus.NOT_FOUND,
+                    provider_id=self.providers.tlr.provider_id,
+                    error_code=ProviderErrorCode.TLR_DOCUMENT_NOT_FOUND,
+                    message="TLR_LINEAGE_ROOT_NOT_FOUND",
+                    coverage_complete=False,
+                ),
+                None,
+            )
+        doc_id = self._candidate_doc_id(refreshed)
+        result_handle = refreshed.metadata.get("result_token")
+        if (
+            doc_id is None
+            or not isinstance(result_handle, str)
+            or not result_handle.strip()
+        ):
+            return (
+                ProviderResult(
+                    status=ProviderResultStatus.ERROR,
+                    provider_id=self.providers.tlr.provider_id,
+                    error_code=ProviderErrorCode.EXTERNAL_PROVIDER_SCHEMA_CHANGED,
+                    message="TLR_LINEAGE_RESULT_HANDLE_MISSING",
+                    coverage_complete=False,
+                ),
+                None,
+            )
+        result, history = _run(
+            self.providers.tlr.case_history(doc_id, result_handle)
+        )
+        provider_calls.append(self._provider_call(result))
+        return result, history
+
+    @staticmethod
+    def _lineage_root_source(
+        sources: list[SourceRecord],
+        jid: str,
+    ) -> SourceRecord | None:
+        eligible = [
+            source
+            for source in sources
+            if source.material_type is MaterialType.JUDGMENT
+            and source.source_tier in {SourceTier.OFFICIAL, SourceTier.VERIFIED_CACHE}
+            and source.trust_status
+            in {TrustStatus.OFFICIAL_VERIFIED, TrustStatus.EVIDENCE_ELIGIBLE}
+            and OfficialJudgmentProvider.normalize_jid(source.official_identifier or "") == jid
+        ]
+        return max(
+            eligible,
+            key=lambda source: source.verified_at or source.fetched_at,
+            default=None,
+        )
+
+    @classmethod
+    def _lineage_candidate(
+        cls,
+        candidates: list[ProviderCandidate],
+        jid: str,
+        *,
+        preferred_candidate_id: str | None = None,
+    ) -> ProviderCandidate | None:
+        matches = [
+            candidate
+            for candidate in candidates
+            if candidate.provider_id == TlrSemanticRecallProvider.provider_id
+            and cls._candidate_matches_jid(candidate, jid)
+        ]
+        if preferred_candidate_id is not None:
+            preferred = next(
+                (
+                    candidate
+                    for candidate in matches
+                    if candidate.candidate_id == preferred_candidate_id
+                ),
+                None,
+            )
+            if preferred is not None:
+                return preferred
+        return min(
+            matches,
+            key=lambda candidate: candidate.candidate_rank or 2**31,
+            default=None,
+        )
+
+    @staticmethod
+    def _candidate_doc_id(candidate: ProviderCandidate) -> str | None:
+        value = (
+            candidate.identity.provider_document_id
+            if candidate.identity is not None
+            else candidate.metadata.get("doc_id")
+        )
+        return str(value).strip() if isinstance(value, str) and value.strip() else None
+
+    @classmethod
+    def _candidate_matches_jid(cls, candidate: ProviderCandidate, jid: str) -> bool:
+        if candidate.identity is not None and candidate.identity.canonical_jid == jid:
+            return True
+        doc_id = cls._candidate_doc_id(candidate)
+        partial = OfficialJudgmentProvider.normalize_partial_jid(doc_id or "")
+        return partial is not None and jid.startswith(f"{partial},")
+
+    @staticmethod
+    def _lineage_identity_matches(
+        actual_identifier: str | None,
+        provider_document_id: str,
+    ) -> bool:
+        actual = OfficialJudgmentProvider.normalize_jid(actual_identifier or "")
+        if actual is None:
+            return False
+        expected = OfficialJudgmentProvider.normalize_jid(provider_document_id)
+        if expected is not None:
+            return actual == expected
+        partial = OfficialJudgmentProvider.normalize_partial_jid(provider_document_id)
+        return partial is not None and actual.startswith(f"{partial},")
+
+    @classmethod
+    def _lineage_verification_error(
+        cls,
+        result: ProviderResult,
+        source: SourceRecord | None,
+        evidence: list[EvidenceSpan],
+        provider_document_id: str,
+        *,
+        root_jid: str,
+        now: datetime,
+    ) -> str | None:
+        if result.status is not ProviderResultStatus.FOUND:
+            return (
+                result.error_code.value
+                if result.error_code is not None
+                else "JUDGMENT_LINEAGE_OFFICIAL_VERIFICATION_FAILED"
+            )
+        if source is None:
+            return "JUDGMENT_LINEAGE_OFFICIAL_SOURCE_MISSING"
+        if not cls._lineage_identity_matches(
+            source.official_identifier,
+            provider_document_id,
+        ):
+            return "JUDGMENT_LINEAGE_OFFICIAL_ID_MISMATCH"
+        if OfficialJudgmentProvider.normalize_jid(source.official_identifier or "") == root_jid:
+            return "JUDGMENT_LINEAGE_OFFICIAL_SELF_REFERENCE"
+        if (
+            source.material_type is not MaterialType.JUDGMENT
+            or source.source_tier not in {SourceTier.OFFICIAL, SourceTier.VERIFIED_CACHE}
+            or source.trust_status
+            not in {TrustStatus.OFFICIAL_VERIFIED, TrustStatus.EVIDENCE_ELIGIBLE}
+        ):
+            return "JUDGMENT_LINEAGE_SOURCE_NOT_OFFICIALLY_VERIFIED"
+        if source.expires_at <= now:
+            return "JUDGMENT_LINEAGE_OFFICIAL_SOURCE_STALE"
+        if not evidence:
+            return "JUDGMENT_LINEAGE_OFFICIAL_EVIDENCE_MISSING"
+        evidence_ids = {item.evidence_id for item in evidence}
+        if (
+            source.source_id not in result.source_ids
+            or not evidence_ids.issubset(set(result.evidence_ids))
+            or any(item.source_id != source.source_id for item in evidence)
+        ):
+            return "JUDGMENT_LINEAGE_OFFICIAL_EVIDENCE_NOT_BOUND"
+        return None
+
+    @staticmethod
+    def _lineage_blocked(jid: str, reason_code: str) -> dict[str, Any]:
+        return {
+            "schema_version": "alr-tw.judgment-lineage-inspection/v1",
+            "status": "blocked",
+            "jid": jid,
+            "reason_codes": [reason_code],
+            "establishes_finality": False,
+            "semantic_opinion_comparison_performed": False,
+            "related_nodes": [],
+            "limitations": ["NO_UPPER_HISTORY_DOES_NOT_ESTABLISH_FINALITY"],
         }
 
     @staticmethod

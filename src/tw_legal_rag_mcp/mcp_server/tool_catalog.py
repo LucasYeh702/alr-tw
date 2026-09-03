@@ -30,6 +30,7 @@ TOOL_CATALOG: tuple[ToolCatalogEntry, ...] = (
     ToolCatalogEntry("get_legal_research_state", ToolCategory.SERVER_OWNED),
     ToolCatalogEntry("get_legal_research_finalization", ToolCategory.SERVER_OWNED),
     ToolCatalogEntry("lookup_legal_source", ToolCategory.SERVER_OWNED),
+    ToolCatalogEntry("inspect_judgment_lineage", ToolCategory.SERVER_OWNED),
     ToolCatalogEntry("lookup_legislative_history", ToolCategory.SERVER_OWNED),
     ToolCatalogEntry("validate_legal_analysis", ToolCategory.SERVER_OWNED),
     ToolCatalogEntry("validate_legal_answer", ToolCategory.SERVER_OWNED),

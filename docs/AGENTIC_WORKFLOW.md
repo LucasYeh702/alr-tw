@@ -2,7 +2,7 @@
 
 This repository does not ship an LLM or agent implementation. The external client supplies planning and drafting; the server owns research state and trust decisions.
 
-## v0.10.1 agent-neutral client-assisted workflow
+## v0.11.0 agent-neutral client-assisted workflow
 
 1. 呼叫 `get_legal_research_capabilities`，不得假設 provider 或研究能力存在。
 2. 以 `discovery_mode=client_assisted` 建立 run。
@@ -25,7 +25,7 @@ This repository does not ship an LLM or agent implementation. The external clien
 兩者都不能改變 server-owned trust boundary。詳見
 [Interoperability Contract](INTEROPERABILITY_CONTRACT.md)。
 
-v0.10.1 另提供 provider-neutral applicability、authority／judgment-lineage 與
+v0.11.0 另提供 provider-neutral applicability、authority／judgment-lineage 與
 public-law contracts，以及可替換 provider SDK。它們只承載 server-owned
 metadata、來源角色、時點、程序及 bounded 關係；不能從來源文字推導法律效果，
 也不能把 `not_found_in_scope` 轉成全球不存在或實務一致。
@@ -37,7 +37,7 @@ receipts, so built-in live runs remain at most `conditional`／`qualified`;
 Finalization is pre-draft (`safe_to_draft`) only; presentation still requires
 `validate_legal_answer`.
 
-## v0.10.1 server-managed workflow
+## v0.11.0 server-managed workflow
 
 1. `research_legal_question` 建立 run 與固定順序 obligations，不生成答案。
 2. Agent 重複呼叫 `continue_legal_research`；每次只執行一個 obligation，並使用唯一 `operation_id`。

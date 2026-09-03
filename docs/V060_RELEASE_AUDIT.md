@@ -19,8 +19,6 @@ will remain available, and it is not a legal-accuracy benchmark.
   independently resolved and verified against an official source.
 - Ordinary judgments are searched and downloaded directly from the public Judicial Yuan
   judgment search and detail pages. This path does not use JDoc or require an API token.
-- `mcp-taiwan-legal-db` is not a dependency or integrated component. No source code was
-  copied from it.
 
 The audit applies to the source snapshot published under the `v0.6.0` tag. The tag and
 GitHub Release remain the canonical public record of the exact release commit.
@@ -93,25 +91,6 @@ Public, read-only smoke checks from the freshly installed wheel passed:
   evidence spans. The source-tree live run took 445 ms and the packaged
   wheel run took 927 ms on this network; source-tree health and keyword calls took 134 ms
   and 594 ms respectively. These are smoke timings, not benchmark guarantees.
-
-## Clean-room comparison
-
-The public `mcp-taiwan-legal-db` repository was cloned read-only at commit
-`f324c00dc87eb49501cf0282433158ddb691f226`. ALR-TW's two judgment implementation files
-were compared against its search, document, WAF, and parser modules after removing blank,
-comment, and import lines:
-
-- maximum token-sequence similarity: 7.45%;
-- maximum exact substantive-line block: two lines;
-- the two-line matches were generic Python syntax or unavoidable Judicial Yuan interface
-  fields such as `judtype=JUDBOOK` and the official submit control;
-- no matching implementation block of three or more substantive lines was found.
-
-This is evidence against direct copying for the audited versions, not a universal
-copyright or provenance guarantee. The implementation remains structurally independent:
-an operation-scoped fixed-host transport feeds pure HTML parsers, provider contracts,
-server-owned evidence snapshots, and the existing resumable research store. It does not
-import or execute the reference project.
 
 ## Ordinary-judgment performance and failure behavior
 

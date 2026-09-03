@@ -1,6 +1,6 @@
 # TLR Provider
 
-ALR-TW v0.10.1 以 clean-room adapter（淨室轉接器）接入 [TLR（Taiwan Legal RAG）公開專案](https://github.com/aa0101181514/tw-legal-rag)的 HTTP API。實作只依公開 OpenAPI 行為撰寫；未複製 TLR 或其他參考專案的程式碼。
+ALR-TW v0.11.0 提供可選的 TLR provider（資料提供者），透過 [TLR（Taiwan Legal RAG）公開專案](https://github.com/aa0101181514/tw-legal-rag)的 HTTP API 召回普通裁判與行政函釋候選，並支援裁判長全文的有界分頁讀取。部署者可依需求選擇召回資料層；正式來源與 evidence 仍由 ALR-TW 驗證。
 
 TLR 回傳的 `doc_id`、`citation_url`、正式字號與 rank 會被正規化為 typed candidate identity。Candidate 先排序、依可得的 canonical JID 去重，再由 ALR-TW 直接回查司法院官方全文；頁面識別碼不一致時以 `CANDIDATE_OFFICIAL_ID_MISMATCH` 阻擋。五段候選只有在官方頁明示相同五段 ID，或唯一提供前五段相符的六段 canonical JID 時，才能升格；TLR snippet 本身始終不可作 claim-support evidence。
 
@@ -24,6 +24,17 @@ finalization 仍由 ALR-TW server-owned gate 掌控。TLR 的查無結果不可�
   -> final validation
 ```
 
+已驗證裁判的歷審檢查使用另一條有界流程：
+
+```text
+同一 run 的已驗證裁判 JID
+  -> TLR /v1/fulltext（只投影 case_history metadata）
+  -> upper / lower 歷審候選
+  -> 目前設定的官方裁判 provider 逐筆回查正文
+  -> 主文分類 + AuthorityLineageContract
+  -> qualified 歷審結果
+```
+
 Provider-neutral snapshot receipt 是可選的 provider contract；只有 receipt-aware
 adapter 能為同一 run 提供並持久化 receipt 時才會綁定。內建 runtime 目前不簽發
 live-provider receipt，因此服務輸出最多為 `conditional`／`qualified`；`ordinary`
@@ -41,6 +52,73 @@ TLR 結果固定標示為：
 - 不產生可作 claim support（主張支持）的 evidence span。
 
 TLR 回傳的 excerpt、citation URL、case history 或 bundle 訊息只能協助定位及排序。它們不能直接成為 ALR-TW 正式引用，也不能因欄位名稱看似官方就升格。
+
+## 行政函釋候選召回
+
+`TlrSemanticRecallProvider.search_administrative_interpretations()` 使用
+`POST /v1/legal_references/search`，目前接受
+`administrative_interpretation` 與 `tax_interpretation` 兩種 TLR 分類。
+回傳固定投影為 `PublicLawCandidate`：
+
+- `material_type=administrative_interpretation`；
+- `source_role=interpretive_guidance`；
+- 保留發文字號、主管機關、日期、provider-reported status、命中片段、
+  `fulltext_total_chars` 及片段是否只涵蓋部分全文；
+- `sources=[]`、`server_metadata=null`、`coverage_complete=false`；
+- 固定帶 `PUBLIC_LAW_CANDIDATES_ONLY`，不允許 scoped absence claim。
+
+TLR 回傳的 `active_verified`、`unknown`、`repealed` 等狀態都只是外部
+provider metadata，不是 ALR-TW 的官方效力查證。查無、TLR server-side rejected
+candidate，或高相似分數都不能證明函釋不存在、有效或適用。要產生正式 evidence，
+部署端仍須把候選字號交給 ALR-TW 所治理的官方 public-law adapter，完成官方
+identity、正文、效力、時點與 server metadata binding；本 repo 目前不內附該
+行政函釋 corpus／官方 connector。
+
+## 命中片段與長全文分頁
+
+普通裁判搜尋會優先把 TLR `hit_excerpt` 投影為 candidate excerpt，另保留原本的
+結構化 `snippet`。兩者都標示為非 evidence；命中片段只協助決定是否值得官方
+回查，不能用來斷言法院理由中存在或不存在某段論述。
+
+`read_candidate_fulltext()` 讀取 `POST /v1/fulltext` 的
+`excerpt_offset`、`fulltext_total_chars` 與 `fulltext_truncated`。它會依每頁實際
+回傳字數續讀，預設最多 6 頁、硬上限 8 頁；到達頁數上限時保留
+`next_excerpt_offset`，讓 caller 明確續讀。輸出同時揭露：
+
+- 每頁 offset、回傳字數、全文總字數與截斷狀態；
+- 本次合併字數、頁數、下一個 offset；
+- `provider_content_complete`（只描述 TLR 本次文本視窗是否從 0 讀完）；
+- `evidence_eligible=false`、`official_verification_required=true`、
+  `coverage_complete=false`。
+
+即使 `provider_content_complete=true`，也只代表 TLR 的外部候選文本已讀完，不會
+建立 `SourceRecord` 或 `EvidenceSpan`。普通裁判正式 evidence 仍由 ALR-TW 回查
+司法院官方全文後產生。
+
+## 歷審檢查
+
+`inspect_judgment_lineage` 接受同一 research run 內已由 server 驗證的六段
+canonical JID。工具會讀取 TLR `case_history.upper/lower`，預設最多回查 8 件、
+上限 20 件關聯裁判，並使用目前設定的官方裁判 provider 驗證每個節點。
+因此 TLR 負責提供資料庫記錄的關聯候選，不限定官方正文必須來自哪一種本地
+或遠端 adapter；但升格後的 source 仍必須符合 ALR-TW 的 official／verified-cache
+與 evidence gate。
+
+目前會從官方主文的明示文字分類：
+
+- `appeal_dismissed`（上訴／抗告駁回）；
+- `affirmed`（維持原判決／裁定）；
+- `vacated_remanded`（廢棄／撤銷並發回或更審）；
+- `vacated_reversed`（廢棄／撤銷並改判或自為判決）。
+
+只有 TLR 上級審項目的 `main_flag` 帶有廢棄標記，且官方上級審主文也分類為
+`vacated_remanded` 或 `vacated_reversed`，才會產生 confirmed `reversed`
+negative-treatment record。單獨的 TLR metadata、單獨的關鍵字或外部全文都不夠。
+
+這個工具不把歷審鏈等同於見解鏈。它會回傳各裁判的官方 evidence IDs，供後續
+比較；但 `semantic_opinion_comparison_performed=false`，不會自行宣稱前後審見解
+相同或不同。TLR 沒有列出上級審，也只代表其資料庫目前沒有記錄，固定
+`establishes_finality=false`，不能據此主張裁判確定或未上訴。
 
 ## 官方驗證
 
@@ -70,4 +148,7 @@ TLR 是外部服務，可能保留伺服器存取紀錄。使用者應先閱讀�
 
 ## 不保證事項
 
-ALR-TW 不保證 TLR 的可用性、完整性、排序、更新速度或資料正確性。TLR 也不替 ALR-TW 保證最終答案、官方現行狀態、審級關係或引用資格。正式法律研究仍需檢查官方原文、時點、程序狀態與反方權威。
+ALR-TW 不保證 TLR 的可用性、完整性、排序、更新速度或資料正確性。歷審工具只
+處理 TLR 資料庫記錄且落在回查上限內的關聯，不保證完整審級鏈。TLR 也不替
+ALR-TW 保證最終答案、官方現行狀態或引用資格。正式法律研究仍需檢查官方原文、
+時點、程序狀態與反方權威。

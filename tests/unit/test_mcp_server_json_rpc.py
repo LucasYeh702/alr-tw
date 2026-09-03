@@ -48,7 +48,7 @@ def test_mcp_initialize_returns_server_metadata():
     assert response["result"]["protocolVersion"] == "2024-11-05"
     assert response["result"]["serverInfo"] == {
         "name": "alr-tw",
-        "version": "0.10.1",
+        "version": "0.11.0",
     }
     assert response["result"]["capabilities"] == {"tools": {}}
 
@@ -68,6 +68,7 @@ def test_v060_server_owned_tools_run_to_blocked_without_server_evidence(
         "continue_legal_research",
         "get_legal_research_state",
         "lookup_legal_source",
+        "inspect_judgment_lineage",
         "validate_legal_analysis",
         "validate_legal_answer",
         "purge_research_storage",
@@ -108,9 +109,25 @@ def test_v060_server_owned_tools_run_to_blocked_without_server_evidence(
     assert validation["decision"] == "blocked"
     assert validation["answer_text"] is None
 
-    purged = _call_tool_json(
+    lineage = _call_tool_json(
         session,
         121,
+        "inspect_judgment_lineage",
+        {
+            "run_id": run_id,
+            "jid": "DEMO,130,測上,1,20990102,1",
+            "operation_id": "lineage_1",
+            "max_related_nodes": 4,
+        },
+    )
+    assert lineage["status"] == "blocked"
+    assert lineage["reason_codes"] == ["JUDGMENT_LINEAGE_EXECUTOR_UNAVAILABLE"]
+    assert lineage["establishes_finality"] is False
+    assert lineage["semantic_opinion_comparison_performed"] is False
+
+    purged = _call_tool_json(
+        session,
+        122,
         "purge_research_storage",
         {"scope": "run", "run_id": run_id, "confirm": True},
     )

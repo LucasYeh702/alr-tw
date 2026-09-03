@@ -8,7 +8,7 @@ Security review focuses on the default branch and latest public-preview release.
 
 Do not publish vulnerabilities, secrets, private paths, real case facts, or personal data in an issue. Use GitHub private vulnerability reporting or a Security Advisory when available. Otherwise open a minimal issue asking for a private contact, without exploit details.
 
-## v0.10.1 trust boundary
+## v0.11.0 trust boundary
 
 - MCP caller input is untrusted, including `source_tier`, URLs, hashes, timestamps, answer text, and identifiers.
 - Caller-attested `official` or `verified_cache` metadata cannot establish final eligibility.
@@ -30,7 +30,7 @@ Do not place production legal data, official full-text caches, user queries, TLR
 ## Operational requirements
 
 - Keep `synthetic` as the implicit default; live modes require explicit selection.
-- Use short-lived Judicial Yuan credentials and avoid shell history or committed env files.
+- Keep external-provider credentials out of shell history and version control; the bundled Judicial Yuan website provider does not require an API token.
 - Limit retention, use `ephemeral` for sensitive-but-permitted local workflows, and purge after use.
 - Treat official removal responses as deletion obligations.
 - Review third-party dependency and service policy changes before release.

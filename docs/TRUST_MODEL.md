@@ -1,6 +1,6 @@
 # ALR-TW Trust Model
 
-## v0.10.1 evidence promotion
+## v0.11.0 evidence promotion
 
 Final validation 只讀取該 run 在 server-side SQLite 中已連結、未到期且 `trust_status=evidence_eligible` 的 evidence。MCP caller 即使提交看似完整的 official URL、hash 或 verified time，也只能視為 caller-attested metadata，不能升格為正式證據。
 

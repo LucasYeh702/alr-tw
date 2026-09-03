@@ -5,9 +5,9 @@ LLM and no agent implementation. The external MCP client supplies the agent
 role; the harness records tool calls, validates citations, computes the trust
 gate, and returns a canonical trace.
 
-## v0.10.1 agent tool profiles and selection
+## v0.11.0 agent tool profiles and selection
 
-v0.10.1 adds a profile-gated MCP catalog and an optional Legislative Yuan
+v0.11.0 provides a profile-gated MCP catalog and an optional Legislative Yuan
 locator connector while preserving the server-owned trust boundary.
 
 The MCP catalog classifies tools as `server_owned`, `legacy_compatibility`, or
@@ -30,6 +30,7 @@ catalog entry directly returns `TOOL_NOT_AVAILABLE_IN_PROFILE`.
 | Use case | First choice | Boundary |
 |---|---|---|
 | Single formal authority lookup | `lookup_legal_source` | Source lookup is not answer validation |
+| Bounded appeal-chain check for a same-run verified judgment | `inspect_judgment_lineage` | TLR history is candidate metadata; related nodes require official verification, no upper record does not establish finality, and opinion comparison is not performed |
 | Multi-step research | `research_legal_question` and `continue_legal_research` | Continue server-owned obligations by `operation_id` |
 | Analysis validation | `validate_legal_analysis` | Validate the untrusted analysis envelope and references |
 | Answer validation | `validate_legal_answer` | Validate claims against evidence from the same run |
@@ -68,7 +69,7 @@ answer use. Synthetic mode never calls the connector. In `official_only` or
 `lookup_legislative_history`; merely starting the stdio server or listing tools
 does not fetch Legislative Yuan data.
 
-## v0.10.1 agent-neutral research flow
+## v0.11.0 agent-neutral research flow
 
 New clients should first call `get_legal_research_capabilities`.
 
@@ -86,7 +87,11 @@ source verification:
 2. Submit an `alr-tw.research-plan-proposal/v1`.
 3. Continue server-owned obligations until `ready_for_draft`; this is workflow
    completion only, not a claim of research sufficiency.
-4. Call `get_legal_research_finalization` to read server-owned Coverage v2,
+4. Before relying on a verified judgment's view, a deployment with TLR enabled
+   may call `inspect_judgment_lineage` with that same-run six-part JID. Review
+   officially verified disposition codes and evidence; do not infer finality
+   from an absent upper record or infer a different opinion from the chain alone.
+5. Call `get_legal_research_finalization` to read server-owned Coverage v2,
    `research_sufficiency`, `answer_mode`, snapshot receipts, blockers, and
    qualifications. Submit `alr-tw.legal-analysis/v1` to `validate_legal_analysis` when a
    structured analysis is needed. One envelope may combine civil substantive,
@@ -94,10 +99,10 @@ source verification:
    and constitutional-review branches.
    Treat `qualified` as a mandatory disclosure and discard `blocked`; even
    `validated` does not authorize an answer.
-5. Draft externally from server-owned evidence.
-6. Call `validate_legal_answer` with evidence IDs and, when a plan is
+6. Draft externally from server-owned evidence.
+7. Call `validate_legal_answer` with evidence IDs and, when a plan is
    registered, the corresponding issue IDs.
-7. Treat finalization as a pre-draft posture only. Render only a
+8. Treat finalization as a pre-draft posture only. Render only a
    `validated` or `qualified` result returned by `validate_legal_answer`; a
    `refusal_only` finalization must not render a draft.
 
@@ -127,7 +132,7 @@ Counter-authority results are bounded lexical candidate discovery followed by
 official verification; they do not establish semantic opposition, global
 absence, or practice-wide consensus.
 
-The v0.10.1 public contracts also expose structural applicability resolution,
+The v0.11.0 public contracts also expose structural applicability resolution,
 authority/judgment lineage, and public-law provider adapters. Use the
 provider-neutral interfaces for explicit source relationships, court/procedure
 metadata, administrative rules or legislative materials. These records remain

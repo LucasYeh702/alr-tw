@@ -1,14 +1,14 @@
 # Roadmap
 
-## Current release: v0.10.1
+## Current release: v0.11.0
 
-v0.10.1 是 agent-neutral、provider-neutral 的台灣法律研究驗證 harness，已完成
+v0.11.0 是 agent-neutral、provider-neutral 的台灣法律研究驗證 harness，已完成
 研究充分性、Coverage v2、finalization、歷史法規、裁判語境安全與可插拔 sidecar
 契約。它不是完整台灣
 法律資料庫，也不提供法律意見或 production SLA；真實資料 provider 由部署者
 依公開契約自行接入。
 
-目前 v0.10.1 已具備的核心能力：
+目前 v0.11.0 已具備的核心能力：
 
 - `workflow_complete`、`research_sufficiency` 與 `answer_mode` 分離；
   `ready_for_draft` 僅表示流程階段，不代表答案可直接呈現；
@@ -42,6 +42,18 @@ Provider-neutral snapshot receipt 目前只是公開契約與一致性檢查介�
 `ResearchService` 尚未簽發或持久化 live-provider receipt，因此服務輸出最多為
 `conditional`／`qualified`；`ordinary` 保留給 receipt-aware provider adapter
 完成同一 run 的 server-owned receipt binding 後使用。
+
+## v0.11.0：有界歷審檢查與可選資料層
+
+- `inspect_judgment_lineage` 使用 TLR 記錄的上下級審候選，再由 ALR-TW
+  回查官方正文並分類主文結果；不推論裁判確定，也不自動比較前後審見解。
+- TLR provider 可召回行政／稅務函釋候選，並分頁讀取普通裁判長全文，保留
+  命中片段、全文總長、截斷狀態與續讀位置；外部結果不直接成為 evidence。
+- 可選唯讀本機裁判 provider 與既有官方 provider 共用查詢介面；前端也可
+  使用相容資料服務，再透過 `client_assisted` 提交候選 locator。
+
+後續仍需分別驗收歷審關係涵蓋率、前後審見解比較及官方行政函釋 connector；
+本版不把候選資料、主文分類或契約介面宣稱為上述能力已完整完成。
 
 ## v0.10.1：官方立法 locator 與 Agent 工具面收斂
 

@@ -1,10 +1,11 @@
 # Official Providers
 
-ALR-TW v0.10.1 以三個獨立 provider 取得台灣中央法規、普通法院裁判與憲法法庭資料。官方即時內容通過結構、一致性與 freshness 檢查後，會固定成 server-owned evidence；呼叫端不能自行宣告某段文字為官方資料。Provider-neutral snapshot receipt 是可選的 provider 契約，並非內建 runtime 已簽發的保證；目前內建 `ResearchService` 尚未注入或持久化 live-provider receipt，因此服務 finalization 最多為 `conditional`／`qualified`，`ordinary` 保留給 receipt-aware provider adapter。
+ALR-TW v0.11.0 以三個獨立 provider 取得台灣中央法規、普通法院裁判與憲法法庭資料。官方即時內容通過結構、一致性與 freshness 檢查後，會固定成 server-owned evidence；呼叫端不能自行宣告某段文字為官方資料。Provider-neutral snapshot receipt 是可選的 provider 契約，並非內建 runtime 已簽發的保證；目前內建 `ResearchService` 尚未注入或持久化 live-provider receipt，因此服務 finalization 最多為 `conditional`／`qualified`，`ordinary` 保留給 receipt-aware provider adapter。
 
-v0.10.1 另公開行政規則、行政解釋、訴願與立法資料的 provider-neutral
-contracts／SDK，但不在本 repo 內附公法資料 provider、corpus 或 index。部署者
-可用 `PublicLawProviderAdapter` 接入自有來源；所有結果仍須由 server metadata
+v0.11.0 也提供行政規則、行政解釋、訴願與立法資料的 provider-neutral
+contracts／SDK。TLR adapter 可召回行政函釋候選，但不建立 source 或 evidence；
+本 repo 仍不內附行政函釋官方 provider、corpus 或 index。部署者可用
+`PublicLawProviderAdapter` 接入官方來源；所有升格結果仍須由 server metadata
 binding 與既有 evidence／finalization gates 驗證。
 
 立法院是例外的 locator-only connector：`lookup_legislative_history` 可在 live
@@ -23,7 +24,7 @@ handshake 後 renegotiation。無法安全建立連線時會 fail closed。
 - 來源：全國法規資料庫官方結構化資料與官方網頁；
 - 能力：法規名稱、基本關鍵詞、精確條文、現行／廢止狀態；
 - 結構化內容與官方網頁內容衝突時，來源降為 `verification_failed`，不得作正式證據；
-- v0.10.1 不承諾指定歷史日期的完整版本、地方自治法規或所有附件解析。
+- v0.11.0 不承諾指定歷史日期的完整版本、地方自治法規或所有附件解析。
 
 ## 司法院普通裁判 Provider
 
@@ -38,7 +39,16 @@ handshake 後 renegotiation。無法安全建立連線時會 fail closed。
 
 效能設計採單次操作內的連線與 cookie 重用、正式字號跨系統一次查詢、候選數量上限，以及 server-owned TTL 快取。連線結束即釋放 session，不保存搜尋 cookie。若遇到 WAF、驗證碼或拒絕頁面，會回 `OFFICIAL_SOURCE_BLOCKED` 並 fail closed；本版不內建規避機制或無限重試。
 
-`mcp-taiwan-legal-db` 僅作公開行為與官方入口的參考。ALR-TW 的 transport、解析器、資料模型、錯誤模型、證據快照與研究流程均為獨立實作；官方網址、表單欄位及 JID 格式屬外部介面事實，不代表程式碼相同。
+## 可選唯讀本機裁判 Provider
+
+在明示的 live data mode 下，可用 `ALR_TW_LOCAL_PORTAL_ROOT` 指定絕對資料根目錄，
+接入部署環境既有、相容的唯讀 `legal_data_pipeline` provider；套件不內附資料。
+本機搜尋只回傳候選。精確查詢會檢查 catalog-bound receipt、來源狀態及正文
+hash；符合條件時建立 server-owned `verified_cache` 記錄，否則回查官方來源。
+資料不可用與查無結果保持分離，候選片段不會直接成為 evidence。
+
+此設定不會在 `synthetic` mode 載入本機資料。部署者應自行治理所接入的 provider
+與 catalog；既有 evidence、時點、角色、claim binding 及答案驗證規則仍適用。
 
 ## 憲法法庭 Provider
 

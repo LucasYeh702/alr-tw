@@ -473,6 +473,16 @@ class SourceLookupExecutor(Protocol):
     def lookup(self, text: str, *, run_id: str | None = None) -> dict[str, Any]: ...
 
 
+class JudgmentLineageExecutor(Protocol):
+    def inspect_judgment_lineage(
+        self,
+        run_id: str,
+        jid: str,
+        *,
+        max_related_nodes: int = 8,
+    ) -> dict[str, Any]: ...
+
+
 class SyntheticObligationExecutor:
     """Deterministic executor used before live providers are enabled."""
 
@@ -995,6 +1005,77 @@ class ResearchService:
         run = self._refresh_sufficiency(run)
         self.store.save_run(run)
         return result
+
+    def inspect_judgment_lineage(
+        self,
+        run_id: str,
+        jid: str,
+        operation_id: str,
+        *,
+        max_related_nodes: int = 8,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Inspect TLR history for one server-owned judgment and persist official nodes."""
+
+        if not operation_id.strip():
+            raise ValueError("operation_id is required")
+        if not 1 <= max_related_nodes <= 20:
+            raise ValueError("max_related_nodes must be between 1 and 20")
+        with self._lock:
+            run = self._required_run(run_id)
+            timestamp = now or datetime.now(UTC)
+            if run.expires_at <= timestamp:
+                raise ValueError("RESEARCH_RUN_EXPIRED")
+            operation = self.store.record_operation(
+                run_id,
+                operation_id,
+                {"status": "in_progress"},
+            )
+            if not operation.created:
+                return operation.result
+            inspect = getattr(self.executor, "inspect_judgment_lineage", None)
+            if callable(inspect):
+                result = inspect(
+                    run_id,
+                    jid,
+                    max_related_nodes=max_related_nodes,
+                )
+            else:
+                result = {
+                    "schema_version": "alr-tw.judgment-lineage-inspection/v1",
+                    "status": "blocked",
+                    "run_id": run_id,
+                    "jid": jid,
+                    "reason_codes": ["JUDGMENT_LINEAGE_EXECUTOR_UNAVAILABLE"],
+                    "establishes_finality": False,
+                    "semantic_opinion_comparison_performed": False,
+                    "related_nodes": [],
+                    "limitations": ["NO_UPPER_HISTORY_DOES_NOT_ESTABLISH_FINALITY"],
+                }
+
+            full_run = self._run_with_server_refs(run)
+            limitations = set(full_run.coverage.limitations)
+            limitations.update(str(item) for item in result.get("limitations", []))
+            treatment = result.get("treatment_summary")
+            if isinstance(treatment, dict) and treatment.get("officially_confirmed_reversal") is True:
+                limitations.add("JUDGMENT_LINEAGE_CONFIRMED_REVERSAL")
+                result["current_holding_use"] = "do_not_rely_as_current_holding"
+            else:
+                result["current_holding_use"] = "qualified_pending_substantive_review"
+            if result.get("status") == "blocked":
+                limitations.add("JUDGMENT_LINEAGE_CHECK_BLOCKED")
+            full_run = full_run.model_copy(
+                update={
+                    "coverage": full_run.coverage.model_copy(
+                        update={"limitations": sorted(limitations)}
+                    ),
+                    "updated_at": timestamp,
+                }
+            )
+            full_run = self._refresh_sufficiency(full_run)
+            self.store.save_run(full_run)
+            self.store.complete_operation(run_id, operation_id, result)
+            return result
 
     def continue_run(
         self,

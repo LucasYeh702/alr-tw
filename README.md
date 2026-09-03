@@ -2,9 +2,9 @@
 
 [繁體中文說明](README.zh-TW.md) | [English](README.en.md)
 
-ALR-TW v0.10.1 是一個讓外部 Agent／LLM 以 MCP 使用台灣法律研究工具的安全框架。它負責管理研究流程、官方來源查證、證據信任邊界、答案驗證與短期資料清除；Agent 負責理解問題與起草文字。
+ALR-TW v0.11.0 是一個讓外部 Agent／LLM 以 MCP 使用台灣法律研究工具的安全框架。它負責管理研究流程、官方來源查證、證據信任邊界、答案驗證與短期資料清除；Agent 負責理解問題與起草文字。
 
-它不是法律意見服務，也不是完整台灣法律資料庫。v0.10.1 仍是 public preview；任何輸出都必須由具資格的人員依官方原文、適用時點與個案事實複核。
+它不是法律意見服務，也不是完整台灣法律資料庫。v0.11.0 仍是 public preview；任何輸出都必須由具資格的人員依官方原文、適用時點與個案事實複核。
 
 本 repo 不包含 LLM，也不包含 agent 實作。Repo 內的 demo ranking／示範 ranking 參數只用於展示與測試，不是 production ranking 設定；正式部署的模型、資料集、排序與權重由部署者自行治理。
 
@@ -32,7 +32,8 @@ Agent 依已驗證證據起草
 |---|---|
 | 精確法源查詢 | 查詢法規條文、正式裁判字號、JID 與憲法法庭資料，並回到官方來源核對。 |
 | 多步驟法律研究 | 建立可觀察、可恢復的研究 run，逐步處理法規、裁判、憲法材料與時點問題。 |
-| 候選資料召回 | 使用官方搜尋或 [TLR（Taiwan Legal RAG）](https://github.com/aa0101181514/tw-legal-rag) 找候選裁判，再由 ALR-TW 回查司法院官方全文。 |
+| 候選資料召回 | 使用官方搜尋或 [TLR（Taiwan Legal RAG）](https://github.com/aa0101181514/tw-legal-rag) 找普通裁判／行政函釋候選；正式證據仍由 ALR-TW 官方驗證產生。 |
+| 有界歷審檢查 | 對已驗證裁判讀取 TLR 記錄的上、下級審候選，再逐件回查官方正文與分類主文結果。 |
 | 分析與答案驗證 | 將核心主張綁定同一研究 run 的證據，檢查來源、角色、時點與支持關係。 |
 | 立法院資料定位 | 定位提案、條文對照、委員會、黨團協商與三讀階段材料；結果只作立法沿革候選。 |
 | 短期研究資料管理 | 保存研究狀態與工具紀錄，依 retention policy 自動到期，也可以手動 purge。 |
@@ -93,6 +94,13 @@ ALR-TW 將「找到資料」、「來源可信」與「資料支持這個主張�
 | `official_only` | 只連官方來源 | 法規、司法院裁判與憲法法庭的查詢與官方回查。 |
 | `hybrid_verified` | 官方來源 + TLR | 用 TLR 提高普通裁判候選召回，再回司法院官方來源驗證。 |
 
+召回／locator 資料層也可由部署者選擇。若使用 `mcp-taiwan-legal-db` 或其他能提供
+正式字號、JID／官方 locator 的相容服務，前端可先取得候選，再透過
+`client_assisted` research plan 提交給 ALR-TW；候選仍須完成官方回查才能建立 evidence。
+
+部署環境也可用 `ALR_TW_LOCAL_PORTAL_ROOT` 接入既有相容的唯讀本機裁判資料層；
+候選搜尋、快取驗證條件與官方回查方式見 [Official Providers](docs/OFFICIAL_PROVIDERS.md)。
+
 啟用 `hybrid_verified` 時，通過 privacy gate 的查詢文字可能送往 TLR。不要輸入個人秘密、未公開案件事實、私有契約、訴訟策略、證據弱點或談判底線。
 
 ### 目前來源的角色
@@ -102,7 +110,7 @@ ALR-TW 將「找到資料」、「來源可信」與「資料支持這個主張�
 | 法務部全國法規資料庫 | 法規名稱、條文、現行／廢止狀態與官方內容核對 | 未確認歷史日期的完整版本、地方自治法規或所有附件 |
 | 司法院裁判書網站 | 普通裁判候選、JID 與官方全文回查 | 全域裁判召回、所有程序裁定或完整審級關係 |
 | 憲法法庭 | 判決、實體裁定、舊制解釋及可取得的意見材料 | 把個別意見當成多數理由或拘束內容 |
-| TLR | 提高普通裁判候選召回率 | TLR excerpt、排序或 URL 本身不是正式證據 |
+| TLR | 提高普通裁判與行政函釋候選召回率；提供裁判命中片段及有界全文分頁 | TLR excerpt、全文、效力標記、排序或 URL 本身不是正式證據 |
 | 立法院官方資料集 | 定位提案與立法過程材料 | 有效法條、完整立法理由或單一立法者意旨 |
 
 立法院資料是 optional、read-only、bounded、candidate-only 的定位結果，可涵蓋議案提案、條文對照表、委員會議案、黨團協商與三讀階段材料。只有在 live data mode 中由 Agent 明示呼叫 `lookup_legislative_history` 才會查詢；`synthetic` mode 固定不連線。連結的 PDF／DOC 不在 connector 中解析，材料仍須回到正式公布版本與 server-owned official verification，才可能進一步作為研究證據。
@@ -127,6 +135,8 @@ alr-tw purge --all --confirm
 | 只查一個條文或正式裁判 | 使用 `lookup_legal_source` | 查到來源不等於整份答案已驗證，仍要做 answer validation。 |
 | 研究一個包含多個爭點的問題 | 使用 `research_legal_question` 與逐步研究流程 | `ready_for_draft` 不是「研究已充分」的保證。 |
 | 找普通裁判候選 | 使用官方搜尋或 `hybrid_verified` | TLR 只提高召回，最後仍須回司法院官方全文。 |
+| 找行政函釋候選 | 使用 TLR provider 的 typed public-law candidate API | 只作定位；須另經 ALR-TW 所治理的官方 public-law adapter 驗證，內建 runtime 目前不附該 connector。 |
+| 查已驗證裁判的上下級審 | 在同一 run 使用 `inspect_judgment_lineage` | 只涵蓋 TLR 記錄與本次回查上限；查無上級審不等於裁判確定，也不自動判斷見解是否不同。 |
 | 查修法背景或立法沿革 | 在 live mode 明示 `lookup_legislative_history` | 結果是 bounded candidate locator，不是有效法條或完整理由全文。 |
 | 驗證已經寫好的草稿 | 用同一 run 的 evidence 呼叫 `validate_legal_answer` | 未綁定核心主張、證據衝突或範圍不足時，結果可能被拒絕。 |
 
@@ -181,6 +191,7 @@ alr-tw doctor --live
 | `get_legal_research_state` | 唯讀恢復研究狀態，不做新的網路請求。 |
 | `get_legal_research_finalization` | 查看研究充分性、覆蓋限制、blockers 與答案姿態。 |
 | `lookup_legal_source` | 精確查詢法規、裁判或憲法法庭正式來源。 |
+| `inspect_judgment_lineage` | 查同一 run 已驗證裁判的 TLR 上下級審記錄，並回查官方主文。 |
 | `lookup_legislative_history` | 查詢立法院 candidate-only 立法資料定位。 |
 | `validate_legal_analysis` | 驗證結構化分析與 server-owned references。 |
 | `validate_legal_answer` | 以同一 run 的 evidence 驗證草稿答案。 |

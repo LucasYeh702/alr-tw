@@ -1,4 +1,4 @@
-"""Fail-closed environment configuration for the v0.10.1 preview."""
+"""Fail-closed environment configuration for the v0.11.0 preview."""
 
 from __future__ import annotations
 
@@ -39,6 +39,7 @@ class Settings(BaseModel):
     mcp_tool_profile: ToolProfile = ToolProfile.DEMO
     storage_policy: StoragePolicy = Field(default_factory=StoragePolicy)
     storage_path: Path | None = None
+    local_portal_root: Path | None = None
     tlr_base_url: str = "https://tlr.dr-lawbot.com"
     tlr_api_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
 
@@ -72,6 +73,13 @@ class Settings(BaseModel):
             raise ValueError("TLR base URL must not contain a fragment")
         return value.rstrip("/")
 
+    @field_validator("local_portal_root")
+    @classmethod
+    def validate_local_portal_root(cls, value: Path | None) -> Path | None:
+        if value is not None and not value.is_absolute():
+            raise ValueError("ALR_TW_LOCAL_PORTAL_ROOT must be an absolute path")
+        return value
+
     @property
     def external_query_enabled(self) -> bool:
         return self.data_mode is DataMode.HYBRID_VERIFIED
@@ -92,6 +100,11 @@ class Settings(BaseModel):
             "data_mode": mode_value,
             "storage_policy": StoragePolicy(retention_seconds=retention),
             "storage_path": Path(storage_path).expanduser() if storage_path else None,
+            "local_portal_root": (
+                Path(env["ALR_TW_LOCAL_PORTAL_ROOT"]).expanduser()
+                if env.get("ALR_TW_LOCAL_PORTAL_ROOT")
+                else None
+            ),
             "tlr_base_url": env.get("ALR_TW_TLR_BASE_URL", "https://tlr.dr-lawbot.com"),
             "tlr_api_key": SecretStr(configured_key) if configured_key else None,
         }

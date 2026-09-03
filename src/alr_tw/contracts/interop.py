@@ -318,6 +318,9 @@ def interoperability_capabilities(
             "live legal-context providers are not bundled in the public development build",
             "counter-authority uses bounded lexical candidate discovery and official verification; "
             "semantic opposition classification and systematic/global coverage are not provided",
+            "judgment lineage inspection is bounded to TLR database-recorded history and "
+            "official verification; an absent upper record does not establish finality and "
+            "the courts' opinions are not semantically compared",
             "complete historical law versions are not implemented",
             "semantic entailment and substantive legal correctness are not performed",
         ],
