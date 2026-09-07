@@ -237,6 +237,61 @@ def test_tlr_schema_change_fails_closed() -> None:
     assert sources == []
 
 
+def test_tlr_response_cannot_exceed_requested_top_k() -> None:
+    base = _search_response().payload["results"][0]
+    response = TlrHttpResponse(
+        200,
+        {
+            "results": [
+                {
+                    **base,
+                    "rank": index,
+                    "doc_id": f"synthetic-doc-{index}",
+                }
+                for index in range(1, 7)
+            ]
+        },
+    )
+    provider = TlrSemanticRecallProvider(transport=FixtureTlrTransport([response]))
+
+    result, sources, _ = asyncio.run(provider.search("行政處分撤銷", top_k=5))
+
+    assert result.status is ProviderResultStatus.ERROR
+    assert result.error_code is ProviderErrorCode.EXTERNAL_PROVIDER_SCHEMA_CHANGED
+    assert result.message == "TLR_SEARCH_RESULT_LIMIT_EXCEEDED"
+    assert sources == []
+
+
+def test_tlr_administrative_response_cannot_exceed_requested_top_k() -> None:
+    base = _administrative_search_response().payload["results"][0]
+    response = TlrHttpResponse(
+        200,
+        {
+            "candidate_count": 6,
+            "rejected": {},
+            "results": [
+                {
+                    **base,
+                    "canonical_id": f"demo-agency:{index}",
+                    "serial_no": f"測字第{index}號函",
+                    "citation": f"示範部會測字第{index}號函",
+                }
+                for index in range(1, 7)
+            ],
+        },
+    )
+    provider = TlrSemanticRecallProvider(transport=FixtureTlrTransport([response]))
+
+    result, _ = asyncio.run(
+        provider.search_administrative_interpretations(_public_law_request(max_results=5))
+    )
+
+    assert result.status is PublicLawResultStatus.RETRY_REQUIRED
+    assert result.reason_codes == ["TLR_PUBLIC_LAW_SCHEMA_CHANGED"]
+    assert result.metadata["provider_error"] == "TLR_PUBLIC_LAW_RESULT_LIMIT_EXCEEDED"
+    assert result.candidates == []
+
+
 def test_tlr_administrative_interpretation_recall_is_candidate_only() -> None:
     transport = FixtureTlrTransport([_administrative_search_response()])
     provider = TlrSemanticRecallProvider(transport=transport)

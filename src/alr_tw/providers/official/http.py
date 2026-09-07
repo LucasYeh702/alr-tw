@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import ssl
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
 from urllib.parse import urljoin, urlparse
@@ -20,6 +21,38 @@ class HttpResponse:
 
 class HttpTransport(Protocol):
     async def get(self, url: str, *, timeout: float, max_bytes: int) -> HttpResponse: ...
+
+
+def system_truststore_context() -> ssl.SSLContext:
+    """Build an SSL context backed by the operating system trust store."""
+
+    try:
+        truststore: Any = importlib.import_module("truststore")
+    except ImportError as exc:  # pragma: no cover - exercised by base-install smoke
+        raise RuntimeError("LIVE_TRUSTSTORE_REQUIRED") from exc
+    return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
+
+def safe_transport_error(exc: Exception) -> str:
+    """Return a stable, non-secret diagnostic for an official HTTPS failure."""
+
+    messages: list[str] = []
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, ssl.SSLCertVerificationError):
+            return "OFFICIAL_TLS_VERIFICATION_FAILED"
+        messages.append(str(current))
+        current = current.__cause__ or current.__context__
+    joined = " ".join(messages).upper()
+    if "LIVE_TRUSTSTORE_REQUIRED" in joined:
+        return "LIVE_TRUSTSTORE_REQUIRED"
+    if "LIVE_EXTRA_REQUIRED" in joined:
+        return "LIVE_EXTRA_REQUIRED"
+    if "CERTIFICATE_VERIFY_FAILED" in joined:
+        return "OFFICIAL_TLS_VERIFICATION_FAILED"
+    return type(exc).__name__
 
 
 class HttpxAllowlistedTransport:
@@ -52,6 +85,7 @@ class HttpxAllowlistedTransport:
             headers={"User-Agent": self.user_agent},
             follow_redirects=False,
             timeout=timeout,
+            verify=system_truststore_context(),
         ) as client:
             for _ in range(4):
                 self.validate_url(current)

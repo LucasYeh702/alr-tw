@@ -1,6 +1,6 @@
 # Storage and Purge
 
-ALR-TW v0.11.0 使用單一 managed SQLite store（受管理 SQLite 儲存）保存短期研究狀態。預設位置是 `~/.cache/alr-tw/alr_tw_storage.sqlite3`，可用 `ALR_TW_STORAGE_PATH` 改寫。
+ALR-TW v0.12.0 使用單一 managed SQLite store（受管理 SQLite 儲存）保存短期研究狀態。預設位置是 `~/.cache/alr-tw/alr_tw_storage.sqlite3`，可用 `ALR_TW_STORAGE_PATH` 改寫。
 
 ## 保存內容
 
@@ -9,8 +9,10 @@ ALR-TW v0.11.0 使用單一 managed SQLite store（受管理 SQLite 儲存）保
 - server-owned source records 與 evidence spans；
 - TLR retrieval candidates；
 - Coverage v2、research sufficiency、answer mode 與 server-owned finalization 摘要；
-- provider-neutral snapshot receipt 參照與一致性結果（可選；只有 receipt-aware adapter 提供時才會存在；內建 runtime 目前不簽發或持久化 live-provider receipt）；
-- 內建 runtime 因此最多產生 `conditional`／`qualified` 的起草姿態；`ordinary` 僅保留給 receipt-aware adapter；
+- 內建 `ResearchService` 依同一 run 精確合格材料集合簽發、持久化的
+  provider-neutral snapshot receipts；finalization 會從 store 讀取並重算 binding；
+- receipt 缺失時最高為 `conditional`，跨 run、過期或集合不一致時 fail closed；
+  只有 receipt 與其他閘門均通過時 `ordinary` 才可達；
 - 有 TTL 的 cache metadata。
 
 秘密值不應寫入資料庫。TLR API key 僅在請求時注入；普通裁判網站路徑不需要 API token。檔案目錄與資料庫分別設為 owner-only 權限；SQLite 啟用 foreign keys、secure delete 與 WAL。
@@ -19,7 +21,7 @@ ALR-TW v0.11.0 使用單一 managed SQLite store（受管理 SQLite 儲存）保
 
 `ALR_TW_RETENTION` 預設為 `24h`，格式為正整數加 `s`、`m`、`h` 或 `d`，公開預覽上限 `7d`。MCP `research_legal_question.constraints.retention` 可指定相同格式，或使用 `ephemeral`：final validation 回傳後同步刪除該 run。
 
-TTL 到期不會自動延長。背景 cleanup 與明確 purge 都必須同時處理 run、source link、evidence、candidate、operation 與不再被其他 run 引用的 source。
+TTL 到期不會自動延長。背景 cleanup 與明確 purge 都必須同時處理 run、source link、evidence、candidate、operation、snapshot receipt 與不再被其他 run 引用的 source。
 
 ## CLI
 

@@ -1,12 +1,19 @@
 # ALR-TW Trust Model
 
-## v0.11.0 evidence promotion
+## v0.12.0 evidence promotion
 
 Final validation 只讀取該 run 在 server-side SQLite 中已連結、未到期且 `trust_status=evidence_eligible` 的 evidence。MCP caller 即使提交看似完整的 official URL、hash 或 verified time，也只能視為 caller-attested metadata，不能升格為正式證據。
 
-官方 provider 取得的內容必須先形成 server-owned evidence record，保存 official identifier、official URL、content hash、fetched/verified/expires timestamps 與 section role。Provider-neutral snapshot receipt 可由 receipt-aware adapter 選擇性附加；內建 runtime 尚未簽發 live-provider receipt。TLR candidate、keyword-search hit、party argument、case fact、concurring opinion 與 dissenting opinion 都有獨立限制，不得因文字相似直接支持不同角色的 claim。
+官方 provider 取得的內容必須先形成 server-owned evidence record，保存 official identifier、official URL、content hash、fetched/verified/expires timestamps 與 section role。內建 `ResearchService` 會為同一 run 的精確官方／可信快取材料集合簽發並持久化 provider-neutral snapshot receipt；finalization 不信任 caller receipt，會重算 server-owned binding。TLR candidate、keyword-search hit、party argument、case fact、concurring opinion 與 dissenting opinion 都有獨立限制，不得因文字相似直接支持不同角色的 claim。
 
 Final decisions 是 `validated`、`qualified`、`blocked`。`qualified` 只代表已驗證 evidence 支持 draft、但有明示召回限制；它不是降低來源門檻。`blocked` 不得包含 answer body。
+
+Quick mode 只調整 obligation breadth 與 verification budget。最多五個候選中，
+只有逐件通過 official exact lookup 的 source／evidence 可進入答案流程；被拒絕的
+candidate 只保留 audit reason。類案 quick 固定是 bounded top-K，至少一件通過也
+維持 `qualified`／`conditional`；剩餘 mismatch、not-found 或 budget truncation
+另加限制，且不得支持 completeness、absence、finality 或 consensus。`0` 件通過仍
+是 hard insufficiency。
 
 ALR-TW separates source discovery from final citation authority.
 
@@ -78,8 +85,9 @@ claim support. Non-answer traces must keep `answer` as `null`.
 `ready_for_draft` is not an evidence or sufficiency decision. The server-owned
 research sufficiency evaluator and finalization contract determine whether the
 run may enter drafting (`safe_to_draft`) as ordinary, conditional, or refusal-only;
-finalization does not authorize presentation. The bundled live runtime remains
-at most conditional/qualified until a receipt-aware adapter binds a receipt.
+finalization does not authorize presentation. The bundled runtime may reach
+ordinary only when its persisted same-run receipt set and all other gates pass;
+missing receipts remain conditional and inconsistent receipts fail closed.
 Counter-authority is bounded
 candidate discovery plus official verification; a scoped miss cannot establish
 global absence or consensus. Synthetic fixtures remain demo-only.

@@ -1,8 +1,8 @@
 # Official Providers
 
-ALR-TW v0.11.0 以三個獨立 provider 取得台灣中央法規、普通法院裁判與憲法法庭資料。官方即時內容通過結構、一致性與 freshness 檢查後，會固定成 server-owned evidence；呼叫端不能自行宣告某段文字為官方資料。Provider-neutral snapshot receipt 是可選的 provider 契約，並非內建 runtime 已簽發的保證；目前內建 `ResearchService` 尚未注入或持久化 live-provider receipt，因此服務 finalization 最多為 `conditional`／`qualified`，`ordinary` 保留給 receipt-aware provider adapter。
+ALR-TW v0.12.0 以三個獨立 provider 取得台灣中央法規、普通法院裁判與憲法法庭資料。官方即時內容通過結構、一致性與 freshness 檢查後，會固定成 server-owned evidence；呼叫端不能自行宣告某段文字為官方資料。內建 `ResearchService` 會依同一 run 中通過官方／可信快取閘門的精確 source／evidence 集合簽發並持久化 provider-neutral snapshot receipt，finalization 再從 server-owned store 重算 binding。receipt 與其他閘門均通過時 `ordinary` 才可達；缺失最高為 `conditional`，跨 run、過期或集合不符則 fail closed。
 
-v0.11.0 也提供行政規則、行政解釋、訴願與立法資料的 provider-neutral
+v0.12.0 也提供行政規則、行政解釋、訴願與立法資料的 provider-neutral
 contracts／SDK。TLR adapter 可召回行政函釋候選，但不建立 source 或 evidence；
 本 repo 仍不內附行政函釋官方 provider、corpus 或 index。部署者可用
 `PublicLawProviderAdapter` 接入官方來源；所有升格結果仍須由 server metadata
@@ -24,7 +24,7 @@ handshake 後 renegotiation。無法安全建立連線時會 fail closed。
 - 來源：全國法規資料庫官方結構化資料與官方網頁；
 - 能力：法規名稱、基本關鍵詞、精確條文、現行／廢止狀態；
 - 結構化內容與官方網頁內容衝突時，來源降為 `verification_failed`，不得作正式證據；
-- v0.11.0 不承諾指定歷史日期的完整版本、地方自治法規或所有附件解析。
+- v0.12.0 不承諾指定歷史日期的完整版本、地方自治法規或所有附件解析。
 
 ## 司法院普通裁判 Provider
 
@@ -39,12 +39,26 @@ handshake 後 renegotiation。無法安全建立連線時會 fail closed。
 
 效能設計採單次操作內的連線與 cookie 重用、正式字號跨系統一次查詢、候選數量上限，以及 server-owned TTL 快取。連線結束即釋放 session，不保存搜尋 cookie。若遇到 WAF、驗證碼或拒絕頁面，會回 `OFFICIAL_SOURCE_BLOCKED` 並 fail closed；本版不內建規避機制或無限重試。
 
+`hybrid_verified` quick judgment research 先呼叫 TLR／相容 candidate provider；
+只有無可用候選或 provider 失敗才退回官方關鍵詞搜尋，並將排序後的 exact
+verification 限制為 1–5 件。候選來源及 excerpt 不影響信任等級；每個入選
+candidate 都須逐件通過上述 identity 與正文解析。類案 quick 固定保留 bounded
+top-K qualification；mismatch／not-found 另加限制且不會進入 evidence，`0` 件成功
+仍無法起草。
+
+Counter-authority 不會把整段長自然語言問題原樣送入司法院搜尋。Server 會產生最多
+四個 deterministic 短查詢，保留明示法條與爭點詞並加入「相反見解」／「不同見解」
+標記；每個 query 最長 128 字。縮短只處理 lexical retrieval，不執行 semantic
+opposition classification。
+
 ## 可選唯讀本機裁判 Provider
 
 在明示的 live data mode 下，可用 `ALR_TW_LOCAL_PORTAL_ROOT` 指定絕對資料根目錄，
 接入部署環境既有、相容的唯讀 `legal_data_pipeline` provider；套件不內附資料。
-本機搜尋只回傳候選。精確查詢會檢查 catalog-bound receipt、來源狀態及正文
-hash；符合條件時建立 server-owned `verified_cache` 記錄，否則回查官方來源。
+本機搜尋只回傳候選。精確查詢會檢查 catalog-bound receipt、coverage binding、
+來源狀態與 trusted-text／provenance hash；全部符合時才由 server 採納並投影為
+`verified_cache` 記錄。candidate-only 快取不會升格；任一條件不符時，以
+canonical JID／正式字號回查官方來源。
 資料不可用與查無結果保持分離，候選片段不會直接成為 evidence。
 
 此設定不會在 `synthetic` mode 載入本機資料。部署者應自行治理所接入的 provider
@@ -61,6 +75,9 @@ hash；符合條件時建立 server-owned `verified_cache` 記錄，否則回查
 ## 共通安全規則
 
 - 僅允許 HTTPS allowlist（允許清單）主機，redirect 也重新驗證；
+- 官方 HTTPS 預設以 `truststore` 使用作業系統憑證庫；`alr-tw doctor --live` 會實際
+  探測三個官方 provider，並以 `LIVE_TRUSTSTORE_REQUIRED` 或
+  `OFFICIAL_TLS_VERIFICATION_FAILED` 明示部署問題；
 - 有明確 timeout、回應大小上限與 schema guard；
 - 網路失敗不等於查無資料；
 - 每個 source 保存官方識別碼、網址、內容 hash、取得與驗證時間、到期時間；

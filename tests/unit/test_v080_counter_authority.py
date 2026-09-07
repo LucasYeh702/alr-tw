@@ -18,6 +18,7 @@ from alr_tw.contracts.sources import (
     TrustStatus,
 )
 from alr_tw.research.counter_authority import (
+    MAX_COUNTER_QUERY_CHARS,
     CounterAuthorityPlan,
     CounterQueryStatus,
     CounterAuthorityStatus,
@@ -96,6 +97,23 @@ def test_plan_is_deterministic_and_bounded() -> None:
     assert first.scope.global_absence_claim_allowed is False
 
 
+def test_plan_compresses_long_natural_language_into_official_search_queries() -> None:
+    query = (
+        "以下是純合成情境，涉及示範法第27條的爭點詞擷取與查詢長度限制，"
+        "並且還有事件順序、通知時間、文件種類等用來測試壓縮的大量虛構敘述。"
+        * 3
+    )
+
+    plan = build_counter_authority_plan(query)
+
+    assert all(len(item.text) <= MAX_COUNTER_QUERY_CHARS for item in plan.queries)
+    assert all(
+        "相反見解" in item.text or "不同見解" in item.text
+        for item in plan.queries
+    )
+    assert any("示範法第27條" in item.text for item in plan.queries)
+
+
 def test_verified_hit_requires_exact_server_evidence() -> None:
     calls: list[str] = []
     candidate = _candidate()
@@ -123,7 +141,7 @@ def test_verified_hit_requires_exact_server_evidence() -> None:
     assert "COUNTER_AUTHORITY_RELATION_UNCLASSIFIED" in result.reason_codes
     assert result.verified_count == 1
     assert len(verifications) == 1
-    assert len(calls) == 3
+    assert len(calls) == 2
 
 
 def test_clean_scoped_miss_allows_only_bounded_absence_language() -> None:

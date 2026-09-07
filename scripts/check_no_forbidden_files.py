@@ -38,10 +38,13 @@ FORBIDDEN_DIR_PARTS = {
     "production_indexes",
     "ranking_calibration",
     "reconciliation_state",
+    "reviews",
 }
 
 FORBIDDEN_FILENAMES = {
     ".env",
+    "PRIVATE_REVIEW_POLICY.md",
+    "REVIEW_GOVERNANCE.md",
     "gold_labels.json",
     "operator_attestation.json",
     "production_manifest.json",

@@ -1,5 +1,9 @@
 name: CI
 
+permissions:
+  contents: read
+  pull-requests: read
+
 on:
   push:
   pull_request:
@@ -30,6 +34,8 @@ jobs:
           pip install -e '.[dev,live]'
       - name: Ruff
         run: ruff check .
+      - name: Typecheck
+        run: mypy src
       - name: Forbidden file check
         run: python scripts/check_no_forbidden_files.py
       - name: Public boundary check

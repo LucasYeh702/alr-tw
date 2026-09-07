@@ -24,7 +24,21 @@ from alr_tw.contracts.sources import EvidenceSpan, MaterialType, SourceRecord, T
 MAX_COUNTER_QUERIES = 4
 MAX_COUNTER_CANDIDATES_PER_QUERY = 5
 MAX_COUNTER_VERIFICATIONS = 5
+MAX_COUNTER_QUERY_CHARS = 128
 _TOKEN_RE = re.compile(r"[\u3400-\u9fffA-Za-z0-9]{2,}")
+_LAW_REFERENCE_RE = re.compile(
+    r"[\u3400-\u9fff]{1,30}?(?:法|條例|規則|辦法)第\s*"
+    r"\d+(?:\s*(?:之|-)\s*\d+)*\s*條"
+)
+_QUERY_FILLERS = (
+    "請問",
+    "是否",
+    "有沒有",
+    "如何",
+    "關於",
+    "針對",
+    "本案",
+)
 
 
 class CounterAuthorityStatus(str, Enum):
@@ -64,7 +78,7 @@ class CounterAuthorityQuery(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     query_id: str = Field(pattern=r"^counter-q-[0-9a-f]{12}$")
-    text: str = Field(min_length=1, max_length=500)
+    text: str = Field(min_length=1, max_length=MAX_COUNTER_QUERY_CHARS)
     purpose: Literal["issue", "lexical_variant", "registered_locator"]
     source_issue_id: str | None = Field(default=None, max_length=80)
     ordinal: int = Field(ge=1, le=MAX_COUNTER_QUERIES)
@@ -104,7 +118,7 @@ class CounterAuthorityPlan(BaseModel):
         "alr-tw.counter-authority-plan/v1"
     )
     plan_id: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    generator: Literal["lexical_counter_v1"] = "lexical_counter_v1"
+    generator: Literal["lexical_counter_v2"] = "lexical_counter_v2"
     scope: CounterAuthorityScope
     queries: tuple[CounterAuthorityQuery, ...] = Field(
         min_length=1,
@@ -258,19 +272,25 @@ def build_counter_authority_plan(
         tuple[str, Literal["issue", "lexical_variant", "registered_locator"], str | None]
     ] = []
     root = " ".join(query.split()).strip()
-    if root:
-        entries.append((root, "issue", None))
-    for issue_key, proposition in issue_proposals:
-        value = " ".join(proposition.split()).strip()
-        if value:
-            entries.append((value, "issue", issue_key))
     for locator in registered_locators:
         value = " ".join(locator.split()).strip()
         if value:
-            entries.append((value, "registered_locator", None))
+            entries.append(
+                (_compact_counter_query(value), "registered_locator", None)
+            )
+    for issue_key, proposition in issue_proposals:
+        value = " ".join(proposition.split()).strip()
+        if not value:
+            continue
+        for marker in ("相反見解", "不同見解"):
+            entries.append(
+                (_compact_counter_query(value, marker=marker), "issue", issue_key)
+            )
     if root:
         for marker in ("相反見解", "不同見解"):
-            entries.append((f"{root} {marker}", "lexical_variant", None))
+            entries.append(
+                (_compact_counter_query(root, marker=marker), "lexical_variant", None)
+            )
 
     selected: list[
         tuple[str, Literal["issue", "lexical_variant", "registered_locator"], str | None]
@@ -281,7 +301,7 @@ def build_counter_authority_plan(
         if not key or key in seen:
             continue
         seen.add(key)
-        selected.append((text[:500], purpose, source_issue_id))
+        selected.append((text, purpose, source_issue_id))
         if len(selected) == bounded:
             break
     if not selected:
@@ -308,7 +328,7 @@ def build_counter_authority_plan(
         time_scope=as_of_date,
     )
     payload = {
-        "generator": "lexical_counter_v1",
+        "generator": "lexical_counter_v2",
         "scope": scope.model_dump(mode="json"),
         "queries": [item.model_dump(mode="json") for item in query_items],
     }
@@ -317,6 +337,46 @@ def build_counter_authority_plan(
         scope=scope,
         queries=tuple(query_items),
     )
+
+
+def _compact_counter_query(value: str, *, marker: str | None = None) -> str:
+    """Build an official-search-safe lexical query without semantic inference."""
+
+    normalized = " ".join(value.split()).strip()
+    if not normalized:
+        raise ValueError("COUNTER_AUTHORITY_QUERY_EMPTY")
+    if marker is None:
+        return normalized[:MAX_COUNTER_QUERY_CHARS]
+
+    references: list[str] = []
+    for match in _LAW_REFERENCE_RE.finditer(normalized):
+        reference = re.sub(r"\s+", "", match.group(0))
+        for filler in _QUERY_FILLERS:
+            if reference.startswith(filler) and len(reference) > len(filler):
+                reference = reference[len(filler) :]
+                break
+        if reference not in references:
+            references.append(reference)
+        if len(references) == 2:
+            break
+
+    issue = _LAW_REFERENCE_RE.sub(" ", normalized)
+    issue = re.sub(r"[，。；;、！？?：:（）()]", " ", issue)
+    issue = " ".join(issue.split()).strip()
+    for filler in _QUERY_FILLERS:
+        issue = issue.removeprefix(filler).strip()
+
+    fixed = " ".join([*references, marker]).strip()
+    issue_budget = max(0, MAX_COUNTER_QUERY_CHARS - len(fixed) - (1 if fixed else 0))
+    if len(issue) > issue_budget:
+        if issue_budget <= 1:
+            issue = ""
+        else:
+            head = max(1, (issue_budget - 1) // 2)
+            tail = max(1, issue_budget - head - 1)
+            issue = f"{issue[:head]} {issue[-tail:]}"
+    compact = " ".join(part for part in (*references, issue, marker) if part).strip()
+    return compact[:MAX_COUNTER_QUERY_CHARS]
 
 
 SearchCounter = Callable[[str, int], ProviderResult]

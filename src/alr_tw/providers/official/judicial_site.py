@@ -9,6 +9,8 @@ from urllib.parse import urljoin, urlparse
 
 from alr_tw._version import __version__
 
+from .http import system_truststore_context
+
 
 JUDICIAL_JUDGMENT_HOST = "judgment.judicial.gov.tw"
 
@@ -64,6 +66,7 @@ class HttpxJudicialSiteTransport:
             self._client = httpx.AsyncClient(
                 headers={"User-Agent": self.user_agent},
                 follow_redirects=False,
+                verify=system_truststore_context(),
             )
         self._open_count += 1
 
@@ -122,6 +125,7 @@ class HttpxJudicialSiteTransport:
             client = httpx.AsyncClient(
                 headers={"User-Agent": self.user_agent},
                 follow_redirects=False,
+                verify=system_truststore_context(),
             )
         try:
             for _ in range(4):

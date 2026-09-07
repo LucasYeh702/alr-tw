@@ -1,15 +1,25 @@
 # Roadmap
 
-## Current release: v0.11.0
+## v0.12.0 公開預覽範圍
 
-v0.11.0 是 agent-neutral、provider-neutral 的台灣法律研究驗證 harness，已完成
+v0.12.0 是 agent-neutral、provider-neutral 的台灣法律研究驗證 harness，已完成
 研究充分性、Coverage v2、finalization、歷史法規、裁判語境安全與可插拔 sidecar
 契約。它不是完整台灣
 法律資料庫，也不提供法律意見或 production SLA；真實資料 provider 由部署者
 依公開契約自行接入。
 
-目前 v0.11.0 已具備的核心能力：
+目前 v0.12.0 已具備的核心能力：
 
+- prompt-selectable quick research 與 `execute_legal_research`，將 server-owned
+  obligations 收斂成一次有界 MCP 呼叫，保留逐步 operation audit、retry stop 與
+  final-answer validation boundary；
+- 裁判型 quick plan 以 1–5 件 exact official verification 為預算，不展開未要求的
+  counter-authority／lineage；已有正式證據的子集合可帶 mandatory qualification
+  回答，`0` 件裁判驗證通過仍 fail closed；
+- `CandidateRecallProvider`／`LineageCandidateProvider` 注入點與 TLR reference
+  adapter，以及只讀 conformance-envelope CLI；
+- pinned、gold-free ChronoLex-TW adapter；歷史版本分數必須有 evaluator-owned
+  server adjudication，缺資料即 `not_scoreable`；
 - `workflow_complete`、`research_sufficiency` 與 `answer_mode` 分離；
   `ready_for_draft` 僅表示流程階段，不代表答案可直接呈現；
 - Coverage v2 表達 bounded query/time scope、provider scope、partial／error／
@@ -38,10 +48,21 @@ v0.11.0 是 agent-neutral、provider-neutral 的台灣法律研究驗證 harness
 - legacy raw citation mappings 固定為 caller-controlled；metadata-only helper
   不再授權答案呈現，synthetic records 固定為 demo-only。
 
-Provider-neutral snapshot receipt 目前只是公開契約與一致性檢查介面。內建
-`ResearchService` 尚未簽發或持久化 live-provider receipt，因此服務輸出最多為
-`conditional`／`qualified`；`ordinary` 保留給 receipt-aware provider adapter
-完成同一 run 的 server-owned receipt binding 後使用。
+Provider-neutral snapshot receipt 在 v0.12.0 已進入內建 `ResearchService`：
+官方／可信快取材料升格後，server 依同一 run 的精確 source／evidence 集合簽發並
+持久化 receipt，finalization 再重算 binding。`ordinary` 因此成為嚴格條件下的
+可達狀態；缺 receipt 最高為 `conditional`，不一致則 fail closed。外部
+receipt-aware adapter 仍須遵守相同 server-owned binding，不能自我認證。
+
+## v0.12.0：快速研究與提議整合
+
+- `/quick`／`快速模式：` 可由 query 明示啟用，也可使用 structured constraint；
+- `execute_legal_research` 回傳 overall/per-step elapsed time 與有界 verified evidence
+  bundle，供實際比較 client multi-hop 與 single-roundtrip latency；
+- 第 1–4 號外部提議分別採 protocol ports、autonomous runner、既有 conditional
+  posture 與 conformance-envelope CLI 形式納入；不宣稱 bundled local graph adapter
+  或任意資料庫深度稽核；
+- 詳細驗收與非目標見 [v0.12.0 Release Scope](docs/V0120_RELEASE_SCOPE.md)。
 
 ## v0.11.0：有界歷審檢查與可選資料層
 

@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from alr_tw.scripts.check_public_boundary import find_public_boundary_violations
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -21,6 +23,18 @@ def _load_forbidden_checker_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.mark.parametrize("name", ["signing.pem", "signing.KEY", "rows.parquet", "state.sqlite3"])
+def test_installed_boundary_guard_rejects_sensitive_file_types(tmp_path: Path, name: str):
+    (tmp_path / name).write_text("synthetic\n", encoding="utf-8")
+    assert find_public_boundary_violations(tmp_path)
+
+
+@pytest.mark.parametrize("text", ["operator@example" + ".local", "LEGAL" + "_PRIVATE_SETTING"])
+def test_installed_boundary_guard_rejects_private_markers(tmp_path: Path, text: str):
+    (tmp_path / "demo.txt").write_text(text, encoding="utf-8")
+    assert find_public_boundary_violations(tmp_path)
 
 
 def _run_forbidden_check(path: Path) -> subprocess.CompletedProcess[str]:
@@ -88,6 +102,14 @@ def test_ci_runs_history_secret_scan():
     text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 
     assert "gitleaks" in text or "trufflehog" in text
+    assert "contents: read" in text
+    assert "pull-requests: read" in text
+
+
+def test_ci_runs_mypy_on_src():
+    text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "mypy src" in text
 
 
 def test_ci_installs_live_provider_dependencies_before_provider_tests():
@@ -127,6 +149,23 @@ def test_public_guards_scan_untracked_files_in_git_worktree(tmp_path: Path):
     assert result.returncode == 1
     assert "api_key" in result.stderr
     assert any("api_key" in item for item in public_boundary_violations)
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    ["PRIVATE_REVIEW_POLICY.md", "REVIEW_GOVERNANCE.md", "reviews/private-review.md"],
+)
+def test_public_guards_reject_private_review_files(tmp_path: Path, relative_path: str):
+    candidate = tmp_path / relative_path
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    candidate.write_text("private review instructions\n", encoding="utf-8")
+
+    result = _run_forbidden_check(tmp_path)
+    public_boundary_violations = find_public_boundary_violations(tmp_path)
+
+    assert result.returncode == 1
+    assert relative_path in result.stderr
+    assert any(relative_path in item for item in public_boundary_violations)
 
 
 def test_public_boundary_scans_large_text_instead_of_silently_skipping(tmp_path: Path):
@@ -268,7 +307,7 @@ def test_current_public_tree_has_no_domain_guard_false_positives():
 def test_public_readmes_share_current_safety_claims():
     for relative in ("README.md", "README.zh-TW.md"):
         text = (REPO_ROOT / relative).read_text(encoding="utf-8")
-        assert "v0.11.0" in text
+        assert "v0.12.0" in text
         assert "本 repo 不包含 LLM，也不包含 agent 實作。" in text
         assert "TLR" in text and "candidate" in text
         assert "blocked" in text and "answer body" in text
@@ -303,7 +342,7 @@ def test_current_public_docs_use_latest_release_identity():
     )
     for relative in current_docs:
         text = (REPO_ROOT / relative).read_text(encoding="utf-8")
-        assert "v0.11.0" in text, relative
+        assert "v0.12.0" in text, relative
         assert "v0.6" not in text, relative
 
 

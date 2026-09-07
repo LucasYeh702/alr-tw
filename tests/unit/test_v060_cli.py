@@ -71,3 +71,33 @@ def test_cli_live_doctor_requires_explicit_live_mode(capsys, monkeypatch) -> Non
 
     assert exit_code == 2
     assert "CONFIG_MODE_REQUIRED" in payload["error"]
+
+
+def test_cli_live_doctor_reports_actionable_tls_failure(capsys, monkeypatch) -> None:
+    async def fake_live_checks() -> dict:
+        return {
+            "tls_backend": "system_truststore",
+            "live_ready": False,
+            "provider_checks": [
+                {
+                    "provider_id": "official_moj_laws",
+                    "status": "unavailable",
+                    "error_code": "OFFICIAL_SOURCE_UNAVAILABLE",
+                    "message": "OFFICIAL_TLS_VERIFICATION_FAILED",
+                }
+            ],
+        }
+
+    monkeypatch.setenv("ALR_TW_DATA_MODE", "official_only")
+    monkeypatch.setattr("alr_tw.cli._doctor_live_checks", fake_live_checks)
+
+    exit_code = main(["doctor", "--live"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["data"]["tls_backend"] == "system_truststore"
+    assert payload["data"]["live_ready"] is False
+    assert (
+        payload["data"]["provider_checks"][0]["message"]
+        == "OFFICIAL_TLS_VERIFICATION_FAILED"
+    )

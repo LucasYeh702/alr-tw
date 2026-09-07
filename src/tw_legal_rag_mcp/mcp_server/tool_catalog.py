@@ -25,6 +25,7 @@ class ToolCatalogEntry:
 TOOL_CATALOG: tuple[ToolCatalogEntry, ...] = (
     ToolCatalogEntry("get_legal_research_capabilities", ToolCategory.SERVER_OWNED),
     ToolCatalogEntry("research_legal_question", ToolCategory.SERVER_OWNED),
+    ToolCatalogEntry("execute_legal_research", ToolCategory.SERVER_OWNED),
     ToolCatalogEntry("submit_legal_research_plan", ToolCategory.SERVER_OWNED),
     ToolCatalogEntry("continue_legal_research", ToolCategory.SERVER_OWNED),
     ToolCatalogEntry("get_legal_research_state", ToolCategory.SERVER_OWNED),

@@ -1,6 +1,6 @@
 # ALR-TW Agent-Neutral Interoperability Contract
 
-本文件定義 v0.11.0 的前端無關接口。任何能呼叫 MCP tool 的法律
+本文件定義 v0.12.0 的前端無關接口。任何能呼叫 MCP tool 的法律
 agent、prompt skill、workflow engine 或人工控制程式都可以使用同一套契約；
 核心程式不依賴特定前端專案、模型或提示詞。
 
@@ -12,24 +12,29 @@ trust-boundary tests only; it does not ship production corpus, private paths,
 indexes, manifests, operational state, or private evaluation labels. A user
 supplies a conforming provider through these public contracts.
 
-The v0.11.0 public surface also includes structural applicability resolution,
+The v0.12.0 public surface also includes structural applicability resolution,
 authority/judgment-lineage records, public-law material contracts, and a
 provider SDK. These are metadata-bound extension points: they describe explicit
 source relationships, court/procedure lineage, and administrative or legislative
 material roles, but they do not perform semantic entailment or opposition
 classification. A deployment must supply the provider and server-owned binding.
 
-The v0.11.0 surface includes an optional semantic-verifier sidecar. It can
+The v0.12.0 surface includes an optional semantic-verifier sidecar. It can
 return bounded `supports`, `contradicts`, `uncertain`, or `not_evaluated`
 relations for server-selected targets, but its output remains advisory-only and
 cannot promote evidence, mutate source trust, or authorize finalization or an
 answer. The core runtime remains model-free.
 
-The v0.11.0 provider boundary also exposes a common conformance validator and an
+The v0.12.0 provider boundary also exposes a common conformance validator and an
 optional receipt-aware adapter. A deployer may provide a provider, model, or
 corpus outside this repository, but the public package does not bundle them;
 server-owned source/evidence promotion and run-bound snapshot receipts remain
 the only path to ordinary eligibility.
+
+Candidate discovery is injected through `CandidateRecallProvider`; bounded
+appeal-history discovery uses `LineageCandidateProvider`. These protocols do
+not transfer trust ownership to the provider. TLR is one reference adapter,
+and deployments may supply a conforming local or remote implementation.
 
 ## Responsibility boundary
 
@@ -68,8 +73,15 @@ same run.
 
 ### `server_managed`
 
-This is the v0.11.0-compatible default. ALR-TW plans and executes its bounded
+This is the v0.12.0-compatible default. ALR-TW plans and executes its bounded
 official/TLR discovery obligations. No external research plan is required.
+
+The client may use `execute_legal_research` to advance all currently executable
+server-owned obligations in one bounded call. A leading `/quick` or
+`快速模式：` selects query-aware quick depth: judgment recall and at most five
+exact official checks remain mandatory, while counter-authority, lineage, and
+unrequested statute expansion are omitted. Retryable failure and final-answer
+validation remain explicit stop boundaries.
 
 ### `client_assisted`
 
@@ -233,13 +245,14 @@ scope and provider scope. A clean `not_found_in_scope` is not a global absence
 claim. Counter-authority is lexical candidate discovery plus official
 verification, not a semantic opposition classifier or a consensus proof.
 
-Snapshot receipts are provider-neutral contracts, not a claim that the bundled
-providers issue them. The built-in `ResearchService` does not currently inject
-or persist live-provider generation receipts, so built-in live finalization is
-at most `conditional`/`qualified`; `ordinary` requires a receipt-aware adapter
-with a server-owned receipt binding for the same run. Finalization is
-pre-draft (`safe_to_draft`) only; presentation still requires
-`validate_legal_answer`.
+Snapshot receipts are provider-neutral contracts. In v0.12.0 the built-in
+`ResearchService` issues and persists them for the exact same-run set of
+eligible official/verified-cache sources and claim-supporting evidence, then
+recomputes that binding during finalization. Caller-supplied receipts are never
+trusted. `ordinary` is reachable only when that server-owned receipt set and
+all other gates pass; missing receipts are at most `conditional`, and expired,
+cross-run, or mismatched sets fail closed. Finalization is pre-draft
+(`safe_to_draft`) only; presentation still requires `validate_legal_answer`.
 
 Synthetic fixtures and legacy traces remain compatibility demonstrations only;
 they cannot support a legal answer.
@@ -248,9 +261,10 @@ they cannot support a legal answer.
 
 ```text
 get_legal_research_capabilities
-  -> research_legal_question(discovery_mode=...)
-  -> [client_assisted only] submit_legal_research_plan
-  -> continue_legal_research until ready_for_draft
+  -> [server_managed] execute_legal_research(/quick or structured depth)
+     OR research_legal_question -> continue_legal_research until ready_for_draft
+  -> [client_assisted] research_legal_question -> submit_legal_research_plan
+     -> continue_legal_research until ready_for_draft
   -> get_legal_research_finalization
   -> [optional structured analysis] validate_legal_analysis
   -> external client drafts and binds claims to evidence + issues

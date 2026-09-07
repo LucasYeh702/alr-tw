@@ -2,7 +2,7 @@
 
 [繁體中文](README.zh-TW.md) | English
 
-ALR-TW v0.11.0 is the agent-neutral public preview of the Taiwan-law research safety harness. An external agent or LLM may create and advance a research run over MCP and propose issues or authority locators, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
+ALR-TW v0.12.0 is the agent-neutral public preview of the Taiwan-law research safety harness. An external agent or LLM may create and advance a research run over MCP and propose issues or authority locators, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
 
 In `hybrid_verified` mode, this project uses [TLR (Taiwan Legal RAG)](https://github.com/aa0101181514/tw-legal-rag) to recall ordinary-judgment candidates, then asks ALR-TW to verify them against Judicial Yuan official full text. The TLR provider can also return typed administrative-interpretation candidates and read long judgment text through bounded paging. No TLR result is final citation evidence by itself.
 
@@ -15,10 +15,10 @@ This project is neither legal advice nor a complete Taiwan legal database.
 
 This repository does not ship an LLM or agent implementation. Planning, tool selection, and natural-language reasoning come from the external caller; ALR-TW supplies auditable tools and deterministic gates. The demo ranking parameters are illustrative test settings, not production ranking configuration.
 
-> v0.11.0 remains a public preview. A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
+> v0.12.0 remains a public preview (package version `0.12.0`). A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
 
-> The current `main` working tree is v0.11.0; it does not claim complete
-> production legal reasoning.
+> This tree targets v0.12.0; publication is tracked by the matching tag and
+> GitHub Release. It does not claim complete production legal reasoning.
 
 ## Agentic RAG capabilities
 
@@ -35,7 +35,7 @@ User query
   -> validated | qualified | blocked
 ```
 
-The v0.11.0 surface provides legacy `hlExportPDF` and
+The v0.12.0 surface provides legacy `hlExportPDF` and
 `/EXPORTFILE/ExportToPdf.aspx` compatibility, official identity verification
 for five-part TLR document IDs, agent-neutral interoperability, and one unified
 legal-analysis envelope with composable branches for civil substantive law,
@@ -43,7 +43,7 @@ civil procedure, substantive criminal law, criminal procedure, administrative
 law, and constitutional review. The administrative branch contains separate
 legality and remedy tracks.
 These checks validate structure and trust references, not semantic entailment.
-The v0.11.0 surface also includes a provider-neutral applicability resolver for
+The v0.12.0 surface also includes a provider-neutral applicability resolver for
 explicit special/general, superior/inferior, and successor/version metadata;
 authority and judgment-lineage contracts for court level, procedural posture,
 appeal/review edges, and bounded negative-treatment results; and public-law
@@ -61,7 +61,7 @@ support a legal answer. Counter-authority remains bounded lexical candidate
 discovery followed by official verification; there is no semantic opposition
 classifier and no basis for global absence or consensus claims.
 
-The current v0.11.0 contracts also provide an optional semantic
+The current v0.12.0 contracts also provide an optional semantic
 verifier sidecar, common provider conformance, a receipt-aware adapter, and a
 deployer boundary validator. Sidecars remain shadow/advisory-only; provider
 source/evidence references require independent server binding and snapshot
@@ -71,16 +71,16 @@ semantic entailment or legal-answer authorization.
 
 ### Snapshot receipts and bundled-runtime limits
 
-The provider-neutral snapshot receipt is a public provider contract and
-consistency check; it does not mean that the bundled providers issue receipts.
-In v0.11.0 the bundled `ResearchService` does not inject or persist live-provider
-snapshot-generation receipts. Its live finalization output is therefore at most
-`conditional` or `qualified` (normally with `SNAPSHOT_RECEIPT_MISSING_LEGACY`),
-not `ordinary`. `ordinary` is reserved for deployments using a receipt-aware
-provider adapter that binds server-owned receipts to the same run. Finalization
-only authorizes entering the drafting phase (`safe_to_draft`); it never
-authorizes presentation. Only `validate_legal_answer` can return a presentable
-`validated` or `qualified` result.
+In v0.12.0 the bundled `ResearchService` issues and persists a provider-neutral
+snapshot receipt for each provider's exact, unexpired official/verified-cache
+source and claim-supporting evidence set in the same run. Finalization reads the
+server-owned set and recomputes its material digest; caller-supplied, cross-run,
+expired, or mismatched receipts cannot self-certify. `ordinary` is reachable only
+when the receipt set and every other gate pass. A missing receipt is at most
+`conditional`, while an inconsistent set fails closed. Finalization only
+authorizes entering the drafting phase (`safe_to_draft`); only
+`validate_legal_answer` can authorize presentation. A receipt does not establish
+global recall completeness, judgment finality, or consensus.
 
 An external agent may plan research and draft an answer, but it cannot declare a source official, promote a candidate into evidence, or bypass final validation.
 
@@ -131,6 +131,27 @@ External agent asks and drafts
 
 In `hybrid_verified`, query text that passes the privacy gate is transmitted to TLR. Do not send personal secrets, unpublished case facts, private contracts, litigation strategy, evidentiary weaknesses, or negotiation limits. See [TLR Provider](docs/TLR_PROVIDER.md) and [Data Policy](DATA_POLICY.md).
 
+### Quick mode
+
+For judgment retrieval, use `/quick <question>`, `快速模式：<question>`, or the
+structured `constraints.research_depth=quick`. With `execute_legal_research`, the
+server performs privacy screening, candidate recall, at most five canonical-JID
+or formal-citation checks against official text, and evidence sufficiency in one
+MCP call. In `hybrid_verified`, quick mode queries TLR or another compatible
+candidate provider first and falls back to Judicial Yuan keyword search only
+when that provider fails or yields no usable candidate.
+
+Quick mode reduces breadth only: it omits counter-authority, lineage, and
+unrequested statute expansion by default, but never skips official verification
+or final `validate_legal_answer`. Similar-case quick research always discloses
+its bounded top-K scope and remains `qualified` / `conditional`, even when all
+selected candidates verify; zero verified sources remains `refusal_only`.
+
+For an incomplete or blocked run, read
+`get_legal_research_state.research_brief`. It exposes verified-source locators,
+obligation progress, blockers, and safe next actions without a draft conclusion;
+it always sets `answer_authorized=false` and `safe_to_present=false`.
+
 ## Install and configure
 
 Python 3.11 or newer is required.
@@ -151,19 +172,24 @@ export ALR_TW_RETENTION=24h
 alr-tw doctor --live
 ```
 
+Official HTTPS providers use the operating-system certificate store through
+`truststore`. `doctor --live` probes the MOJ, Constitutional Court, and Judicial
+Yuan providers and reports certificate deployment failures explicitly.
+
 Ordinary-judgment lookup does not require a Judicial Yuan API token. In a live mode, search terms and filters are sent directly to `judgment.judicial.gov.tw`; do not use confidential or unpublished case facts as search terms.
 
 Secrets are redacted from `doctor` output and must not be committed, traced, or persisted in SQLite.
 
-## v0.11.0 MCP tools
+## v0.12.0 MCP tools
 
 | Tool | Purpose |
 |---|---|
 | `get_legal_research_capabilities` | Report active modes, supported profiles, and fixed trust ownership |
 | `research_legal_question` | Create a server-owned research run without drafting an answer |
+| `execute_legal_research` | Create a run and execute bounded server-owned obligations in one call, returning elapsed time and a draft-stage evidence bundle |
 | `submit_legal_research_plan` | Register an untrusted client-assisted issue and locator plan |
 | `continue_legal_research` | Execute exactly one next obligation using an idempotent `operation_id` |
-| `get_legal_research_state` | Read run state without network activity or TTL extension |
+| `get_legal_research_state` | Read run state and its non-answer `research_brief` without network activity or TTL extension |
 | `get_legal_research_finalization` | Return server-owned research sufficiency, Coverage v2, snapshot receipts, and answer posture |
 | `lookup_legal_source` | Exact lookup for a law article, Constitutional identifier, JID, or formal judgment citation |
 | `inspect_judgment_lineage` | Inspect TLR-recorded upper/lower history for a same-run verified six-part JID and officially verify up to 1–20 related decisions |
@@ -264,6 +290,11 @@ promoted server-owned evidence before calling `validate_legal_answer`. Only a
 final-answer `validated` result, or a `qualified` result allowed by disclosure
 rules, may be rendered. `lookup_legal_source` does not replace answer-level
 validation.
+
+If a forcibly terminated local stdio process leaves the host showing a stale
+connected state, disable and re-enable the MCP configuration or restart the
+host. If it still reports `Not connected`, remove and re-add the same
+configuration. Stale host UI state is not runtime health evidence.
 
 ## Development verification
 

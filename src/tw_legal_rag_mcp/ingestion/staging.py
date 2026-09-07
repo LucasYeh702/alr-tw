@@ -14,7 +14,7 @@ def _synthetic_staging_manifest() -> SourceManifest:
     return SourceManifest(
         provider="Synthetic Staging Source",
         dataset_name="synthetic-staging-demo",
-        dataset_version="v0.11.0",
+        dataset_version="v0.12.0",
         source_url="https://example.test/synthetic-staging",
         license_name="Synthetic demo fixture",
         attribution_text="Synthetic staging data generated for this reference repository.",

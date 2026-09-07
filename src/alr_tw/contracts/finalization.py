@@ -10,6 +10,8 @@ results can be attached as server-produced summaries.
 from __future__ import annotations
 
 from collections.abc import Sequence
+import hashlib
+import json
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -30,6 +32,8 @@ from .research import (
 
 
 _ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+_DIGEST_PATTERN = r"^sha256:[0-9a-f]{64}$"
+MAX_FINALIZATION_EVIDENCE_PREVIEW = 512
 
 
 def _as_list(value: object) -> list[object]:
@@ -123,6 +127,53 @@ class AbsenceClaimGate(BaseModel):
             raise ValueError("an allowed absence claim requires a bounded scope")
         return self
 
+
+class EvidenceAuthorizationSummary(BaseModel):
+    """Bounded description of the full server-authorized passage ID set."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal["alr-tw.evidence-authorization/v1"] = (
+        "alr-tw.evidence-authorization/v1"
+    )
+    granularity: Literal["passage"] = "passage"
+    validation_mode: Literal["claim_binding_server_lookup"] = (
+        "claim_binding_server_lookup"
+    )
+    authorized_count: int = Field(ge=0)
+    evidence_ids_digest: str = Field(pattern=_DIGEST_PATTERN)
+    preview_count: int = Field(ge=0, le=MAX_FINALIZATION_EVIDENCE_PREVIEW)
+    preview_complete: bool
+
+    @model_validator(mode="after")
+    def validate_preview(self) -> EvidenceAuthorizationSummary:
+        if self.preview_count > self.authorized_count:
+            raise ValueError("evidence preview cannot exceed the authorized set")
+        if self.preview_complete != (self.preview_count == self.authorized_count):
+            raise ValueError("evidence preview completeness does not match its counts")
+        return self
+
+
+def summarize_evidence_authorization(
+    evidence_ids: Sequence[str],
+) -> EvidenceAuthorizationSummary:
+    """Hash the full ID set while keeping the finalization envelope bounded."""
+
+    values = [str(item) for item in evidence_ids]
+    if len(values) != len(set(values)):
+        raise ValueError("allowed_evidence_ids values must be unique")
+    canonical = sorted(values)
+    encoded = json.dumps(canonical, ensure_ascii=False, separators=(",", ":"))
+    digest = "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    preview_count = min(len(canonical), MAX_FINALIZATION_EVIDENCE_PREVIEW)
+    return EvidenceAuthorizationSummary(
+        authorized_count=len(canonical),
+        evidence_ids_digest=digest,
+        preview_count=preview_count,
+        preview_complete=preview_count == len(canonical),
+    )
+
+
 class FinalizationContract(BaseModel):
     """Immutable, server-owned decision envelope for the final answer stage."""
 
@@ -136,7 +187,13 @@ class FinalizationContract(BaseModel):
     research_sufficiency: ResearchSufficiency
     answer_mode: AnswerMode
     allowed_source_ids: list[str] = Field(default_factory=list, max_length=256)
-    allowed_evidence_ids: list[str] = Field(default_factory=list, max_length=512)
+    # Compatibility preview only.  The full passage set is bound by
+    # ``evidence_authorization`` and checked by server-side claim lookup.
+    allowed_evidence_ids: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_FINALIZATION_EVIDENCE_PREVIEW,
+    )
+    evidence_authorization: EvidenceAuthorizationSummary | None = None
     required_qualification: list[str] = Field(default_factory=list, max_length=64)
     pending_support: list[str] = Field(default_factory=list, max_length=128)
     pending_lookups: list[str] = Field(default_factory=list, max_length=128)
@@ -216,6 +273,9 @@ class FinalizationContract(BaseModel):
             values = getattr(self, field_name)
             if len(values) != len(set(values)):
                 raise ValueError(f"{field_name} values must be unique")
+        if self.evidence_authorization is not None:
+            if self.evidence_authorization.preview_count != len(self.allowed_evidence_ids):
+                raise ValueError("evidence authorization preview count mismatch")
         if self.answer_mode in {AnswerMode.REFUSAL_ONLY} or self.blockers:
             if self.answer_draft is not None:
                 raise ValueError("blocked/refusal finalization cannot carry an answer draft")
@@ -395,6 +455,8 @@ def build_finalization_contract(
     ]
     source_values = [str(item) for item in _as_list(allowed_source_ids)]
     evidence_values = [str(item) for item in _as_list(allowed_evidence_ids)]
+    evidence_authorization = summarize_evidence_authorization(evidence_values)
+    evidence_preview = sorted(evidence_values)[:MAX_FINALIZATION_EVIDENCE_PREVIEW]
     qualification_values = [str(item) for item in _as_list(required_qualification)]
     pending_support_values = [str(item) for item in _as_list(pending_support)]
     pending_lookup_values = [str(item) for item in _as_list(pending_lookups)]
@@ -538,7 +600,8 @@ def build_finalization_contract(
         research_sufficiency=research_sufficiency,
         answer_mode=mode,
         allowed_source_ids=source_values,
-        allowed_evidence_ids=evidence_values,
+        allowed_evidence_ids=evidence_preview,
+        evidence_authorization=evidence_authorization,
         required_qualification=qualification,
         pending_support=pending_support_values,
         pending_lookups=pending_lookup_values,
@@ -693,7 +756,8 @@ def validate_finalization(
             "Finalization is a pre-draft posture and cannot carry answer content.",
         )
     source_ids = set(server_source_ids)
-    evidence_ids = set(server_evidence_ids)
+    server_evidence_values = [str(item) for item in server_evidence_ids]
+    evidence_ids = set(server_evidence_values)
     foreign_sources = sorted(set(contract.allowed_source_ids) - source_ids)
     foreign_evidence = sorted(set(contract.allowed_evidence_ids) - evidence_ids)
     if foreign_sources:
@@ -705,6 +769,31 @@ def validate_finalization(
         add_blocker(
             "FINALIZATION_EVIDENCE_NOT_SERVER_OWNED",
             "Finalization contains evidence references outside this run.",
+        )
+    server_evidence_unique = len(server_evidence_values) == len(set(server_evidence_values))
+    if not server_evidence_unique:
+        add_blocker(
+            "FINALIZATION_SERVER_EVIDENCE_FACTS_INVALID",
+            "Server evidence references contain duplicate IDs.",
+        )
+    expected_values = sorted(set(server_evidence_values))
+    expected_authorization = summarize_evidence_authorization(expected_values)
+    expected_preview = expected_values[:MAX_FINALIZATION_EVIDENCE_PREVIEW]
+    if contract.evidence_authorization is not None:
+        if not server_evidence_unique or contract.evidence_authorization != expected_authorization:
+            add_blocker(
+                "FINALIZATION_EVIDENCE_SET_MISMATCH",
+                "Finalization evidence-set summary does not match this server run.",
+            )
+        if contract.allowed_evidence_ids != expected_preview:
+            add_blocker(
+                "FINALIZATION_EVIDENCE_PREVIEW_MISMATCH",
+                "Finalization evidence preview does not match this server run.",
+            )
+    elif len(server_evidence_values) > MAX_FINALIZATION_EVIDENCE_PREVIEW:
+        add_blocker(
+            "FINALIZATION_EVIDENCE_SET_SUMMARY_REQUIRED",
+            "Large server evidence sets require a digest-bound authorization summary.",
         )
 
     presentable_mode = contract.answer_mode in {

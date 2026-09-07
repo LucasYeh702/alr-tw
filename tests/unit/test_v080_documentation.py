@@ -39,12 +39,12 @@ def _read(relative: str) -> str:
     return (REPO_ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_active_docs_disclose_receipt_aware_runtime_boundary():
+def test_active_docs_disclose_builtin_receipt_runtime_boundary():
     for relative in ACTIVE_RECEIPT_DOCS:
         text = _read(relative).casefold()
         assert "provider-neutral" in text or "provider neutral" in text, relative
-        assert "receipt-aware" in text, relative
-        assert "conditional" in text and "qualified" in text, relative
+        assert "server-owned" in text, relative
+        assert "ordinary" in text and "conditional" in text, relative
 
 
 def test_finalization_docs_describe_pre_draft_only():

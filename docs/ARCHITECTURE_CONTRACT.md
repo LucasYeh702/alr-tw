@@ -1,12 +1,12 @@
 # Architecture Contract
 
-## v0.11.0 agent-neutral contract
+## v0.12.0 agent-neutral contract
 
 ALR-TW is an independently implemented, public-safe contract and validator
 runtime. It is agent-neutral and provider-neutral; no non-public deployment
 artifact, corpus, index, manifest, or operational state is a package dependency.
 
-The v0.11.0 contract includes an optional untrusted planning boundary and a
+The v0.12.0 contract includes an optional untrusted planning boundary and a
 server-owned sufficiency/finalization boundary:
 
 ```text
@@ -32,7 +32,7 @@ taxonomy, per-element burden records, temporal applicability, authority status,
 and legal validity. They do not duplicate citation support or privacy logic and
 do not perform semantic entailment.
 
-## v0.11.0 server-owned contract
+## v0.12.0 server-owned contract
 
 新整合應以 `alr_tw.contracts` 的 provider-neutral models、`ResearchService`、`ProviderObligationExecutor` 與 `SqliteStore` 為主。外部 agent 只能建立／推進 run 與提交 draft；不得提交 evidence span 讓 final validation 採信。
 
@@ -45,17 +45,18 @@ ResearchRun -> ordered obligations -> ProviderResult
 `ProviderCandidate` 永遠不是 `EvidenceSpan`。官方即時內容只有在 provider 完成 origin、schema、content 與 freshness 檢查並由 server 儲存後，才能成為 `evidence_eligible`。Source identifier、hash、role 與 timestamp 不可由 MCP caller 自我認證。
 
 早期的 `tw_legal_rag_mcp.contracts` 仍為 legacy synthetic contract，相容期間不得與
-v0.11.0 server-owned records 混作同一 authority store。`ready_for_draft` 只代表
+v0.12.0 server-owned records 混作同一 authority store。`ready_for_draft` 只代表
 workflow completion；`ResearchSufficiency`、Coverage v2 與
 `get_legal_research_finalization` 只決定起草前答案姿態。真正可呈現的
 `validated`／`qualified` 仍必須由 `validate_legal_answer` 回傳；synthetic records
 不得支撐法律答案。
 
-Snapshot receipt 是 provider-neutral 的公開契約與一致性檢查介面，不是內建
-provider 已簽發的保證。內建 `ResearchService` 尚未注入或持久化 live-provider
-generation receipt，因此內建服務輸出最多為 `conditional`／`qualified`；
-`ordinary` 保留給 receipt-aware provider adapter 完成同一 run 的 server-owned
-receipt binding。Finalization 只表達 `safe_to_draft`，不授權 answer presentation。
+Snapshot receipt 是 provider-neutral 的公開契約與一致性檢查介面。v0.12.0
+內建 `ResearchService` 會依同一 run 中符合資格的官方／可信快取 source 與
+evidence 精確集合簽發並持久化 receipt，finalization 再重算 server-owned binding。
+receipt 完整且其他閘門均通過時 `ordinary` 可達；缺失最高為 `conditional`，跨
+run、過期或材料不一致則 fail closed。Finalization 只表達 `safe_to_draft`，不授權
+answer presentation。
 
 本文件說明使用者接入自己的法規、裁判、憲法法庭資料或其他合規資料源時，建議保留的資料流介面、來源驗證邊界與 trust gate 規則。本 repo 只示範可替換介面，不提供部署環境專屬的資料、索引、快取、切片策略、調校後的 production ranking 權重或私有評測集。
 

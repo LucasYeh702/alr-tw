@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alr-tw"
-version = "0.11.0"
+version = "0.12.0"
 description = "Agent-neutral legal research verification runtime for Taiwan law."
 requires-python = ">=3.11"
 dependencies = [
@@ -17,6 +17,7 @@ alr-tw = "alr_tw.cli:main"
 alr-tw-demo = "alr_tw.harness.orchestrator:main"
 alr-tw-boundary-check = "alr_tw.scripts.check_public_boundary:main"
 alr-tw-mcp = "alr_tw.mcp.server:main"
+alr-tw-chronolex = "alr_tw.evaluation.chronolex_tw:main"
 tw-legal-rag-mcp = "tw_legal_rag_mcp.mcp_server.server:main"
 
 [project.optional-dependencies]
@@ -30,16 +31,19 @@ mcp = [
 ]
 live = [
   "httpx>=0.27",
+  "truststore>=0.10",
   "beautifulsoup4>=4.12",
   "lxml>=5",
   "platformdirs>=4",
 ]
 tlr = [
   "httpx>=0.27",
+  "truststore>=0.10",
 ]
 all = [
   "mcp>=1.0",
   "httpx>=0.27",
+  "truststore>=0.10",
   "beautifulsoup4>=4.12",
   "lxml>=5",
   "platformdirs>=4",

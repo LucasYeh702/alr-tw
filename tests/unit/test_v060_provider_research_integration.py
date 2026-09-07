@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import quote
 
+import pytest
+
 from alr_tw.contracts.providers import (
     CandidateIdentity,
     DataMode,
@@ -38,7 +40,7 @@ from alr_tw.providers.official import (
 )
 from alr_tw.providers.official.http import HttpResponse
 from alr_tw.providers.official.judicial_site import JudicialSiteResponse
-from alr_tw.providers.tlr import TlrSemanticRecallProvider
+from alr_tw.providers.tlr import TlrSemanticRecallProvider, screen_external_query
 from alr_tw.providers.tlr.provider import TlrHttpResponse
 from alr_tw.research.provider_executor import ProviderObligationExecutor, ProviderSet
 from alr_tw.research.service import ResearchService
@@ -91,12 +93,27 @@ class CountingLawProvider(OfficialLawProvider):
         return await super().exact_lookup(law_name, article_no, **kwargs)
 
 
+def _expire_law_cache_fixture(store: SqliteStore) -> None:
+    """只將合成快取關聯設為到期；不改動不可變來源或正式新鮮度檢查。"""
+    key = "law:示範責任法:7"
+    assert store.get_fresh_cache_entry(key) is not None
+    with store._connection() as connection:
+        cursor = connection.execute(
+            "UPDATE cache_entries SET expires_at = ? WHERE cache_key = ?",
+            ((datetime.now(UTC) - timedelta(days=1)).isoformat(), key),
+        )
+        assert cursor.rowcount == 1
+        connection.commit()
+    assert store.has_cache_entry(key)
+    assert store.get_fresh_cache_entry(key) is None
+
+
 class FailingRevalidationLawProvider(OfficialLawProvider):
     def __init__(self) -> None:
         super().__init__(
             LawTransport(),
             verify_webpage=False,
-            snapshot_ttl=timedelta(microseconds=1),
+            snapshot_ttl=timedelta(hours=24),
         )
         self.exact_calls = 0
 
@@ -120,6 +137,128 @@ class UnusedHttpTransport:
     async def get(self, url: str, *, timeout: float, max_bytes: int) -> HttpResponse:
         del timeout, max_bytes
         return HttpResponse(503, b"", {}, url)
+
+
+class UnusableCandidateProvider:
+    provider_id = "unusable_candidate_provider"
+
+    async def search(
+        self,
+        query: str,
+        *,
+        top_k: int = 5,
+        now: datetime | None = None,
+    ):
+        del top_k, now
+        candidate = ProviderCandidate(
+            candidate_id="opaque-candidate",
+            provider_id=self.provider_id,
+            title="只有不透明識別碼的候選",
+            metadata={"candidate_only": True},
+        )
+        return (
+            ProviderResult(
+                status=ProviderResultStatus.FOUND,
+                provider_id=self.provider_id,
+                candidates=[candidate],
+                coverage_complete=False,
+            ),
+            [],
+            screen_external_query(query),
+        )
+
+
+class MalformedPrivacyCandidateProvider(UnusableCandidateProvider):
+    provider_id = "malformed_privacy_candidate_provider"
+
+    async def search(self, query: str, *, top_k: int = 5, now: datetime | None = None):
+        result, sources, _ = await super().search(query, top_k=top_k, now=now)
+        return result, sources, None
+
+
+class OfficialRecallFixtureProvider(OfficialJudgmentProvider):
+    jid = "DEMO,130,測,701,20990102,1"
+
+    def __init__(self) -> None:
+        super().__init__(EmptyJudgmentSearchTransport())
+        self.search_calls = 0
+
+    async def search(self, query: str = "", *, limit: int = 10, **kwargs: Any) -> ProviderResult:
+        del query, kwargs
+        self.search_calls += 1
+        candidate = ProviderCandidate(
+            candidate_id="official-fallback-candidate",
+            provider_id=self.provider_id,
+            official_identifier=self.jid,
+            identity=CandidateIdentity(canonical_jid=self.jid),
+            candidate_rank=1,
+            metadata={"candidate_only": True},
+        )
+        return ProviderResult(
+            status=ProviderResultStatus.FOUND,
+            provider_id=self.provider_id,
+            candidates=[candidate][:limit],
+            coverage_complete=True,
+        )
+
+
+class InvalidMaterialLawProvider(OfficialLawProvider):
+    def __init__(self, *, provider_mismatch: bool) -> None:
+        super().__init__(LawTransport(), verify_webpage=False)
+        self.provider_mismatch = provider_mismatch
+
+    async def resolve_citations(self, text: str, *, limit: int = 10):
+        del text, limit
+        return [("示範責任法", "7")]
+
+    async def exact_lookup(self, law_name: str, article_no: str, **kwargs: Any):
+        del law_name, article_no, kwargs
+        now = datetime.now(UTC)
+        text = "不應被持久化的 provider payload。"
+        digest = EvidenceSpan.hash_text(text)
+        source = SourceRecord(
+            source_id="src-invalid-provider-payload",
+            source_key="law:invalid-provider-payload",
+            source_version_id="invalid-provider-payload:v1",
+            material_type=MaterialType.LAW,
+            provider_id=self.provider_id,
+            source_tier=SourceTier.OFFICIAL,
+            trust_status=TrustStatus.EVIDENCE_ELIGIBLE,
+            official_identifier="fixture:invalid-provider-payload",
+            citation="示範責任法第7條",
+            fetched_at=now,
+            verified_at=now,
+            expires_at=now + timedelta(hours=1),
+            content_hash=digest,
+            normalized_content_hash=digest,
+            normalized_text=text,
+        )
+        evidence = EvidenceSpan.from_exact_text(
+            evidence_id="ev-invalid-provider-payload",
+            source_id=source.source_id,
+            section_id="article-7",
+            section_type=EvidenceSectionType.LAW_TEXT,
+            exact_text=text,
+            eligible_for_claim_support=True,
+        )
+        if self.provider_mismatch:
+            result = ProviderResult(
+                status=ProviderResultStatus.FOUND,
+                provider_id="unexpected-provider",
+                source_ids=[source.source_id],
+                evidence_ids=[evidence.evidence_id],
+                coverage_complete=True,
+            )
+        else:
+            result = ProviderResult(
+                status=ProviderResultStatus.ERROR,
+                provider_id=self.provider_id,
+                source_ids=[source.source_id],
+                evidence_ids=[evidence.evidence_id],
+                error_code=ProviderErrorCode.OFFICIAL_CONTENT_CONFLICT,
+                coverage_complete=False,
+            )
+        return result, source, evidence
 
 
 class EmptyJudgmentSearchTransport:
@@ -532,7 +671,9 @@ def test_official_law_run_promotes_evidence_and_validates(tmp_path: Path) -> Non
 
     assert state["source_count"] == 1
     assert state["evidence_count"] == 1
-    assert validation["decision"] == "qualified"
+    assert state["answer_mode"] == "ordinary"
+    assert state["finalization"]["snapshot_receipt_count"] == 1
+    assert validation["decision"] == "validated"
     assert validation["safe_to_present"] is True
 
 
@@ -956,6 +1097,42 @@ def test_tlr_canonical_doc_id_is_promoted_through_official_exact_lookup(tmp_path
     assert sum("data.aspx" in url for _, url in judgments.calls) == 1
 
 
+def test_quick_hybrid_uses_tlr_first_and_skips_official_keyword_search(
+    tmp_path: Path,
+) -> None:
+    jid = TlrPromotionJudgmentTransport.jid
+    service, judgments = _tlr_promotion_service(
+        tmp_path,
+        doc_id=jid,
+        citation_url=OfficialJudgmentProvider.official_document_url(jid),
+    )
+    run = service.create_run(
+        "查找合成侵權類案裁判",
+        mode=DataMode.HYBRID_VERIFIED,
+        depth=ResearchDepth.QUICK,
+        include_counter_authority=False,
+    )
+
+    service.continue_run(run.run_id, "quick-understand")
+    service.continue_run(run.run_id, "quick-privacy")
+    service.continue_run(run.run_id, "quick-tlr-recall")
+    after_recall = service.get_run(run.run_id)
+
+    assert after_recall is not None
+    assert judgments.calls == []
+    assert "QUICK_JUDGMENT_RECALL_BOUNDED" in after_recall.coverage.partial_reason_codes
+
+    verification = service.continue_run(run.run_id, "quick-official-exact")
+    assert verification["outcome"]["added_eligible_evidence_count"] > 0
+    assert [method for method, _ in judgments.calls] == ["GET"]
+    assert "data.aspx" in judgments.calls[0][1]
+
+    service.continue_run(run.run_id, "quick-sufficiency")
+    finalization = service.get_finalization_contract(run.run_id)
+    assert finalization["answer_mode"] == "conditional"
+    assert finalization["snapshot_consistency"]["status"] == "consistent"
+
+
 def test_tlr_five_part_doc_id_is_completed_by_official_canonical_page(tmp_path: Path) -> None:
     jid = TlrPromotionJudgmentTransport.jid
     partial_jid = jid.rsplit(",", 1)[0]
@@ -1102,6 +1279,67 @@ def test_tlr_candidate_keeps_recall_progress_when_official_search_is_unavailable
     assert verification["outcome"]["added_eligible_evidence_count"] > 0
 
 
+def test_quick_verification_caps_at_five_and_keeps_verified_subset(
+    tmp_path: Path,
+) -> None:
+    store = SqliteStore(tmp_path / "cache")
+    judgments = TlrPromotionJudgmentTransport()
+    providers = ProviderSet(
+        laws=OfficialLawProvider(LawTransport(), verify_webpage=False),
+        constitutional=OfficialConstitutionalProvider(UnusedHttpTransport()),
+        judgments=OfficialJudgmentProvider(judgments),
+    )
+    service = ResearchService(store, ProviderObligationExecutor(store, providers))
+    run = service.create_run(
+        "請查找定型化契約條款效力的相關裁判",
+        mode=DataMode.OFFICIAL_ONLY,
+        depth=ResearchDepth.QUICK,
+        max_judgment_verifications=5,
+    )
+    identifiers = [
+        judgments.jid,
+        *[f"DEMO,130,測,{number},20990102,1" for number in range(43, 48)],
+    ]
+    for rank, identifier in enumerate(identifiers, start=1):
+        store.save_candidate(
+            run.run_id,
+            ProviderCandidate(
+                candidate_id=f"candidate-{rank}",
+                provider_id="candidate-provider",
+                official_identifier=identifier,
+                identity=CandidateIdentity(canonical_jid=identifier),
+                candidate_rank=rank,
+                metadata={"candidate_only": True},
+            ),
+            expires_at=run.expires_at,
+        )
+
+    service.continue_run(run.run_id, "understand")
+    service.continue_run(run.run_id, "recall")
+    verification = service.continue_run(run.run_id, "verify")
+    stored = service.get_run(run.run_id)
+
+    assert verification["outcome"]["metadata"]["attempted_count"] == 5
+    assert verification["outcome"]["metadata"]["verified_source_count"] == 1
+    assert verification["outcome"]["metadata"]["failed_count"] == 4
+    assert verification["outcome"]["metadata"]["truncated"] is True
+    assert (
+        "CANDIDATE_OFFICIAL_ID_MISMATCH"
+        in verification["outcome"]["metadata"]["failed_reason_codes"]
+    )
+    assert "CANDIDATE_OFFICIAL_ID_MISMATCH" not in verification["outcome"]["warnings"]
+    assert "JUDGMENT_VERIFICATION_BUDGET_TRUNCATED" in verification["outcome"]["warnings"]
+    assert stored is not None
+    assert stored.coverage.judgment_checked is True
+    assert stored.judgment_recall_incomplete is False
+
+    service.continue_run(run.run_id, "sufficiency")
+    finalization = service.get_finalization_contract(run.run_id)
+    assert finalization["answer_mode"] == "conditional"
+    assert finalization["research_sufficiency"] == "qualified"
+    assert finalization["blockers"] == []
+
+
 def test_unavailable_historical_law_version_blocks_final_answer(tmp_path: Path) -> None:
     service = _service(tmp_path)
     run = service.create_run(
@@ -1206,6 +1444,8 @@ def test_expired_cache_revalidation_failure_is_explicit_and_not_reused(
         depth=ResearchDepth.QUICK,
     )
     _advance(service, first.run_id)
+    assert service.get_state(first.run_id)["evidence_count"] == 1
+    _expire_law_cache_fixture(store)
 
     second = service.create_run(
         "依示範責任法第7條應負何種責任？",
@@ -1228,7 +1468,7 @@ def test_expired_cache_revalidation_failure_is_explicit_and_not_reused(
 
 def test_expired_cache_is_replaced_after_successful_revalidation(tmp_path: Path) -> None:
     store = SqliteStore(tmp_path / "cache")
-    laws = CountingLawProvider(snapshot_ttl=timedelta(microseconds=1))
+    laws = CountingLawProvider()
     service = ResearchService(
         store,
         ProviderObligationExecutor(
@@ -1253,6 +1493,106 @@ def test_expired_cache_is_replaced_after_successful_revalidation(tmp_path: Path)
         assert len(sources) == 1
         assert service.get_state(run.run_id)["evidence_count"] == 1
         source_ids.append(sources[0].source_id)
+        if index == 0:
+            _expire_law_cache_fixture(store)
 
     assert laws.exact_calls == 2
     assert source_ids[0] != source_ids[1]
+
+
+@pytest.mark.parametrize(
+    ("candidate_provider", "expect_degraded"),
+    [
+        (UnusableCandidateProvider(), False),
+        (MalformedPrivacyCandidateProvider(), True),
+    ],
+)
+def test_quick_candidate_recall_falls_back_when_external_identity_is_unusable(
+    candidate_provider: UnusableCandidateProvider,
+    expect_degraded: bool,
+    tmp_path: Path,
+) -> None:
+    store = SqliteStore(tmp_path / "candidate-fallback-cache")
+    judgments = OfficialRecallFixtureProvider()
+    service = ResearchService(
+        store,
+        ProviderObligationExecutor(
+            store,
+            ProviderSet(
+                laws=OfficialLawProvider(LawTransport(), verify_webpage=False),
+                constitutional=OfficialConstitutionalProvider(UnusedHttpTransport()),
+                judgments=judgments,
+                candidate_recall=candidate_provider,
+            ),
+        ),
+    )
+    run = service.create_run(
+        "請查找定型化契約條款效力的相關裁判",
+        mode=DataMode.HYBRID_VERIFIED,
+        depth=ResearchDepth.QUICK,
+        include_counter_authority=False,
+    )
+
+    recall_result: dict[str, Any] | None = None
+    for index in range(6):
+        current = service.get_run(run.run_id)
+        assert current is not None
+        pending = [
+            item
+            for item in current.obligations
+            if item.status is ResearchObligationStatus.PENDING
+        ]
+        assert pending
+        result = service.continue_run(run.run_id, f"fallback-{index}")
+        if pending[0].kind is ResearchObligationKind.JUDGMENT_RECALL:
+            recall_result = result
+            break
+
+    assert recall_result is not None
+    stored = service.get_run(run.run_id)
+    assert stored is not None
+    assert judgments.search_calls == 1
+    assert stored.judgment_recall_incomplete is False
+    assert stored.semantic_recall_degraded is expect_degraded
+    assert any(
+        item.official_identifier == judgments.jid
+        for item in store.list_candidates(run.run_id)
+    )
+    if expect_degraded:
+        assert "PROVIDER_RESULT_CONTRACT_VIOLATION" in recall_result["outcome"]["warnings"]
+
+
+@pytest.mark.parametrize("provider_mismatch", [False, True])
+def test_error_or_provider_mismatch_payload_cannot_persist_exact_material(
+    provider_mismatch: bool,
+    tmp_path: Path,
+) -> None:
+    store = SqliteStore(tmp_path / f"invalid-material-{provider_mismatch}")
+    service = ResearchService(
+        store,
+        ProviderObligationExecutor(
+            store,
+            ProviderSet(
+                laws=InvalidMaterialLawProvider(provider_mismatch=provider_mismatch),
+                constitutional=OfficialConstitutionalProvider(UnusedHttpTransport()),
+                judgments=_empty_judgments(),
+            ),
+        ),
+    )
+    run = service.create_run(
+        "示範責任法第7條",
+        mode=DataMode.OFFICIAL_ONLY,
+        depth=ResearchDepth.QUICK,
+    )
+
+    service.continue_run(run.run_id, "invalid-material-understand")
+    result = service.continue_run(run.run_id, "invalid-material-law")
+
+    assert store.list_sources(run.run_id) == []
+    assert store.list_evidence(run.run_id) == []
+    expected = (
+        "PROVIDER_RESULT_CONTRACT_VIOLATION"
+        if provider_mismatch
+        else "OFFICIAL_CONTENT_CONFLICT"
+    )
+    assert expected in result["outcome"]["warnings"]

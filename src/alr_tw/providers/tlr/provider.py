@@ -39,6 +39,7 @@ from alr_tw.contracts.sources import (
     SourceTier,
     TrustStatus,
 )
+from alr_tw.providers.official.http import system_truststore_context
 from alr_tw.providers.official.judgments import OfficialJudgmentProvider
 
 from .privacy import PrivacyScreenResult, screen_external_query
@@ -202,7 +203,11 @@ class HttpxTlrTransport:
             httpx: Any = importlib.import_module("httpx")
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError("TLR_EXTRA_REQUIRED") from exc
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+        async with httpx.AsyncClient(
+            timeout=timeout,
+            follow_redirects=False,
+            verify=system_truststore_context(),
+        ) as client:
             async with client.stream(
                 method,
                 url,
@@ -349,7 +354,11 @@ class TlrSemanticRecallProvider:
         if response.status_code != 200:
             return self._unavailable(f"HTTP_{response.status_code}"), [], privacy
         try:
-            candidates, sources = self._normalize_response(response.payload, now or datetime.now(UTC))
+            candidates, sources = self._normalize_response(
+                response.payload,
+                now or datetime.now(UTC),
+                limit=limit,
+            )
         except ValueError as exc:
             return (
                 ProviderResult(
@@ -507,6 +516,7 @@ class TlrSemanticRecallProvider:
                 self._normalize_public_law_candidates(
                     response.payload,
                     source_kind=source_kind,
+                    limit=limit,
                 )
             )
         except ValueError as exc:
@@ -764,9 +774,13 @@ class TlrSemanticRecallProvider:
         self,
         payload: Any,
         timestamp: datetime,
+        *,
+        limit: int,
     ) -> tuple[list[ProviderCandidate], list[SourceRecord]]:
         if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
             raise ValueError("TLR_SEARCH_SCHEMA_CHANGED")
+        if len(payload["results"]) > limit:
+            raise ValueError("TLR_SEARCH_RESULT_LIMIT_EXCEEDED")
         candidates: list[ProviderCandidate] = []
         sources: list[SourceRecord] = []
         for rank, raw in enumerate(payload["results"], start=1):
@@ -857,6 +871,7 @@ class TlrSemanticRecallProvider:
         payload: Any,
         *,
         source_kind: TlrAdministrativeSourceKind,
+        limit: int,
     ) -> tuple[
         list[PublicLawCandidate],
         dict[str, str | int | bool | None],
@@ -864,7 +879,9 @@ class TlrSemanticRecallProvider:
     ]:
         if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
             raise ValueError("TLR_PUBLIC_LAW_SEARCH_SCHEMA_CHANGED")
-        if len(payload["results"]) > MAX_TLR_RESULTS:
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+            raise ValueError("TLR_PUBLIC_LAW_RESULT_LIMIT_INVALID")
+        if len(payload["results"]) > limit:
             raise ValueError("TLR_PUBLIC_LAW_RESULT_LIMIT_EXCEEDED")
 
         rejected = payload.get("rejected", {})

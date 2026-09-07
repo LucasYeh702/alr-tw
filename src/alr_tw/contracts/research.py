@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from enum import Enum
 import re
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -24,6 +24,9 @@ class ResearchDepth(str, Enum):
     QUICK = "quick"
     STANDARD = "standard"
     DEEP = "deep"
+
+
+MAX_JUDGMENT_VERIFICATIONS = 5
 
 
 class PrivacyStatus(str, Enum):
@@ -114,6 +117,63 @@ class ResearchBlocker(BaseModel):
     code: str = Field(min_length=1)
     message: str = Field(min_length=1)
     obligation: ResearchObligationKind | None = None
+
+
+class ResearchBriefObligation(BaseModel):
+    """Read-only progress item safe to expose before answer validation."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: ResearchObligationKind
+    status: ResearchObligationStatus
+    required: bool
+    reason: str = Field(default="", max_length=500)
+    blocker_code: str | None = Field(default=None, max_length=128)
+
+
+class ResearchBriefSource(BaseModel):
+    """Verified-source locator only; no source body or draft conclusion."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source_id: str = Field(min_length=1, max_length=128)
+    material_type: str = Field(min_length=1, max_length=40)
+    trust_status: Literal["official_verified", "evidence_eligible"]
+    citation: str = Field(min_length=1, max_length=1000)
+    official_identifier: str | None = Field(default=None, max_length=500)
+    official_url: str | None = Field(default=None, max_length=2000)
+    verified_at: datetime | None = None
+
+
+class ResearchBriefBlocker(BaseModel):
+    """Human-readable reason why the brief is not a legal answer."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    code: str = Field(min_length=1, max_length=128)
+    message: str = Field(min_length=1, max_length=500)
+    retryable: bool = False
+
+
+class ResearchBrief(BaseModel):
+    """Non-answer exit for incomplete or blocked agent research."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal["alr-tw.research-brief/v1"] = "alr-tw.research-brief/v1"
+    run_id: str = Field(min_length=1, max_length=128)
+    status: Literal["in_progress", "ready_for_draft", "blocked"]
+    answer_mode: AnswerMode
+    answer_authorized: Literal[False] = False
+    safe_to_present: Literal[False] = False
+    verified_sources: list[ResearchBriefSource] = Field(default_factory=list, max_length=64)
+    verified_source_count: int = Field(ge=0)
+    omitted_verified_source_count: int = Field(ge=0)
+    obligations: list[ResearchBriefObligation] = Field(default_factory=list, max_length=32)
+    blockers: list[ResearchBriefBlocker] = Field(default_factory=list, max_length=64)
+    reason_codes: list[str] = Field(default_factory=list, max_length=128)
+    limitations: list[str] = Field(default_factory=list, max_length=128)
+    safe_next_actions: list[str] = Field(default_factory=list, max_length=32)
 
 
 class CoverageState(BaseModel):
@@ -224,6 +284,11 @@ class ResearchRun(BaseModel):
     requested_mode: DataMode
     effective_mode: DataMode
     research_depth: ResearchDepth = ResearchDepth.STANDARD
+    max_judgment_verifications: int = Field(
+        default=MAX_JUDGMENT_VERIFICATIONS,
+        ge=1,
+        le=MAX_JUDGMENT_VERIFICATIONS,
+    )
     include_counter_authority: bool = True
     ephemeral: bool = False
     as_of_date: date | None = None

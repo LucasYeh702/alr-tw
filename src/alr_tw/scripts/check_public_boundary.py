@@ -8,6 +8,13 @@ MAX_TEXT_SCAN_BYTES = 5 * 1024 * 1024
 FORBIDDEN_DIR_PARTS = {
     ".cache",
     "cache",
+    "logs",
+    "archives",
+    "raw_official",
+    "official_cache",
+    "tlr_cache",
+    "hf_cache",
+    "verified_archive",
     "verified_cache",
     "chroma",
     "daily_overlay",
@@ -19,15 +26,21 @@ FORBIDDEN_DIR_PARTS = {
     "production_indexes",
     "ranking_calibration",
     "reconciliation_state",
+    "reviews",
     "vector_store",
 }
 FORBIDDEN_PATH_PREFIXES = (
     "data/legal_public",
     "data/legal_private",
 )
-FORBIDDEN_SUFFIXES = (".sqlite", ".db", ".jsonl.gz", ".rar", ".log")
+FORBIDDEN_SUFFIXES = (
+    ".sqlite", ".sqlite3", ".db", ".duckdb", ".parquet", ".arrow",
+    ".pem", ".key", ".p12", ".pfx", ".jsonl.gz", ".rar", ".log",
+)
 FORBIDDEN_FILENAMES = {
     ".env",
+    "PRIVATE_REVIEW_POLICY.md",
+    "REVIEW_GOVERNANCE.md",
     "gold_labels.json",
     "operator_attestation.json",
     "production_manifest.json",
@@ -51,6 +64,10 @@ FORBIDDEN_TEXT_PATTERNS = (
     (re.compile(r"\bsecret\s*[:=]", re.IGNORECASE), "secret"),
     (re.compile(r"(?<![A-Za-z0-9])[A-Z][12][0-9]{8}(?![0-9])"), "taiwan_id"),
     (re.compile(re.escape("/" + "Users" + "/")), "/" + "Users" + "/"),
+    (re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.local\b"), "local email address"),
+    (re.compile(r"\b[A-Za-z0-9.-]+\.local\b"), "local host name"),
+    (re.compile("LEGAL" + "_PRIVATE_"), "private deployment marker"),
+    (re.compile(r"\b(?:private|legal)_contracts\b"), "private contract collection"),
 )
 JUDGMENT_IDENTIFIER_PATTERN = re.compile(
     r"(?<![A-Za-z0-9,])(?P<court>[A-Z]{3,5}),(?P<year>[0-9]{2,3}),"
@@ -60,7 +77,7 @@ JUDGMENT_IDENTIFIER_PATTERN = re.compile(
 
 
 def _is_ignored(path: Path) -> bool:
-    return any(part in {".git", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache"} for part in path.parts)
+    return any(part in {".git", ".venv", "venv", "__pycache__", ".pytest_cache", ".ruff_cache"} for part in path.parts)
 
 
 def _iter_files(root: Path) -> list[Path]:
@@ -136,7 +153,7 @@ def find_public_boundary_violations(root: Path) -> list[str]:
             violations.append(f"forbidden path: {relative}")
         if path.name in FORBIDDEN_FILENAMES:
             violations.append(f"forbidden filename: {relative}")
-        if path.suffix in FORBIDDEN_SUFFIXES or relative.endswith(FORBIDDEN_SUFFIXES):
+        if path.suffix.lower() in FORBIDDEN_SUFFIXES or relative.lower().endswith(FORBIDDEN_SUFFIXES):
             violations.append(f"forbidden file type: {relative}")
         if path.stat().st_size > MAX_TEXT_SCAN_BYTES:
             violations.append(f"file too large: {relative}")
