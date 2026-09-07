@@ -1,5 +1,79 @@
 # Changelog
 
+## 0.12.0 - 2026-09-05
+
+### Added
+
+- Prompt-selectable bounded quick research (`/quick`、`快速模式：`) with a
+  maximum-five official judgment verification budget.
+- `execute_legal_research` and `ResearchService.execute_run_to_completion()` for
+  bounded single-roundtrip server-owned orchestration, elapsed-time telemetry,
+  and a verified evidence bundle at the drafting boundary.
+- Provider-neutral candidate/lineage protocols and a read-only
+  `alr-tw verify-provider --input` conformance-envelope command.
+- A version-pinned, gold-free ChronoLex-TW evaluation adapter whose historical
+  version metric requires evaluator-owned server adjudication.
+- A non-answer `research_brief` projection for verified source locators,
+  obligation progress, blockers, and safe next actions.
+
+### Changed
+
+- A non-empty officially verified judgment subset may now reach the existing
+  `qualified` / `conditional` posture when remaining candidate checks are
+  bounded, rejected, or budget-truncated. Zero verified sources, stale or
+  foreign evidence, and claim-binding failures remain fail closed.
+- Quick judgment lookup omits unrequested breadth such as counter-authority and
+  lineage expansion, while retaining explicit statutory lookup, privacy
+  screening, exact source verification, evidence sufficiency, and final answer
+  validation.
+- Official HTTPS transports use the operating-system certificate store through
+  `truststore`; TLR HTTPS uses the same backend. `doctor --live` performs
+  bounded official-provider probes.
+
+### Fixed
+
+- Official-law memory snapshots retain their original fetched, verified and
+  expiry times. Expiry or forced refresh revokes old data before reloading;
+  failures and lookups cannot revive or extend stale material. I/O crossing
+  expiry returns no eligible source or evidence.
+- Release CI exercises isolated base/TLR-only wheel installs, including
+  Python 3.11 and 3.12, while retaining built-distribution boundary scans.
+
+- Large passage sets no longer overflow the 512-ID finalization field: the
+  field is a deterministic preview and the full server-owned set is digest-bound.
+- Unusable external candidates now trigger official fallback; malformed
+  candidate privacy receipts and provider/source/evidence mismatches fail closed.
+- Counter-authority uses deterministic queries of at most 128 characters, TLR
+  judgment and public-law responses cannot exceed requested top-K, and
+  two-character statute names are retained for exact lookup.
+- `include_counter_authority=true` with `research_depth=quick` now fail-closes
+  instead of silently omitting counter-authority.
+- Package, installed metadata, and MCP `serverInfo` share the `0.12.0` identity.
+- Evidence bundles reserve bounded capacity for statutes and constitutional
+  materials instead of allowing five judgment sources to displace them.
+- `verify-provider` rejects JSON `null` collections with structured output
+  instead of an uncaught exception.
+- Caller-supplied provider envelopes receive structural checks only; the CLI
+  cannot certify live origin, issue trusted receipts, or authorize presentation.
+- Bare JIDs and formal judgment citations route to official verification in
+  quick mode. `execute_legal_research.operation_prefix` labels steps only and
+  does not promise request idempotency.
+- Public-boundary checks also reject private review governance and review
+  directories; regression scenarios use synthetic, non-personal inputs.
+- The standalone `tlr` extra declares `truststore`, matching its HTTPS transport
+  dependency rather than relying on the separate `live` extra being installed.
+- Built sdist checks use the package root so wrapper directories cannot hide
+  forbidden data paths; out-of-package tar members are rejected. The installed
+  boundary checker also rejects private-key/data suffixes and local markers.
+- TLS diagnostics recognize certificate errors in wrapped exceptions without
+  misclassifying a timeout merely because its message contains `ssl`.
+
+### Compatibility
+
+- Existing step-by-step tools and the v0.11 `ProviderSet(tlr=...)` constructor
+  slot remain available. New integrations should use `candidate_recall` and
+  `lineage_candidates`.
+
 ## 0.11.0 - 2026-09-03
 
 ### Added
@@ -16,8 +90,10 @@
 - 歷審結果綁定既有 `AuthorityLineageContract`；只有 TLR 的廢棄標記與官方
   上級審主文分類同時成立時，才回報 confirmed reversal。查無上級審不推論
   裁判確定，也不宣稱已完成前後審見解的語義比較。
-- 新增可選的唯讀本機裁判 provider；搜尋結果維持 candidate-only，精確查詢
-  會檢查 catalog binding 與正文 hash，未符合本機快取條件時回查官方來源。
+- 新增可選的唯讀本機裁判 provider；搜尋結果維持 candidate-only，精確查詢會檢查
+  catalog-bound receipt、coverage binding、來源狀態與 trusted-text／provenance
+  hash。candidate-only 快取不會升格；未符合本機快取條件時以 JID／正式字號回查
+  官方來源。
 
 ### Changed
 
@@ -132,7 +208,7 @@
 - 新增公開發布用 repository-scoped secret-scan policy，將 synthetic redaction
   fixture 的例外範圍限制在單一測試檔案。
 
-以下版本段落是歷史變更紀錄，不代表目前 v0.9.1 的能力或公開宣稱。
+以下版本段落是歷史變更紀錄，不代表目前 v0.12.0 的能力或公開宣稱。
 
 ## 0.8.0 - 2026-08-08
 
@@ -154,7 +230,13 @@
 - `ready_for_draft` 現僅表示 workflow completion；最終答案須同時通過 research sufficiency 與 finalization gate。
 - 新增 provider-neutral snapshot consistency 與 absence-claim gate；synthetic fixture 僅供 demo／契約測試。
 - 既有研究工具與 payload 維持 additive 相容；舊紀錄回讀後由伺服器重新計算充分性。
-- provider-neutral snapshot receipt 是公開契約；內建 runtime 尚未簽發或持久化 live-provider receipt，服務輸出最多為 `conditional`／`qualified`，`ordinary` 保留給 receipt-aware adapter。
+- 內建 `ResearchService` 現會依同一 run 的官方／可信快取 source 與 evidence
+  集合簽發、持久化 provider-neutral snapshot receipt；finalization 從 server-owned
+  store 重算 binding。receipt 完整且其他閘門通過時 `ordinary` 可達，缺失最高為
+  `conditional`，過期、跨 run 或材料不一致則 fail closed。
+- 新增集中式 v0.12 公開紅隊與 verified-profile 通過／拒絕雙路徑測試；量測公開
+  正向 fixtures 的 false-refuse count，並保留「閘門通過但法律結論仍可能錯」為
+  RESULTS 限制，而不是虛構成測試失敗。
 
 本專案遵循語意化版本精神；`0.x` 仍屬公開預覽，介面可能調整。
 

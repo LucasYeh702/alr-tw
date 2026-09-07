@@ -37,6 +37,7 @@ from .judicial_site import (
     JudicialSiteResponse,
     JudicialSiteTransport,
 )
+from .http import safe_transport_error
 from .judgment_parser import (
     JudgmentRole,
     ParsedJudgment,
@@ -555,7 +556,7 @@ class OfficialJudgmentProvider:
                 max_bytes=MAX_RESPONSE_BYTES,
             )
         except Exception as exc:
-            return None, type(exc).__name__
+            return None, safe_transport_error(exc)
         if response.status_code == 404:
             return None, "HTTP_404"
         if response.status_code in {403, 429}:
@@ -579,7 +580,7 @@ class OfficialJudgmentProvider:
                 max_bytes=MAX_RESPONSE_BYTES,
             )
         except Exception as exc:
-            return None, type(exc).__name__
+            return None, safe_transport_error(exc)
         if response.status_code in {403, 429}:
             return None, f"OFFICIAL_SITE_BLOCKED_HTTP_{response.status_code}"
         if response.status_code != 200:

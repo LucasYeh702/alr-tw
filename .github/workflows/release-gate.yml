@@ -1,0 +1,84 @@
+name: Release gate
+
+permissions:
+  contents: read
+  pull-requests: read
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'pyproject.toml'
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - '.github/workflows/**'
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install audit dependencies
+        run: python -m pip install -q -e '.[dev,live]' build
+      - name: Static and boundary checks
+        run: |
+          ruff check .
+          mypy src
+          python scripts/check_no_forbidden_files.py
+          python scripts/check_public_boundary.py
+          git diff --check
+      - name: Full regression
+        run: pytest -q
+      - name: Build distributions
+        run: python -m build
+      - name: Check built artifact boundaries and version
+        run: python scripts/check_release_artifacts.py --version 0.12.0 dist/*.whl dist/*.tar.gz
+      - name: Isolated base and TLR-only wheel smoke
+        shell: bash
+        run: |
+          wheel="$GITHUB_WORKSPACE/dist/alr_tw-0.12.0-py3-none-any.whl"
+          for profile in base tlr; do
+            envdir="$RUNNER_TEMP/alr-tw-$profile-smoke"
+            python -m venv "$envdir"
+            requirement="$wheel"
+            if [ "$profile" = tlr ]; then requirement="$wheel[tlr]"; fi
+            "$envdir/bin/python" -m pip install -q "$requirement"
+            "$envdir/bin/python" -m pip check
+            (cd "$RUNNER_TEMP" && "$envdir/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed_package.py" --profile "$profile" --version 0.12.0)
+          done
+
+  tlr-only-minimum-python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build without installing dev or live extras
+        run: |
+          python -m pip install -q build
+          python -m build
+      - name: TLR-only isolated install and synthetic transport smoke
+        shell: bash
+        run: |
+          wheel="$GITHUB_WORKSPACE/dist/alr_tw-0.12.0-py3-none-any.whl"
+          envdir="$RUNNER_TEMP/alr-tw-tlr-minimum"
+          python -m venv "$envdir"
+          "$envdir/bin/python" -m pip install -q "$wheel[tlr]"
+          "$envdir/bin/python" -m pip check
+          cd "$RUNNER_TEMP"
+          "$envdir/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed_package.py" --profile tlr --version 0.12.0

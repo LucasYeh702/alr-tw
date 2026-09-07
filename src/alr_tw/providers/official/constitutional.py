@@ -27,7 +27,7 @@ from alr_tw.contracts.sources import (
     TrustStatus,
 )
 
-from .http import HttpTransport, HttpxAllowlistedTransport
+from .http import HttpTransport, HttpxAllowlistedTransport, safe_transport_error
 
 CONSTITUTIONAL_ORIGIN = "https://cons.judicial.gov.tw"
 CONSTITUTIONAL_HOST = "cons.judicial.gov.tw"
@@ -192,7 +192,7 @@ class OfficialConstitutionalProvider:
                 max_bytes=MAX_HTML_BYTES,
             )
         except Exception as exc:
-            return None, type(exc).__name__
+            return None, safe_transport_error(exc)
         if response.status_code == 404:
             return None, "HTTP_404"
         if response.status_code != 200:

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date
 import json
 from pathlib import Path
+import re
 import sys
 from typing import Any, TextIO, overload
 from uuid import uuid4
@@ -187,6 +188,14 @@ class McpSession:
             if settings.data_mode.value == "synthetic":
                 self._research_service = ResearchService(store)
             else:
+                candidate_provider = (
+                    TlrSemanticRecallProvider(
+                        settings.tlr_base_url,
+                        settings.tlr_api_key,
+                    )
+                    if settings.external_query_enabled
+                    else None
+                )
                 providers = ProviderSet(
                     laws=OfficialLawProvider(),
                     constitutional=OfficialConstitutionalProvider(),
@@ -198,14 +207,8 @@ class McpSession:
                         if settings.local_portal_root is not None
                         else OfficialJudgmentProvider()
                     ),
-                    tlr=(
-                        TlrSemanticRecallProvider(
-                            settings.tlr_base_url,
-                            settings.tlr_api_key,
-                        )
-                        if settings.external_query_enabled
-                        else None
-                    ),
+                    candidate_recall=candidate_provider,
+                    lineage_candidates=candidate_provider,
                 )
                 self._research_service = ResearchService(
                     store,
@@ -433,7 +436,7 @@ def _all_tool_definitions() -> list[dict[str, Any]]:
         },
         {
             "name": "get_claim_grounding_policy",
-            "description": "Return the current public claim-grounding contract used by ALR-TW v0.11.0.",
+            "description": "Return the current public claim-grounding contract used by ALR-TW v0.12.0.",
             "inputSchema": {
                 "type": "object",
                 "properties": {},
@@ -660,6 +663,32 @@ def _research_plan_schema() -> dict[str, Any]:
     }
 
 
+def _research_constraints_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "as_of_date": {"type": "string", "format": "date"},
+            "research_depth": {
+                "type": "string",
+                "enum": ["quick", "standard", "deep"],
+            },
+            "max_judgment_verifications": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "default": 5,
+            },
+            "include_counter_authority": {"type": "boolean"},
+            "discovery_mode": {
+                "type": "string",
+                "enum": ["server_managed", "client_assisted"],
+            },
+            "retention": {"type": "string"},
+        },
+        "additionalProperties": False,
+    }
+
+
 def _legal_analysis_schema() -> dict[str, Any]:
     return LegalAnalysisEnvelope.model_json_schema()
 
@@ -681,30 +710,46 @@ def _server_owned_tool_definitions() -> list[dict[str, Any]]:
         },
         {
             "name": "research_legal_question",
-            "description": "Create a server-owned legal research run without drafting an answer.",
+            "description": (
+                "Create a server-owned legal research run without drafting an answer. "
+                "A leading /quick or 快速模式： command selects bounded quick research."
+            ),
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "query": {"type": "string"},
-                    "constraints": {
-                        "type": "object",
-                        "properties": {
-                            "as_of_date": {"type": "string", "format": "date"},
-                            "research_depth": {
-                                "type": "string",
-                                "enum": ["quick", "standard", "deep"],
-                            },
-                            "include_counter_authority": {"type": "boolean"},
-                            "discovery_mode": {
-                                "type": "string",
-                                "enum": ["server_managed", "client_assisted"],
-                            },
-                            "retention": {"type": "string"},
-                        },
-                        "additionalProperties": False,
-                    },
+                    "constraints": _research_constraints_schema(),
                     "client_id": {"type": "string"},
                     "request_id": {"type": "string"},
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "execute_legal_research",
+            "description": (
+                "Create a research run and autonomously execute its bounded server-owned "
+                "obligations in one call. Drafting and final answer validation remain separate."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "constraints": _research_constraints_schema(),
+                    "max_steps": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 32,
+                        "default": 12,
+                    },
+                    "operation_prefix": {
+                        "type": "string",
+                        "description": (
+                            "Optional prefix for per-step operation records; "
+                            "this is not a request idempotency key."
+                        ),
+                    },
                 },
                 "required": ["query"],
                 "additionalProperties": False,
@@ -1045,7 +1090,10 @@ def call_tool(params: dict[str, Any], *, session: McpSession | None = None) -> d
         if source_tier not in SOURCE_TIER_VALUES:
             raise ValueError(f"source_tier must be one of: {', '.join(sorted(SOURCE_TIER_VALUES))}")
         legal_material_type = _optional_string(arguments, "legal_material_type", default=None)
-        if legal_material_type is not None and legal_material_type not in LEGAL_MATERIAL_TYPE_VALUES:
+        if (
+            legal_material_type is not None
+            and legal_material_type not in LEGAL_MATERIAL_TYPE_VALUES
+        ):
             raise ValueError(
                 "legal_material_type must be one of: "
                 + ", ".join(sorted(LEGAL_MATERIAL_TYPE_VALUES))
@@ -1089,6 +1137,95 @@ def call_tool(params: dict[str, Any], *, session: McpSession | None = None) -> d
     }
 
 
+_SLASH_DEPTH_COMMAND = re.compile(
+    r"^\s*/(?P<depth>quick|standard|deep)(?:\s+|\s*[:：]\s*)",
+    re.IGNORECASE,
+)
+_ZH_DEPTH_COMMAND = re.compile(r"^\s*(?P<label>快速|標準|深度)(?:研究)?模式\s*[:：]\s*")
+_ZH_DEPTHS = {
+    "快速": ResearchDepth.QUICK,
+    "標準": ResearchDepth.STANDARD,
+    "深度": ResearchDepth.DEEP,
+}
+
+
+def _prompt_depth(query: str) -> tuple[str, ResearchDepth | None]:
+    slash = _SLASH_DEPTH_COMMAND.match(query)
+    if slash is not None:
+        return query[slash.end() :].strip(), ResearchDepth(slash.group("depth").lower())
+    chinese = _ZH_DEPTH_COMMAND.match(query)
+    if chinese is not None:
+        return query[chinese.end() :].strip(), _ZH_DEPTHS[chinese.group("label")]
+    return query.strip(), None
+
+
+def _create_research_run(
+    arguments: dict[str, Any],
+    session: McpSession,
+) -> tuple[ResearchService, Any]:
+    constraints = arguments.get("constraints") or {}
+    if not isinstance(constraints, dict):
+        raise ValueError("constraints must be an object")
+    _reject_unexpected_keys(
+        constraints,
+        {
+            "as_of_date",
+            "research_depth",
+            "max_judgment_verifications",
+            "include_counter_authority",
+            "discovery_mode",
+            "retention",
+        },
+    )
+    query, command_depth = _prompt_depth(_required_string(arguments, "query"))
+    if not query:
+        raise ValueError("query is required after the research mode command")
+    configured_depth = constraints.get("research_depth")
+    if configured_depth is not None:
+        depth = ResearchDepth(str(configured_depth))
+        if command_depth is not None and command_depth is not depth:
+            raise ValueError("prompt research mode conflicts with constraints.research_depth")
+    else:
+        depth = command_depth or ResearchDepth.STANDARD
+
+    max_verifications = constraints.get("max_judgment_verifications", 5)
+    if isinstance(max_verifications, bool) or not isinstance(max_verifications, int):
+        raise ValueError("max_judgment_verifications must be an integer")
+    as_of_value = constraints.get("as_of_date")
+    if as_of_value is not None and not isinstance(as_of_value, str):
+        raise ValueError("as_of_date must be an ISO date string")
+    retention_value = constraints.get("retention", "24h")
+    if not isinstance(retention_value, str):
+        raise ValueError("retention must be a duration string")
+    include_counter = constraints.get(
+        "include_counter_authority",
+        depth is not ResearchDepth.QUICK,
+    )
+    if not isinstance(include_counter, bool):
+        raise ValueError("include_counter_authority must be a boolean")
+    if depth is ResearchDepth.QUICK and include_counter:
+        raise ValueError(
+            "include_counter_authority is incompatible with research_depth=quick"
+        )
+    discovery_mode = DiscoveryMode(
+        str(constraints.get("discovery_mode", DiscoveryMode.SERVER_MANAGED.value))
+    )
+    ephemeral = retention_value.strip().lower() == "ephemeral"
+    service = session.research_service()
+    run = service.create_run(
+        query,
+        mode=session.settings.data_mode,
+        depth=depth,
+        max_judgment_verifications=max_verifications,
+        include_counter_authority=include_counter,
+        ephemeral=ephemeral,
+        as_of_date=date.fromisoformat(as_of_value) if as_of_value else None,
+        retention_seconds=(86400 if ephemeral else parse_retention(retention_value)),
+        discovery_mode=discovery_mode,
+    )
+    return service, run
+
+
 def _call_server_owned_tool(
     name: str,
     arguments: dict[str, Any],
@@ -1106,51 +1243,36 @@ def _call_server_owned_tool(
         ).model_dump(mode="json")
     if name == "lookup_legislative_history":
         return _lookup_legislative_history(arguments, session)
-    service = session.research_service()
     if name == "research_legal_question":
         _reject_unexpected_keys(arguments, {"query", "constraints", "client_id", "request_id"})
-        constraints = arguments.get("constraints") or {}
-        if not isinstance(constraints, dict):
-            raise ValueError("constraints must be an object")
-        _reject_unexpected_keys(
-            constraints,
-            {
-                "as_of_date",
-                "research_depth",
-                "include_counter_authority",
-                "discovery_mode",
-                "retention",
-            },
-        )
-        settings = session.settings
-        depth = ResearchDepth(str(constraints.get("research_depth", "standard")))
-        as_of_value = constraints.get("as_of_date")
-        if as_of_value is not None and not isinstance(as_of_value, str):
-            raise ValueError("as_of_date must be an ISO date string")
-        retention_value = constraints.get("retention", "24h")
-        if not isinstance(retention_value, str):
-            raise ValueError("retention must be a duration string")
-        include_counter = constraints.get("include_counter_authority", True)
-        if not isinstance(include_counter, bool):
-            raise ValueError("include_counter_authority must be a boolean")
-        discovery_mode = DiscoveryMode(
-            str(constraints.get("discovery_mode", DiscoveryMode.SERVER_MANAGED.value))
-        )
-        ephemeral = retention_value.strip().lower() == "ephemeral"
-        run = service.create_run(
-            _required_string(arguments, "query"),
-            mode=settings.data_mode,
-            depth=depth,
-            include_counter_authority=include_counter,
-            ephemeral=ephemeral,
-            as_of_date=date.fromisoformat(as_of_value) if as_of_value else None,
-            retention_seconds=(86400 if ephemeral else parse_retention(retention_value)),
-            discovery_mode=discovery_mode,
-        )
+        _service, run = _create_research_run(arguments, session)
         return {
             "schema_version": "alr-tw.research-created/v1",
             "run": run.model_dump(mode="json"),
         }
+    if name == "execute_legal_research":
+        _reject_unexpected_keys(
+            arguments,
+            {
+                "query",
+                "constraints",
+                "max_steps",
+                "operation_prefix",
+            },
+        )
+        max_steps = arguments.get("max_steps", 12)
+        if isinstance(max_steps, bool) or not isinstance(max_steps, int):
+            raise ValueError("max_steps must be an integer")
+        operation_prefix = arguments.get("operation_prefix")
+        if operation_prefix is not None and not isinstance(operation_prefix, str):
+            raise ValueError("operation_prefix must be a string")
+        service, run = _create_research_run(arguments, session)
+        return service.execute_run_to_completion(
+            run.run_id,
+            max_steps=max_steps,
+            operation_prefix=operation_prefix,
+        )
+    service = session.research_service()
     if name == "submit_legal_research_plan":
         _reject_unexpected_keys(
             arguments,
@@ -1546,11 +1668,7 @@ def _coverage_from_recorded_validations(validations: list[dict[str, Any]]) -> di
         for item in validations
         if item["input"].get("legal_material_type")
     }
-    has_laws = (
-        "present"
-        if not material_types or "law" in material_types
-        else "not_checked"
-    )
+    has_laws = "present" if not material_types or "law" in material_types else "not_checked"
     has_judgments = "present" if "judgment" in material_types else "not_checked"
     return {"has_laws": has_laws, "has_judgments": has_judgments}
 

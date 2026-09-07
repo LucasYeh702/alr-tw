@@ -1,6 +1,6 @@
 # ALR-TW Error Codes
 
-## v0.11.0 contract codes
+## v0.12.0 contract codes
 
 | Code | Meaning |
 |---|---|
@@ -23,7 +23,7 @@
 | `HISTORICAL_LAW_NORMATIVE_ROLE_MISMATCH` | 法條版本 source role 不是 normative text |
 | `HISTORICAL_LAW_SOURCE_ROLE_INVALID` | Provider 回傳的法條／立法資料分類無法安全驗證 |
 
-## v0.11.0 provider and research codes
+## v0.12.0 provider and research codes
 
 | Code | Meaning |
 |---|---|
@@ -51,7 +51,10 @@
 | `TLR_PUBLIC_LAW_SCHEMA_CHANGED` | TLR 行政函釋候選回應不符合 bounded public-law schema；結果為 retry-required，不升格 |
 | `TLR_PUBLIC_LAW_NOT_FOUND_IS_BOUNDED_ONLY` | 本次 TLR 行政函釋召回為空；不代表函釋不存在，也不允許 scoped absence claim |
 | `TLR_PUBLIC_LAW_STATUS_REQUIRES_OFFICIAL_VERIFICATION` | TLR 回傳的函釋效力狀態只是外部 metadata；必須由 ALR-TW 官方 public-law adapter 重新驗證 |
-| `TLR_LINEAGE_PROVIDER_UNAVAILABLE` | 本 data mode／deployment 沒有啟用 TLR lineage provider |
+| `LINEAGE_CANDIDATE_PROVIDER_UNAVAILABLE` | 本 data mode／deployment 沒有啟用相容的 lineage candidate provider |
+| `JUDGMENT_VERIFICATION_BUDGET_TRUNCATED` | 排序後可解析候選超過本次 1–5 件官方回查預算；只允許已驗證範圍的 qualified 結論 |
+| `JUDGMENT_OFFICIAL_VERIFICATION_INCOMPLETE` | 至少一個候選未通過 exact official verification；個別失敗保留在 operation metadata，不得引用被淘汰候選 |
+| `JUDGMENT_CANDIDATE_RESOLUTION_INCOMPLETE` | 至少一個候選無法安全解析為 canonical JID／正式字號；該候選不進入官方查證與 evidence |
 | `JUDGMENT_LINEAGE_ROOT_SOURCE_NOT_IN_RUN` | Root JID 尚未在同一 run 取得 server-owned official／verified-cache source |
 | `JUDGMENT_LINEAGE_ROOT_SOURCE_STALE` | Root judgment source 已過期，不能用來展開歷審 |
 | `JUDGMENT_LINEAGE_*` | 歷審 root 或關聯節點的 identity、official source tier、freshness、evidence binding、重複或方向檢查失敗；該節點不升格，且不推論裁判確定 |
@@ -101,7 +104,7 @@
 | `COUNTER_AUTHORITY_COVERAGE_INCOMPLETE` | 未執行、未完成或失敗的反面見解搜尋必須揭露 |
 | `PROCEDURAL_POSTURE_UNRESOLVED` | 程序階段尚未確認 |
 
-## v0.11.0 applicability and authority-lineage codes
+## v0.12.0 applicability and authority-lineage codes
 
 | Code | Meaning |
 |---|---|
@@ -131,7 +134,7 @@
 | `AUTHORITY_LINEAGE_NOT_FOUND_IS_BOUNDED_ONLY` | `not_found_in_scope` 僅限 bounded scope，不支持全球不存在主張 |
 | `NEGATIVE_TREATMENT_SEMANTIC_CLASSIFICATION_NOT_PERFORMED` | Provider treatment 尚未經 semantic opposition classifier |
 
-## v0.11.0 public-law provider and SDK codes
+## v0.12.0 public-law provider and SDK codes
 
 | Code | Meaning |
 |---|---|
@@ -159,6 +162,7 @@
 | `SOURCE_STALE` | Source snapshot 已過期，不可作 final evidence |
 | `SOURCE_REVALIDATION_FAILED` | 過期來源的官方重新驗證失敗 |
 | `SOURCE_NOT_EVIDENCE_ELIGIBLE` | 查得來源仍只具候選或不可引用身分 |
+| `PROVIDER_RESULT_CONTRACT_VIOLATION` | Provider 回傳的角色、provider ID、source/evidence 綁定、privacy receipt 或 bounded count 不符合契約；材料不得持久化或升格 |
 | `JUDGMENT_RECALL_INCOMPLETE` | 普通法院召回不完整 |
 | `PURGE_CONFIRMATION_REQUIRED` | 清除操作未收到明確確認 |
 | `PURGE_PARTIAL_FAILURE` | DB sidecar 或 temp artifact 未完整清除 |
@@ -188,11 +192,18 @@
 | `SNAPSHOT_GENERATION_MISMATCH` | provider snapshot generation 與 run receipt 不一致 |
 | `FINALIZATION_SOURCE_NOT_SERVER_OWNED` | finalization 引用的 source 不屬於 server-owned run |
 | `FINALIZATION_EVIDENCE_NOT_SERVER_OWNED` | finalization 引用的 evidence 不屬於 server-owned run |
+| `FINALIZATION_EVIDENCE_SET_MISMATCH` | Finalization 的完整 passage 集合摘要與同一 run 的 server evidence 不一致 |
+| `FINALIZATION_EVIDENCE_PREVIEW_MISMATCH` | `allowed_evidence_ids` 相容預覽與 server deterministic preview 不一致 |
+| `FINALIZATION_EVIDENCE_SET_SUMMARY_REQUIRED` | 超過 512 筆的 evidence set 缺少 digest-bound authorization summary |
+| `FINALIZATION_SERVER_EVIDENCE_FACTS_INVALID` | Server evidence facts 含重複 ID；finalization 必須 fail closed |
 | `SNAPSHOT_RECEIPT_MISMATCH` | provider snapshot receipt 與 run scope 或世代不一致 |
 | `SNAPSHOT_RECEIPT_MISSING_LEGACY` | 舊紀錄沒有 receipt；不得據此宣稱 ordinary sufficiency |
 | `ANSWER_REFUSAL_ONLY` | finalization 只允許結構化拒答，不回傳草稿 |
 
-## v0.11.0 semantic-verifier plugin codes
+`LIVE_TRUSTSTORE_REQUIRED` 與 `OFFICIAL_TLS_VERIFICATION_FAILED` 是
+`alr-tw doctor --live`／official transport 的部署診斷，不表示法源查無資料。
+
+## v0.12.0 semantic-verifier plugin codes
 
 | Code | Meaning |
 |---|---|
@@ -224,7 +235,7 @@
 | `SEMANTIC_VERIFIER_TARGET_DUPLICATED` | plugin 對同一 target 回傳多筆 finding |
 | `SEMANTIC_VERIFIER_TARGET_COVERAGE_PARTIAL` | completed plugin 結果未涵蓋所有 requested targets |
 
-## v0.11.0 provider conformance and boundary codes
+## v0.12.0 provider conformance and boundary codes
 
 | Code | Meaning |
 |---|---|
@@ -261,7 +272,7 @@
 | DEPLOYER_CREDENTIALS_FORBIDDEN | 公開套件不得含 credentials |
 | DEPLOYER_DEPLOYMENT_PARAMETERS_FORBIDDEN | 公開套件不得含 deployment parameters |
 
-## v0.11.0 legal-analysis domain constraint codes
+## v0.12.0 legal-analysis domain constraint codes
 
 | Code | Meaning |
 |---|---|

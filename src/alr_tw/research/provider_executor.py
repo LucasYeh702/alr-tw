@@ -10,8 +10,11 @@ from typing import Any, Callable, Coroutine, TypeVar
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from alr_tw.contracts.providers import (
+    CandidateRecallProvider,
+    CandidatePrivacyDecision,
     CandidateIdentity,
     DataMode,
+    LineageCandidateProvider,
     ProviderCandidate,
     ProviderErrorCode,
     ProviderResult,
@@ -20,6 +23,8 @@ from alr_tw.contracts.providers import (
 from alr_tw.contracts.authority_lineage import NegativeTreatmentStatus
 from alr_tw.contracts.interop import AuthorityLocatorProposal, DiscoveryMode
 from alr_tw.contracts.research import (
+    PrivacyStatus,
+    ResearchDepth,
     ResearchObligation,
     ResearchObligationKind,
     ResearchRun,
@@ -66,7 +71,7 @@ from alr_tw.storage.sqlite_store import SqliteStore
 
 _T = TypeVar("_T")
 _LAW_CITATION = re.compile(
-    r"(?P<law>[\u4e00-\u9fff]{2,30}(?:法|條例|規則|辦法))第\s*"
+    r"(?P<law>[\u4e00-\u9fff]{1,30}(?:法|條例|規則|辦法))第\s*"
     r"(?P<article>\d+(?:\s*(?:之|-)\s*\d+)*)\s*條"
 )
 _JID = re.compile(
@@ -99,7 +104,23 @@ class ProviderSet:
     laws: OfficialLawProvider
     constitutional: OfficialConstitutionalProvider
     judgments: JudgmentProviderPort
+    candidate_recall: CandidateRecallProvider | None = None
+    lineage_candidates: LineageCandidateProvider | None = None
+    # Deprecated compatibility slot for v0.11 constructors.  New deployments
+    # inject provider-neutral candidate ports above.
     tlr: TlrSemanticRecallProvider | None = None
+
+    @property
+    def candidate_recall_provider(self) -> CandidateRecallProvider | None:
+        return self.candidate_recall or self.tlr
+
+    @property
+    def lineage_candidate_provider(self) -> LineageCandidateProvider | None:
+        if self.lineage_candidates is not None:
+            return self.lineage_candidates
+        if isinstance(self.candidate_recall, LineageCandidateProvider):
+            return self.candidate_recall
+        return self.tlr
 
 
 class ProviderObligationExecutor:
@@ -140,6 +161,7 @@ class ProviderObligationExecutor:
                 run_id,
                 f"law:{law_name.strip()}:{article_no.strip()}",
                 fetch,
+                expected_provider_id=self.providers.laws.provider_id,
             )
         else:
             jid = self._jid_from_text(text)
@@ -150,18 +172,21 @@ class ProviderObligationExecutor:
                     run_id,
                     f"judgment:{jid}",
                     lambda: _run(self.providers.judgments.exact_lookup(jid)),
+                    expected_provider_id=self.providers.judgments.provider_id,
                 )
             elif formal_citation:
                 result, source, evidence_items = self._cached_lookup(
                     run_id,
                     f"judgment-formal:{_compact_identifier(formal_citation)}",
                     lambda: _run(self.providers.judgments.exact_lookup(formal_citation)),
+                    expected_provider_id=self.providers.judgments.provider_id,
                 )
             elif constitutional:
                 result, source, evidence_items = self._cached_lookup(
                     run_id,
                     f"constitutional:{constitutional}",
                     lambda: _run(self.providers.constitutional.exact_lookup(constitutional)),
+                    expected_provider_id=self.providers.constitutional.provider_id,
                 )
             else:
                 return {
@@ -204,8 +229,11 @@ class ProviderObligationExecutor:
         now = datetime.now(UTC)
         if root_source.expires_at <= now:
             return self._lineage_blocked(normalized_jid, "JUDGMENT_LINEAGE_ROOT_SOURCE_STALE")
-        if self.providers.tlr is None:
-            return self._lineage_blocked(normalized_jid, "TLR_LINEAGE_PROVIDER_UNAVAILABLE")
+        if self.providers.lineage_candidate_provider is None:
+            return self._lineage_blocked(
+                normalized_jid,
+                "LINEAGE_CANDIDATE_PROVIDER_UNAVAILABLE",
+            )
 
         candidates = self.store.list_candidates(run_id)
         origin_candidate_id = root_source.metadata.get("origin_candidate_id")
@@ -266,6 +294,7 @@ class ProviderObligationExecutor:
                 entry.provider_document_id,
                 root_jid=normalized_jid,
                 now=now,
+                expected_provider_id=self.providers.judgments.provider_id,
             )
             if verification_error is None and source is not None:
                 identity_key = (
@@ -457,19 +486,13 @@ class ProviderObligationExecutor:
         added_sources = 0
         added_evidence = 0
         plan_locators = self._plan_locators(run, MaterialType.LAW)
-        client_assisted = (
-            run.responsibility.discovery_mode is DiscoveryMode.CLIENT_ASSISTED
-        )
+        client_assisted = run.responsibility.discovery_mode is DiscoveryMode.CLIENT_ASSISTED
         lookup_texts = (
-            [item.lookup_text for item in plan_locators]
-            if client_assisted
-            else [run.query]
+            [item.lookup_text for item in plan_locators] if client_assisted else [run.query]
         )
         citations: list[tuple[str, str]] = []
         for lookup_text in lookup_texts:
-            citations.extend(
-                _run(self.providers.laws.resolve_citations(lookup_text, limit=5))
-            )
+            citations.extend(_run(self.providers.laws.resolve_citations(lookup_text, limit=5)))
         citations = list(dict.fromkeys(citations))
         if citations:
             for law_name, article_no in citations:
@@ -484,6 +507,7 @@ class ProviderObligationExecutor:
                     run.run_id,
                     f"law:{law_name.strip()}:{article_no.strip()}",
                     fetch_law,
+                    expected_provider_id=self.providers.laws.provider_id,
                 )
                 calls.append(self._provider_call(result))
                 if source is not None:
@@ -548,8 +572,7 @@ class ProviderObligationExecutor:
                 formal_citation = self._formal_citation_from_text(lookup_text)
                 candidate = ProviderCandidate(
                     candidate_id=(
-                        f"external-plan:{registered_plan.proposal.plan_id}:"
-                        f"{locator.locator_id}"
+                        f"external-plan:{registered_plan.proposal.plan_id}:{locator.locator_id}"
                     ),
                     provider_id="external_research_plan",
                     title=locator.citation,
@@ -600,25 +623,109 @@ class ProviderObligationExecutor:
         warnings: list[str] = []
         added_sources = 0
         added_candidates = 0
+        usable_candidate_count = 0
         updates: dict[str, Any] = {}
+        candidate_provider = self.providers.candidate_recall_provider
 
-        official = _run(self.providers.judgments.search(run.query, limit=5))
-        calls.append(self._provider_call(official))
-        if official.status == ProviderResultStatus.FOUND:
-            for candidate in official.candidates:
-                self.store.save_candidate(run.run_id, candidate, expires_at=run.expires_at)
-            added_candidates += len(official.candidates)
-        elif official.status == ProviderResultStatus.ERROR:
-            warnings.append(
-                official.error_code.value
-                if official.error_code
-                else "OFFICIAL_SOURCE_UNAVAILABLE"
-            )
+        def recall_official() -> None:
+            nonlocal added_candidates, usable_candidate_count
+            official = _run(self.providers.judgments.search(run.query, limit=5))
+            calls.append(self._provider_call(official))
+            provider_matches = official.provider_id == self.providers.judgments.provider_id
+            accepted = [
+                candidate
+                for candidate in official.candidates[:5]
+                if candidate.provider_id == self.providers.judgments.provider_id
+            ]
+            if (
+                official.status == ProviderResultStatus.FOUND
+                and official.error_code is None
+                and provider_matches
+                and len(accepted) == len(official.candidates)
+            ):
+                for candidate in accepted:
+                    self.store.save_candidate(run.run_id, candidate, expires_at=run.expires_at)
+                added_candidates += len(accepted)
+                usable_candidate_count += sum(
+                    resolve_judgment_candidate(candidate) is not None for candidate in accepted
+                )
+            elif official.status == ProviderResultStatus.FOUND:
+                warnings.append(ProviderErrorCode.PROVIDER_RESULT_CONTRACT_VIOLATION.value)
+            elif official.status == ProviderResultStatus.ERROR:
+                warnings.append(
+                    official.error_code.value
+                    if official.error_code
+                    else "OFFICIAL_SOURCE_UNAVAILABLE"
+                )
 
-        if run.effective_mode == DataMode.HYBRID_VERIFIED and self.providers.tlr is not None:
-            result, sources, privacy = _run(self.providers.tlr.search(run.query))
+        def recall_external_candidates() -> None:
+            nonlocal added_candidates, added_sources, usable_candidate_count
+            assert candidate_provider is not None
+            try:
+                result, sources, privacy = _run(
+                    candidate_provider.search(
+                        run.query,
+                        top_k=run.max_judgment_verifications,
+                    )
+                )
+            except Exception as exc:
+                result = ProviderResult(
+                    status=ProviderResultStatus.ERROR,
+                    provider_id=candidate_provider.provider_id,
+                    error_code=ProviderErrorCode.PROVIDER_RESULT_CONTRACT_VIOLATION,
+                    message=f"CANDIDATE_RECALL_CONTRACT_ERROR:{type(exc).__name__}",
+                    coverage_complete=False,
+                )
+                sources = []
+                privacy = None
             calls.append(self._provider_call(result))
-            updates["privacy_status"] = privacy.status
+            privacy_status: PrivacyStatus | None = None
+            privacy_allowed = False
+            if isinstance(privacy, CandidatePrivacyDecision):
+                raw_status = getattr(privacy.status, "value", privacy.status)
+                try:
+                    privacy_status = PrivacyStatus(str(raw_status))
+                except ValueError:
+                    privacy_status = None
+                privacy_allowed = privacy.allowed is True
+            if privacy_status is not None:
+                updates["privacy_status"] = privacy_status
+            provider_matches = result.provider_id == candidate_provider.provider_id
+            candidate_contract_valid = (
+                privacy_status is not None
+                and privacy_allowed
+                and provider_matches
+                and result.error_code is None
+                and not result.evidence_ids
+                and len(result.candidates) <= run.max_judgment_verifications
+                and all(
+                    candidate.provider_id == candidate_provider.provider_id
+                    for candidate in result.candidates
+                )
+                and all(
+                    source.provider_id == candidate_provider.provider_id
+                    and source.source_tier is SourceTier.EXTERNAL_SEMANTIC_RECALL
+                    and source.trust_status is TrustStatus.EXTERNAL_CANDIDATE
+                    for source in sources
+                )
+                and set(result.source_ids) == {source.source_id for source in sources}
+            )
+            if result.status is ProviderResultStatus.FOUND and not result.candidates:
+                candidate_contract_valid = False
+            if result.status is ProviderResultStatus.NOT_FOUND and (
+                result.candidates or sources or result.source_ids
+            ):
+                candidate_contract_valid = False
+            if result.status is not ProviderResultStatus.ERROR and not candidate_contract_valid:
+                result = ProviderResult(
+                    status=ProviderResultStatus.ERROR,
+                    provider_id=candidate_provider.provider_id,
+                    error_code=ProviderErrorCode.PROVIDER_RESULT_CONTRACT_VIOLATION,
+                    message="CANDIDATE_RECALL_RESULT_CONTRACT_VIOLATION",
+                    coverage_complete=False,
+                )
+                calls[-1] = self._provider_call(result)
+                sources = []
             if result.status == ProviderResultStatus.ERROR:
                 updates.update(
                     {
@@ -628,7 +735,9 @@ class ProviderObligationExecutor:
                 )
                 warnings.extend(
                     [
-                        result.error_code.value if result.error_code else "TLR_UNAVAILABLE",
+                        result.error_code.value
+                        if result.error_code
+                        else "EXTERNAL_PROVIDER_UNAVAILABLE",
                         "SEMANTIC_RECALL_DEGRADED",
                     ]
                 )
@@ -639,8 +748,33 @@ class ProviderObligationExecutor:
                     self.store.save_candidate(run.run_id, candidate, expires_at=run.expires_at)
                 added_sources += len(sources)
                 added_candidates += len(result.candidates)
+                usable_candidate_count += sum(
+                    resolve_judgment_candidate(candidate) is not None
+                    for candidate in result.candidates
+                )
 
-        updates["judgment_recall_incomplete"] = added_candidates == 0
+        quick_external_first = (
+            run.research_depth is ResearchDepth.QUICK
+            and run.effective_mode is DataMode.HYBRID_VERIFIED
+            and candidate_provider is not None
+        )
+        if quick_external_first:
+            # Quick judgment research follows the explicit TLR-first contract:
+            # fuzzy recall once, then exact official verification.  The slower
+            # official keyword search remains a fail-safe only when the
+            # candidate provider returns no usable identity.
+            recall_external_candidates()
+            if usable_candidate_count == 0:
+                recall_official()
+        else:
+            recall_official()
+            if run.effective_mode is DataMode.HYBRID_VERIFIED and candidate_provider is not None:
+                recall_external_candidates()
+
+        if run.research_depth is ResearchDepth.QUICK and added_candidates:
+            warnings.append("QUICK_JUDGMENT_RECALL_BOUNDED")
+
+        updates["judgment_recall_incomplete"] = usable_candidate_count == 0
         return self._outcome(
             obligation,
             calls=calls,
@@ -708,7 +842,8 @@ class ProviderObligationExecutor:
         evidence_count = 0
         partial_parse_count = 0
         failed_count = unresolved_count
-        attempted_targets = targets[:5]
+        failed_reason_codes: list[str] = []
+        attempted_targets = targets[: run.max_judgment_verifications]
         truncated = len(targets) > len(attempted_targets)
         for target in attempted_targets:
             identifier = target.lookup_identifier
@@ -727,9 +862,16 @@ class ProviderObligationExecutor:
                         else f"judgment-formal:{_compact_identifier(identifier)}"
                     ),
                     fetch_judgment,
+                    expected_provider_id=self.providers.judgments.provider_id,
                 )
             else:
                 result, source, evidence = fetch_judgment()
+                result, source, evidence = self._validated_exact_material(
+                    result,
+                    source,
+                    evidence,
+                    expected_provider_id=self.providers.judgments.provider_id,
+                )
                 if result.error_code is ProviderErrorCode.OFFICIAL_IDENTIFIER_MISMATCH:
                     result = result.model_copy(
                         update={
@@ -793,14 +935,14 @@ class ProviderObligationExecutor:
             calls.append(self._provider_call(result))
             if source is not None:
                 source_count += 1
-                partial_parse_count += int(
-                    source.metadata.get("parse_status") == "partial"
-                )
+                partial_parse_count += int(source.metadata.get("parse_status") == "partial")
                 for item in evidence:
                     evidence_count += int(item.eligible_for_claim_support)
             else:
                 failed_count += 1
-                warnings.append(result.error_code.value if result.error_code else result.status.value)
+                failed_reason_codes.append(
+                    result.error_code.value if result.error_code else result.status.value
+                )
         limitations: list[str] = []
         if unresolved_count:
             limitations.append("JUDGMENT_CANDIDATE_RESOLUTION_INCOMPLETE")
@@ -810,6 +952,12 @@ class ProviderObligationExecutor:
             limitations.append("JUDGMENT_PARSE_PARTIAL")
         if failed_count:
             limitations.append("JUDGMENT_OFFICIAL_VERIFICATION_INCOMPLETE")
+        # A rejected candidate is not itself answer evidence.  Once at least
+        # one different candidate is officially verified, preserve individual
+        # failures in metadata and expose the bounded incompleteness warning;
+        # zero verified sources still surfaces the underlying hard failures.
+        if source_count == 0:
+            warnings.extend(failed_reason_codes)
         warnings.extend(limitations)
         coverage = run.coverage.model_copy(
             update={
@@ -825,6 +973,7 @@ class ProviderObligationExecutor:
             "eligible_evidence_count": evidence_count,
             "partial_parse_count": partial_parse_count,
             "failed_count": failed_count,
+            "failed_reason_codes": sorted(set(failed_reason_codes)),
             "truncated": truncated,
             "limitations": sorted(set(limitations)),
         }
@@ -837,7 +986,10 @@ class ProviderObligationExecutor:
             metadata=verification_summary,
             updates={
                 "coverage": coverage,
-                "judgment_recall_incomplete": source_count == 0 or bool(limitations),
+                # A verified subset is usable with explicit bounded-scope
+                # qualifications.  Zero promoted sources remains a hard
+                # authenticity failure.
+                "judgment_recall_incomplete": source_count == 0,
             },
         )
 
@@ -851,13 +1003,9 @@ class ProviderObligationExecutor:
         source_count = 0
         evidence_count = 0
         plan_locators = self._plan_locators(run, MaterialType.CONSTITUTIONAL)
-        client_assisted = (
-            run.responsibility.discovery_mode is DiscoveryMode.CLIENT_ASSISTED
-        )
+        client_assisted = run.responsibility.discovery_mode is DiscoveryMode.CLIENT_ASSISTED
         lookup_texts = (
-            [item.lookup_text for item in plan_locators]
-            if client_assisted
-            else [run.query]
+            [item.lookup_text for item in plan_locators] if client_assisted else [run.query]
         )
         identifiers = list(
             dict.fromkeys(
@@ -880,6 +1028,7 @@ class ProviderObligationExecutor:
                     run.run_id,
                     f"constitutional:{identifier}",
                     fetch_constitutional,
+                    expected_provider_id=self.providers.constitutional.provider_id,
                 )
                 calls.append(self._provider_call(result))
                 if source is not None:
@@ -1094,13 +1243,13 @@ class ProviderObligationExecutor:
                 run.run_id,
                 cache_key,
                 fetch_judgment,
+                expected_provider_id=self.providers.judgments.provider_id,
             )
             calls.append(self._provider_call(result))
-            if (
-                source is not None
-                and source.trust_status
-                in {TrustStatus.OFFICIAL_VERIFIED, TrustStatus.EVIDENCE_ELIGIBLE}
-            ):
+            if source is not None and source.trust_status in {
+                TrustStatus.OFFICIAL_VERIFIED,
+                TrustStatus.EVIDENCE_ELIGIBLE,
+            }:
                 existing_verified[existing_key] = (source, tuple(evidence))
             return CounterAuthorityVerification(
                 candidate_id=candidate.candidate_id,
@@ -1287,16 +1436,15 @@ class ProviderObligationExecutor:
                 EvidenceSpan | list[EvidenceSpan] | None,
             ],
         ],
+        *,
+        expected_provider_id: str,
     ) -> tuple[ProviderResult, SourceRecord | None, list[EvidenceSpan]]:
         existing_cache = run_id is not None and self.store.has_cache_entry(cache_key)
         if run_id is not None:
             cached = self.store.get_fresh_cache_entry(cache_key)
             if cached is not None:
                 cached_source, evidence = cached
-                self.store.save_source(run_id, cached_source)
-                for item in evidence:
-                    self.store.save_evidence(run_id, item)
-                return (
+                cached_result, validated_source, evidence = self._validated_exact_material(
                     ProviderResult(
                         status=ProviderResultStatus.FOUND,
                         provider_id=cached_source.provider_id,
@@ -1307,7 +1455,13 @@ class ProviderObligationExecutor:
                     ),
                     cached_source,
                     evidence,
+                    expected_provider_id=expected_provider_id,
                 )
+                if validated_source is not None:
+                    self.store.save_source(run_id, validated_source)
+                    for item in evidence:
+                        self.store.save_evidence(run_id, item)
+                    return cached_result, validated_source, evidence
 
         result, source, raw_evidence = fetch()
         if existing_cache and result.status != ProviderResultStatus.FOUND:
@@ -1322,12 +1476,11 @@ class ProviderObligationExecutor:
                     },
                 }
             )
-        evidence = (
-            raw_evidence
-            if isinstance(raw_evidence, list)
-            else [raw_evidence]
-            if raw_evidence is not None
-            else []
+        result, source, evidence = self._validated_exact_material(
+            result,
+            source,
+            raw_evidence,
+            expected_provider_id=expected_provider_id,
         )
         if run_id is not None and source is not None:
             self.store.save_source(run_id, source)
@@ -1336,6 +1489,60 @@ class ProviderObligationExecutor:
             if result.status == ProviderResultStatus.FOUND and evidence:
                 self.store.save_cache_entry(cache_key, source, evidence)
         return result, source, evidence
+
+    @staticmethod
+    def _validated_exact_material(
+        result: ProviderResult,
+        source: SourceRecord | None,
+        raw_evidence: EvidenceSpan | list[EvidenceSpan] | None,
+        *,
+        expected_provider_id: str,
+    ) -> tuple[ProviderResult, SourceRecord | None, list[EvidenceSpan]]:
+        """Reject inconsistent exact-provider material before it reaches storage."""
+
+        evidence = (
+            raw_evidence
+            if isinstance(raw_evidence, list)
+            else [raw_evidence]
+            if raw_evidence is not None
+            else []
+        )
+        if result.status is not ProviderResultStatus.FOUND or result.error_code is not None:
+            return result, None, []
+
+        evidence_ids = [item.evidence_id for item in evidence if isinstance(item, EvidenceSpan)]
+        contract_valid = bool(
+            source is not None
+            and isinstance(source, SourceRecord)
+            and result.provider_id == expected_provider_id
+            and source.provider_id == expected_provider_id
+            and result.source_ids == [source.source_id]
+            and len(evidence_ids) == len(evidence)
+            and len(evidence_ids) == len(set(evidence_ids))
+            and set(result.evidence_ids) == set(evidence_ids)
+            and all(item.source_id == source.source_id for item in evidence)
+            and source.source_tier in {SourceTier.OFFICIAL, SourceTier.VERIFIED_CACHE}
+            and source.trust_status
+            in {
+                TrustStatus.OFFICIAL_FETCHED,
+                TrustStatus.OFFICIAL_VERIFIED,
+                TrustStatus.EVIDENCE_ELIGIBLE,
+            }
+        )
+        if contract_valid:
+            return result, source, evidence
+        return (
+            ProviderResult(
+                status=ProviderResultStatus.ERROR,
+                provider_id=expected_provider_id,
+                error_code=ProviderErrorCode.PROVIDER_RESULT_CONTRACT_VIOLATION,
+                message="EXACT_PROVIDER_RESULT_CONTRACT_VIOLATION",
+                coverage_complete=False,
+                metadata={"reported_provider_id": result.provider_id},
+            ),
+            None,
+            [],
+        )
 
     @staticmethod
     def _provider_call(result: Any) -> dict[str, Any]:
@@ -1355,18 +1562,13 @@ class ProviderObligationExecutor:
         candidate: ProviderCandidate | None,
         provider_calls: list[dict[str, Any]],
     ) -> tuple[ProviderResult, TlrCaseHistoryRecord | None]:
-        assert self.providers.tlr is not None
+        provider = self.providers.lineage_candidate_provider
+        assert provider is not None
         if candidate is not None:
             doc_id = self._candidate_doc_id(candidate)
             result_handle = candidate.metadata.get("result_token")
-            if (
-                doc_id is not None
-                and isinstance(result_handle, str)
-                and result_handle.strip()
-            ):
-                result, history = _run(
-                    self.providers.tlr.case_history(doc_id, result_handle)
-                )
+            if doc_id is not None and isinstance(result_handle, str) and result_handle.strip():
+                result, history = _run(provider.case_history(doc_id, result_handle))
                 provider_calls.append(self._provider_call(result))
                 if result.error_code is not ProviderErrorCode.TLR_RESULT_TOKEN_INVALID_OR_EXPIRED:
                     return result, history
@@ -1374,17 +1576,13 @@ class ProviderObligationExecutor:
         refresh_query = root_source.citation
         if candidate is not None:
             for value in (
-                candidate.identity.formal_citation
-                if candidate.identity is not None
-                else None,
+                candidate.identity.formal_citation if candidate.identity is not None else None,
                 candidate.title,
             ):
                 if isinstance(value, str) and value.strip():
                     refresh_query = value.strip()
                     break
-        search_result, _, _ = _run(
-            self.providers.tlr.search(refresh_query, top_k=10)
-        )
+        search_result, _, _ = _run(provider.search(refresh_query, top_k=10))
         provider_calls.append(self._provider_call(search_result))
         if search_result.status is ProviderResultStatus.ERROR:
             return search_result, None
@@ -1393,7 +1591,7 @@ class ProviderObligationExecutor:
             return (
                 ProviderResult(
                     status=ProviderResultStatus.NOT_FOUND,
-                    provider_id=self.providers.tlr.provider_id,
+                    provider_id=provider.provider_id,
                     error_code=ProviderErrorCode.TLR_DOCUMENT_NOT_FOUND,
                     message="TLR_LINEAGE_ROOT_NOT_FOUND",
                     coverage_complete=False,
@@ -1402,24 +1600,18 @@ class ProviderObligationExecutor:
             )
         doc_id = self._candidate_doc_id(refreshed)
         result_handle = refreshed.metadata.get("result_token")
-        if (
-            doc_id is None
-            or not isinstance(result_handle, str)
-            or not result_handle.strip()
-        ):
+        if doc_id is None or not isinstance(result_handle, str) or not result_handle.strip():
             return (
                 ProviderResult(
                     status=ProviderResultStatus.ERROR,
-                    provider_id=self.providers.tlr.provider_id,
+                    provider_id=provider.provider_id,
                     error_code=ProviderErrorCode.EXTERNAL_PROVIDER_SCHEMA_CHANGED,
                     message="TLR_LINEAGE_RESULT_HANDLE_MISSING",
                     coverage_complete=False,
                 ),
                 None,
             )
-        result, history = _run(
-            self.providers.tlr.case_history(doc_id, result_handle)
-        )
+        result, history = _run(provider.case_history(doc_id, result_handle))
         provider_calls.append(self._provider_call(result))
         return result, history
 
@@ -1515,6 +1707,7 @@ class ProviderObligationExecutor:
         *,
         root_jid: str,
         now: datetime,
+        expected_provider_id: str,
     ) -> str | None:
         if result.status is not ProviderResultStatus.FOUND:
             return (
@@ -1522,8 +1715,15 @@ class ProviderObligationExecutor:
                 if result.error_code is not None
                 else "JUDGMENT_LINEAGE_OFFICIAL_VERIFICATION_FAILED"
             )
+        if result.error_code is not None:
+            return "JUDGMENT_LINEAGE_PROVIDER_RESULT_CONTRACT_VIOLATION"
         if source is None:
             return "JUDGMENT_LINEAGE_OFFICIAL_SOURCE_MISSING"
+        if (
+            result.provider_id != expected_provider_id
+            or source.provider_id != expected_provider_id
+        ):
+            return "JUDGMENT_LINEAGE_PROVIDER_RESULT_CONTRACT_VIOLATION"
         if not cls._lineage_identity_matches(
             source.official_identifier,
             provider_document_id,
@@ -1544,8 +1744,8 @@ class ProviderObligationExecutor:
             return "JUDGMENT_LINEAGE_OFFICIAL_EVIDENCE_MISSING"
         evidence_ids = {item.evidence_id for item in evidence}
         if (
-            source.source_id not in result.source_ids
-            or not evidence_ids.issubset(set(result.evidence_ids))
+            set(result.source_ids) != {source.source_id}
+            or set(result.evidence_ids) != evidence_ids
             or any(item.source_id != source.source_id for item in evidence)
         ):
             return "JUDGMENT_LINEAGE_OFFICIAL_EVIDENCE_NOT_BOUND"

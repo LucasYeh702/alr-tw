@@ -2,9 +2,9 @@
 
 [繁體中文說明](README.zh-TW.md) | [English](README.en.md)
 
-ALR-TW v0.11.0 是一個讓外部 Agent／LLM 以 MCP 使用台灣法律研究工具的安全框架。它負責管理研究流程、官方來源查證、證據信任邊界、答案驗證與短期資料清除；Agent 負責理解問題與起草文字。
+ALR-TW v0.12.0 是一個讓外部 Agent／LLM 以 MCP 使用台灣法律研究工具的安全框架。它負責管理研究流程、官方來源查證、證據信任邊界、答案驗證與短期資料清除；Agent 負責理解問題與起草文字。
 
-它不是法律意見服務，也不是完整台灣法律資料庫。v0.11.0 仍是 public preview；任何輸出都必須由具資格的人員依官方原文、適用時點與個案事實複核。
+它不是法律意見服務，也不是完整台灣法律資料庫。v0.12.0 仍是 public preview（套件版本 `0.12.0`）；任何輸出都必須由具資格的人員依官方原文、適用時點與個案事實複核。
 
 本 repo 不包含 LLM，也不包含 agent 實作。Repo 內的 demo ranking／示範 ranking 參數只用於展示與測試，不是 production ranking 設定；正式部署的模型、資料集、排序與權重由部署者自行治理。
 
@@ -31,7 +31,7 @@ Agent 依已驗證證據起草
 | 功能 | 白話說明 |
 |---|---|
 | 精確法源查詢 | 查詢法規條文、正式裁判字號、JID 與憲法法庭資料，並回到官方來源核對。 |
-| 多步驟法律研究 | 建立可觀察、可恢復的研究 run，逐步處理法規、裁判、憲法材料與時點問題。 |
+| 多步驟法律研究 | 建立可觀察、可恢復的研究 run；可逐步處理，也可在一次 MCP 呼叫中執行 server-owned obligations。 |
 | 候選資料召回 | 使用官方搜尋或 [TLR（Taiwan Legal RAG）](https://github.com/aa0101181514/tw-legal-rag) 找普通裁判／行政函釋候選；正式證據仍由 ALR-TW 官方驗證產生。 |
 | 有界歷審檢查 | 對已驗證裁判讀取 TLR 記錄的上、下級審候選，再逐件回查官方正文與分類主文結果。 |
 | 分析與答案驗證 | 將核心主張綁定同一研究 run 的證據，檢查來源、角色、時點與支持關係。 |
@@ -61,7 +61,13 @@ Agent 依已驗證證據起草
 `ready_for_draft` 只代表研究流程走完，不代表研究充分。最後仍須由
 `validate_legal_answer` 決定草稿是否可以展示。
 
-內建 runtime 的 `provider-neutral` snapshot receipt 介面不代表內建 provider 已經簽發 receipt；只有接入 `receipt-aware` provider adapter 的部署，才可能取得較完整的 receipt 綁定。內建服務的答案姿態最多通常是 `conditional`／`qualified`。`safe_to_draft` 只代表可以進入起草階段，不授權直接展示；`blocked` 或 `refusal_only` 不會帶出 answer body。
+v0.12.0 內建 `ResearchService` 會為同一 run 中通過官方／可信快取閘門的精確
+source 與 evidence 集合簽發並持久化 provider-neutral snapshot receipt；caller 提供的
+receipt 不受信任。receipt 完整、未過期且其餘閘門均通過時，`ordinary` 才可能
+成為起草前姿態；缺 receipt 最高為 `conditional`，混用或內容不符則 fail closed。
+`safe_to_draft` 不授權直接展示；仍須由 `validate_legal_answer` 檢查草稿，且
+`blocked`／`refusal_only` 不會帶出 answer body。receipt 只證明該 run 的材料綁定，
+不證明全域召回完整、裁判確定或實務一致。
 
 ## 主要安全邊界
 
@@ -103,6 +109,31 @@ ALR-TW 將「找到資料」、「來源可信」與「資料支持這個主張�
 
 啟用 `hybrid_verified` 時，通過 privacy gate 的查詢文字可能送往 TLR。不要輸入個人秘密、未公開案件事實、私有契約、訴訟策略、證據弱點或談判底線。
 
+### 快速模式（v0.12）
+
+若主要目的是找裁判，可以直接在提示詞開頭指定：
+
+```text
+/quick 請查找定型化契約條款效力的相關裁判
+```
+
+也可寫成 `快速模式：問題`，或使用
+`constraints.research_depth="quick"`。建議搭配 `execute_legal_research`，由 server
+在一次呼叫內完成候選召回與最多五件官方回查。`hybrid_verified` quick 會先用
+TLR／相容 provider 找候選；只有沒有可用候選或候選 provider 失敗時，才退回司法院
+關鍵詞搜尋。候選 JID／正式字號仍逐件回查官方全文。
+
+快速模式縮減的是研究廣度：裁判型問題預設不展開 counter-authority、歷審鏈或
+未明示的法規研究；它不會跳過 JID／正式字號與官方內容驗證。至少一件候選通過
+後，整條類案查詢仍只能以 `qualified`／`conditional` 呈現已驗證的 bounded
+top-K 範圍；候選未通過或超出預算時再附個別限制，`0` 件通過仍會拒答。任何草稿
+最後仍須經 `validate_legal_answer`。
+
+研究尚未完成或被 gate 擋下時，`get_legal_research_state` 會提供正式
+`research_brief`：只包含已驗證來源 locator、義務進度、blocker 與可重試步驟，沒有
+草稿結論，且固定 `answer_authorized=false`、`safe_to_present=false`。Client 不需要為了
+顯示進度而繞過 server 直接讀庫。
+
 ### 目前來源的角色
 
 | 來源 | 可以協助的工作 | 不能直接宣稱的事情 |
@@ -133,7 +164,8 @@ alr-tw purge --all --confirm
 | 你想做的事 | 建議方式 | 需要注意 |
 |---|---|---|
 | 只查一個條文或正式裁判 | 使用 `lookup_legal_source` | 查到來源不等於整份答案已驗證，仍要做 answer validation。 |
-| 研究一個包含多個爭點的問題 | 使用 `research_legal_question` 與逐步研究流程 | `ready_for_draft` 不是「研究已充分」的保證。 |
+| 快速找出並核對類案 | 使用 `/quick` 搭配 `execute_legal_research` | 最多回查五件；未窮盡、查無結果與淘汰候選都不能支持全球不存在主張。 |
+| 研究一個包含多個爭點的問題 | 使用 standard／deep 的 `research_legal_question` 與逐步研究流程 | `ready_for_draft` 不是「研究已充分」的保證。 |
 | 找普通裁判候選 | 使用官方搜尋或 `hybrid_verified` | TLR 只提高召回，最後仍須回司法院官方全文。 |
 | 找行政函釋候選 | 使用 TLR provider 的 typed public-law candidate API | 只作定位；須另經 ALR-TW 所治理的官方 public-law adapter 驗證，內建 runtime 目前不附該 connector。 |
 | 查已驗證裁判的上下級審 | 在同一 run 使用 `inspect_judgment_lineage` | 只涵蓋 TLR 記錄與本次回查上限；查無上級審不等於裁判確定，也不自動判斷見解是否不同。 |
@@ -164,6 +196,10 @@ export ALR_TW_RETENTION=24h
 alr-tw doctor --live
 ```
 
+官方 HTTPS provider 預設使用作業系統憑證庫（`truststore`）。`doctor --live` 會實際
+檢查法務部、憲法法庭與司法院裁判來源；憑證驗證失敗會以
+`OFFICIAL_TLS_VERIFICATION_FAILED` 明示，而不是被誤報成查無資料。
+
 普通裁判查詢不需要司法院 API token；live 查詢的關鍵字、案號與篩選條件會送到官方網站。不要把未公開個案事實或保密資料當成搜尋詞。
 
 ## Agent 最短使用流程
@@ -171,13 +207,19 @@ alr-tw doctor --live
 新整合建議依序：
 
 1. 呼叫 `get_legal_research_capabilities`，先確認目前 data mode 與可用工具。
-2. 需要研究時呼叫 `research_legal_question`，再依序執行 `continue_legal_research`。
+2. 快速或一般 server-managed 研究可呼叫 `execute_legal_research`；需要逐步除錯或
+   client-assisted plan 時，使用 `research_legal_question` 再依序執行
+   `continue_legal_research`。
 3. 讀取 `get_legal_research_finalization`，確認證據、限制與答案姿態。
 4. 只使用同一 run 的 server-owned evidence 起草。
 5. 呼叫 `validate_legal_answer`，只展示允許展示的結果。
 6. 依 retention policy 等待自動清除，或使用 `purge_research_storage` 手動清除。
 
 若只需核對單一法源，可使用 `lookup_legal_source`；若要查立法沿革候選，可在 live mode 明示使用 `lookup_legislative_history`。
+
+若本機 stdio MCP process 被強制終止，而宿主畫面仍顯示舊的 connected 狀態，先停用
+再啟用該 MCP 設定或重新啟動宿主；仍為 `Not connected` 時移除後依原設定重新加入。
+強制終止後的宿主連線顯示不由 ALR-TW process 控制，不應把殘留 UI 狀態視為健康證據。
 
 可複製的 Agent 工作區規則見 [templates/AGENTS.md](templates/AGENTS.md)。它是使用建議，不是安全邊界；真正的工具權限、證據升格與拒答規則由 MCP server 強制執行。
 
@@ -187,6 +229,7 @@ alr-tw doctor --live
 |---|---|
 | `get_legal_research_capabilities` | 了解目前資料模式、可用 profile 與 server 的信任責任。 |
 | `research_legal_question` | 建立一個 server-owned research run。 |
+| `execute_legal_research` | 建立 run 並一次執行可執行的 server-owned obligations；保留逐步稽核與 final-answer validation。 |
 | `continue_legal_research` | 執行下一個研究義務；每次只推進一個有界步驟。 |
 | `get_legal_research_state` | 唯讀恢復研究狀態，不做新的網路請求。 |
 | `get_legal_research_finalization` | 查看研究充分性、覆蓋限制、blockers 與答案姿態。 |

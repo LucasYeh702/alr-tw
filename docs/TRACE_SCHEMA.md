@@ -1,14 +1,19 @@
 # ALR-TW Trace Schema
 
-## v0.11.0 research state records
+## v0.12.0 research state records
 
-v0.11.0 流程以持久化 `ResearchRun` 與逐步 result 取代 caller 組裝 authority trace：
+v0.12.0 流程以持久化 `ResearchRun` 與逐步 result 取代 caller 組裝 authority trace：
 
-- `alr-tw.research-run/v1`：狀態、mode、privacy、obligations、coverage、source/evidence ids、TTL，以及 additive responsibility／registered-plan、workflow completion、research sufficiency 與 answer mode fields；
+- `alr-tw.research-run/v1`：狀態、mode、privacy、obligations、coverage、source/evidence ids、TTL，以及 additive responsibility／registered-plan、workflow completion、research sufficiency、answer mode 與 `max_judgment_verifications` fields；
 - Coverage v2 另保存 bounded query/time scope、provider scope、partial／error／timeout reason codes、absence gate 與可選 snapshot receipt reference；
 - `alr-tw.finalization/v1`：server-owned sufficiency、pre-draft answer posture、`safe_to_draft`、blockers、qualifications、safe next actions 與 optional snapshot consistency；finalization 不授權 answer presentation，答案驗證拒答路徑另產生 structured refusal；
 - 只有既有 `validate_legal_answer` 的 `validated`／`qualified` 結果才可作為答案呈現依據；
 - `alr-tw.research-step-result/v1`：本次 obligation、provider calls、warnings、剩餘 obligations；
+- `alr-tw.research-execution/v1`：單次 autonomous runner 的 stop reason、step count、
+  overall/per-step `elapsed_ms`、精簡 provider calls、目前 state 及 finalization；
+- `alr-tw.research-evidence-bundle/v1`：到達 draft boundary 後最多五個新鮮、
+  evidence-eligible sources 與每來源最多八個 exact spans；固定
+  `global_absence_claim_allowed=false`、`answer_authorized=false`；
 - `alr-tw.legal-source-lookup/v1`：精確來源結果，固定 `claim_verified=false`；
 - `alr-tw.legal-analysis-validation/v1`：profiles、各分支 scope、
   core-dimension coverage、民法逐要件舉證責任、server-owned reference
@@ -18,7 +23,7 @@ v0.11.0 流程以持久化 `ResearchRun` 與逐步 result 取代 caller 組裝 a
 
 Trace 不得記錄 API secret。TLR privacy metadata 不得包含未遮罩的 sensitive input。Blocked validation 的 `answer_text` 必須是 `null`；ephemeral validation 另回 `storage_purged=true`。
 
-舊 `alr-tw.agentic_trace/v1` 保留 synthetic／externally-driven compatibility，但不得用它把 caller-attested source 注入 v0.11.0 evidence。
+舊 `alr-tw.agentic_trace/v1` 保留 synthetic／externally-driven compatibility，但不得用它把 caller-attested source 注入 v0.12.0 evidence。
 
 The public trace schema version is `alr-tw.agentic_trace/v1`.
 

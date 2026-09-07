@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta, timezone
 import re
 from threading import RLock
-from typing import Any, Protocol
+from time import perf_counter
+from typing import Any, Literal, Protocol
 import unicodedata
 from uuid import uuid4
 
@@ -27,9 +28,14 @@ from alr_tw.contracts.legal_context import LegalContextProvider
 from alr_tw.contracts.providers import DataMode
 from alr_tw.contracts.research import (
     CoverageState,
+    MAX_JUDGMENT_VERIFICATIONS,
     PrivacyStatus,
     ResearchDepth,
     ResearchBlocker,
+    ResearchBrief,
+    ResearchBriefBlocker,
+    ResearchBriefObligation,
+    ResearchBriefSource,
     ResearchObligation,
     ResearchObligationKind,
     ResearchObligationStatus,
@@ -45,6 +51,7 @@ from alr_tw.contracts.sources import (
     SourceRecord,
     TrustStatus,
 )
+from alr_tw.contracts.provider_snapshot import ProviderSnapshotReceipt
 from alr_tw.storage.sqlite_store import SqliteStore
 from alr_tw.providers.synthetic import SyntheticLegalContextProvider
 from alr_tw.research.counter_authority import CounterAuthorityProgress
@@ -64,8 +71,28 @@ from alr_tw.verification.claim_support import (
 from alr_tw.verification.output_privacy import screen_answer_output
 
 from .state_machine import transition_run
+from .snapshot_receipts import (
+    check_run_snapshot_receipts,
+    issue_run_snapshot_receipts,
+    mark_receipts_inconsistent,
+)
 
 TAIWAN_TIME = timezone(timedelta(hours=8))
+
+_EXPLICIT_LAW_ARTICLE = re.compile(
+    r"[\u4e00-\u9fff]{1,30}(?:法|條例|規則|辦法)第\s*"
+    r"\d+(?:\s*(?:之|-)\s*\d+)*\s*條"
+)
+_JUDGMENT_LOOKUP_MARKERS = (
+    "判決",
+    "裁判",
+    "類案",
+    "法院見解",
+    "裁定",
+    "案號",
+    "字號",
+    "JID",
+)
 
 
 _BINDING_CLAIM_TYPES = {
@@ -81,6 +108,31 @@ _BINDING_CLAIM_TYPES = {
 def _claim_key(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value)
     return re.sub(r"[^\u3400-\u9fffA-Za-z0-9]", "", normalized).lower()
+
+
+def _evidence_query_overlap(query: str, text: str) -> int:
+    query_key = _claim_key(query)
+    text_key = _claim_key(text)
+    if not query_key or not text_key:
+        return 0
+    width = 2 if len(query_key) < 12 else 3
+    grams = {
+        query_key[index : index + width] for index in range(max(1, len(query_key) - width + 1))
+    }
+    return sum(gram in text_key for gram in grams)
+
+
+def _evidence_section_priority(section_type: EvidenceSectionType) -> int:
+    priorities = {
+        EvidenceSectionType.DISPOSITION: 0,
+        EvidenceSectionType.COURT_HOLDING: 1,
+        EvidenceSectionType.HOLDING: 1,
+        EvidenceSectionType.COURT_REASONING: 2,
+        EvidenceSectionType.FACTS: 3,
+        EvidenceSectionType.PROCEDURE: 4,
+        EvidenceSectionType.PARTY_ARGUMENT: 5,
+    }
+    return priorities.get(section_type, 9)
 
 
 def _claims_for_validation(
@@ -143,10 +195,12 @@ def _outcome_reason_codes(outcome: dict[str, Any]) -> tuple[list[str], list[str]
         "EXACT_JUDGMENT_IDENTIFIER_WILL_USE_OFFICIAL_PROVIDER",
     }
     metadata = outcome.get("metadata")
-    if (
-        isinstance(metadata, dict)
-        and metadata.get("status") == "not_found_in_scope"
-    ):
+    verified_subset_failure_codes: set[str] = set()
+    if isinstance(metadata, dict) and metadata.get("verified_source_count", 0) > 0:
+        raw_failed_codes = metadata.get("failed_reason_codes", [])
+        if isinstance(raw_failed_codes, list):
+            verified_subset_failure_codes = {str(code).upper() for code in raw_failed_codes if code}
+    if isinstance(metadata, dict) and metadata.get("status") == "not_found_in_scope":
         # A clean bounded miss is a successful scoped outcome.  It must not
         # become a generic partial/error gap merely because the audit reason
         # is present in the provider metadata.
@@ -169,9 +223,13 @@ def _outcome_reason_codes(outcome: dict[str, Any]) -> tuple[list[str], list[str]
         code = raw_code.upper()
         if "TIMEOUT" in code or "TIMED_OUT" in code:
             timeouts.append(raw_code)
+        elif code in verified_subset_failure_codes:
+            partial.append(raw_code)
         elif code == "TLR_UNAVAILABLE":
             # TLR is an optional recall enhancer.  Its outage is a bounded
             # degradation; official recall/verification remains authoritative.
+            partial.append(raw_code)
+        elif code == "QUICK_JUDGMENT_RECALL_BOUNDED":
             partial.append(raw_code)
         elif any(
             marker in code
@@ -188,6 +246,7 @@ def _outcome_reason_codes(outcome: dict[str, Any]) -> tuple[list[str], list[str]
                 "UNSUPPORTED",
                 "CANDIDATE_ONLY",
                 "NOT_FOUND_IN_SCOPE",
+                "NOT_FOUND",
             )
         ):
             partial.append(raw_code)
@@ -500,6 +559,32 @@ class SyntheticObligationExecutor:
         }
 
 
+def _has_explicit_law_article(query: str) -> bool:
+    return _EXPLICIT_LAW_ARTICLE.search(query) is not None
+
+
+def _is_judgment_lookup_query(query: str) -> bool:
+    normalized = query.upper()
+    if any(marker.upper() in normalized for marker in _JUDGMENT_LOOKUP_MARKERS):
+        return True
+    if re.search(
+        r"[A-Z0-9]{3,12},[^,\r\n]{1,80},[^,\r\n]{1,80},"
+        r"\d+,\d{8},\d+",
+        query,
+        flags=re.IGNORECASE,
+    ):
+        return True
+    return (
+        re.search(
+            r"[\u4e00-\u9fff]{2,24}法院\s*\d{1,3}\s*年度\s*"
+            r"[^,，。；;\r\n]{1,20}?字\s*第\s*\d{1,12}\s*號"
+            r"(?:(?:民事|刑事|行政|懲戒)(?:判決|裁定)?)?",
+            query,
+        )
+        is not None
+    )
+
+
 def _plan_obligations(
     query: str,
     *,
@@ -516,15 +601,20 @@ def _plan_obligations(
     kinds.append(ResearchObligationKind.QUERY_UNDERSTANDING)
     if mode == DataMode.HYBRID_VERIFIED:
         kinds.append(ResearchObligationKind.PRIVACY_SCREEN)
-    kinds.append(ResearchObligationKind.LAW_RESEARCH)
-    if depth in {ResearchDepth.STANDARD, ResearchDepth.DEEP}:
+    quick_judgment_lookup = depth is ResearchDepth.QUICK and _is_judgment_lookup_query(query)
+    # QUICK is query-aware.  A request for similar judgments spends its
+    # bounded budget on candidate recall and exact-content verification; an
+    # explicit statute citation still keeps the law branch in scope.
+    if not quick_judgment_lookup or _has_explicit_law_article(query):
+        kinds.append(ResearchObligationKind.LAW_RESEARCH)
+    if depth in {ResearchDepth.STANDARD, ResearchDepth.DEEP} or quick_judgment_lookup:
         kinds.extend(
             [
                 ResearchObligationKind.JUDGMENT_RECALL,
                 ResearchObligationKind.JUDGMENT_OFFICIAL_VERIFICATION,
             ]
         )
-        if include_counter_authority:
+        if depth is not ResearchDepth.QUICK and include_counter_authority:
             kinds.append(ResearchObligationKind.COUNTER_AUTHORITY)
     if any(token in query for token in ("憲法", "釋字", "憲判字", "基本權")):
         kinds.append(ResearchObligationKind.CONSTITUTIONAL_RESEARCH)
@@ -552,9 +642,7 @@ class ResearchService:
     ):
         self.store = store
         self.executor = executor or SyntheticObligationExecutor()
-        self.legal_context_provider = (
-            legal_context_provider or SyntheticLegalContextProvider()
-        )
+        self.legal_context_provider = legal_context_provider or SyntheticLegalContextProvider()
         self._lock = RLock()
 
     def create_run(
@@ -563,7 +651,8 @@ class ResearchService:
         *,
         mode: DataMode,
         depth: ResearchDepth = ResearchDepth.STANDARD,
-        include_counter_authority: bool = True,
+        max_judgment_verifications: int = MAX_JUDGMENT_VERIFICATIONS,
+        include_counter_authority: bool | None = None,
         ephemeral: bool = False,
         as_of_date: date | None = None,
         retention_seconds: int = 86400,
@@ -573,6 +662,16 @@ class ResearchService:
         normalized_query = query.strip()
         if not normalized_query:
             raise ValueError("query is required")
+        if isinstance(max_judgment_verifications, bool) or not (
+            1 <= max_judgment_verifications <= MAX_JUDGMENT_VERIFICATIONS
+        ):
+            raise ValueError("max_judgment_verifications must be an integer between 1 and 5")
+        if include_counter_authority is None:
+            include_counter_authority = depth is not ResearchDepth.QUICK
+        elif include_counter_authority and depth is ResearchDepth.QUICK:
+            raise ValueError(
+                "include_counter_authority is incompatible with research_depth=quick"
+            )
         timestamp = now or datetime.now(UTC)
         run = ResearchRun(
             run_id=f"run_{uuid4().hex}",
@@ -583,6 +682,7 @@ class ResearchService:
             requested_mode=mode,
             effective_mode=mode,
             research_depth=depth,
+            max_judgment_verifications=max_judgment_verifications,
             include_counter_authority=include_counter_authority,
             ephemeral=ephemeral,
             as_of_date=as_of_date,
@@ -694,6 +794,49 @@ class ResearchService:
         assessed = self._refresh_sufficiency(eligible_run)
         return full_run, assessed
 
+    def _sync_snapshot_receipts(
+        self,
+        run: ResearchRun,
+        *,
+        now: datetime,
+    ) -> list[ProviderSnapshotReceipt]:
+        """Persist receipts issued only from the server's current run material."""
+
+        if run.requested_mode is DataMode.SYNTHETIC:
+            self.store.replace_provider_snapshot_receipts(run.run_id, [])
+            return []
+        sources = self.store.list_sources(run.run_id)
+        evidence = self.store.list_evidence(run.run_id)
+        receipts = issue_run_snapshot_receipts(
+            run,
+            sources,
+            evidence,
+            existing=self.store.list_provider_snapshot_receipts(run.run_id),
+            now=now,
+        )
+        self.store.replace_provider_snapshot_receipts(run.run_id, receipts)
+        return receipts
+
+    def _snapshot_receipts_for_finalization(
+        self,
+        run: ResearchRun,
+        *,
+        now: datetime,
+    ) -> list[ProviderSnapshotReceipt]:
+        """Return only receipts still bound to the exact eligible run material."""
+
+        receipts = self.store.list_provider_snapshot_receipts(run.run_id)
+        check = check_run_snapshot_receipts(
+            run,
+            self.store.list_sources(run.run_id),
+            self.store.list_evidence(run.run_id),
+            receipts,
+            now=now,
+        )
+        if check.valid:
+            return receipts
+        return mark_receipts_inconsistent(receipts) if receipts else []
+
     @staticmethod
     def _finalization_summary(contract: FinalizationContract) -> dict[str, Any]:
         """Compact get_state view; full contract is available through its tool."""
@@ -712,7 +855,98 @@ class ResearchService:
                 if contract.snapshot_consistency is not None
                 else "unknown"
             ),
+            "snapshot_receipt_count": len(contract.snapshot_receipts),
+            "evidence_authorization": (
+                contract.evidence_authorization.model_dump(mode="json")
+                if contract.evidence_authorization is not None
+                else None
+            ),
         }
+
+    def _research_brief(
+        self,
+        run: ResearchRun,
+        contract: FinalizationContract,
+        *,
+        now: datetime,
+    ) -> dict[str, Any]:
+        """Build a source-and-progress brief that can never authorize an answer."""
+
+        verified = sorted(
+            (
+                source
+                for source in self.store.list_sources(run.run_id)
+                if source.expires_at > now
+                and source.trust_status
+                in {TrustStatus.OFFICIAL_VERIFIED, TrustStatus.EVIDENCE_ELIGIBLE}
+            ),
+            key=lambda source: (source.material_type.value, source.citation, source.source_id),
+        )
+        visible = verified[:64]
+        if run.state is ResearchState.BLOCKED or (
+            contract.workflow_complete and contract.answer_mode is AnswerMode.REFUSAL_ONLY
+        ):
+            status: Literal["in_progress", "ready_for_draft", "blocked"] = "blocked"
+        elif contract.workflow_complete:
+            status = "ready_for_draft"
+        else:
+            status = "in_progress"
+
+        actions = list(contract.safe_next_actions)
+        if not contract.workflow_complete:
+            actions.append("以新的 operation_id 繼續完成尚未完成的研究義務。")
+        elif contract.answer_mode is not AnswerMode.REFUSAL_ONLY:
+            actions.append(
+                "僅依 evidence bundle 撰寫草稿，並以 passage 級 claim_bindings 呼叫 "
+                "validate_legal_answer。"
+            )
+        reasons = [item.code for item in contract.blockers]
+        reasons.append("RESEARCH_BRIEF_IS_NOT_A_VALIDATED_ANSWER")
+        brief = ResearchBrief(
+            run_id=run.run_id,
+            status=status,
+            answer_mode=contract.answer_mode,
+            verified_sources=[
+                ResearchBriefSource(
+                    source_id=source.source_id,
+                    material_type=source.material_type.value,
+                    trust_status=(
+                        "official_verified"
+                        if source.trust_status is TrustStatus.OFFICIAL_VERIFIED
+                        else "evidence_eligible"
+                    ),
+                    citation=source.citation,
+                    official_identifier=source.official_identifier,
+                    official_url=source.official_url,
+                    verified_at=source.verified_at,
+                )
+                for source in visible
+            ],
+            verified_source_count=len(verified),
+            omitted_verified_source_count=len(verified) - len(visible),
+            obligations=[
+                ResearchBriefObligation(
+                    kind=item.kind,
+                    status=item.status,
+                    required=item.required,
+                    reason=item.reason[:500],
+                    blocker_code=item.blocker_code,
+                )
+                for item in run.obligations
+            ],
+            blockers=[
+                ResearchBriefBlocker(
+                    code=item.code,
+                    message=item.message[:500],
+                    retryable=item.retryable,
+                )
+                for item in contract.blockers
+            ],
+            reason_codes=sorted(set(reasons)),
+            limitations=sorted(set(run.coverage.limitations)),
+            safe_next_actions=list(dict.fromkeys(actions)),
+        )
+        return brief.model_dump(mode="json")
 
     @staticmethod
     def _refusal_contract(
@@ -753,15 +987,11 @@ class ResearchService:
         run: ResearchRun,
         contract: FinalizationContract,
     ) -> bool:
-        return (
-            not contract.retryable
-            and run.state
-            in {
-                ResearchState.READY_FOR_DRAFT,
-                ResearchState.VALIDATING,
-                ResearchState.BLOCKED,
-            }
-        )
+        return not contract.retryable and run.state in {
+            ResearchState.READY_FOR_DRAFT,
+            ResearchState.VALIDATING,
+            ResearchState.BLOCKED,
+        }
 
     def _persist_refusal_decision(
         self,
@@ -828,7 +1058,14 @@ class ResearchService:
             )
             if refreshed != run:
                 self.store.save_run(refreshed)
-            contract = build_finalization_from_run(assessed, now=timestamp)
+            contract = build_finalization_from_run(
+                assessed,
+                snapshot_receipts=self._snapshot_receipts_for_finalization(
+                    assessed,
+                    now=timestamp,
+                ),
+                now=timestamp,
+            )
             return contract.model_dump(mode="json")
 
     def get_state(
@@ -852,7 +1089,15 @@ class ResearchService:
                 "answer_mode": assessment.answer_mode,
             }
         )
-        contract = build_finalization_from_run(assessed, now=timestamp)
+        contract = build_finalization_from_run(
+            assessed,
+            snapshot_receipts=self._snapshot_receipts_for_finalization(
+                assessed,
+                now=timestamp,
+            ),
+            now=timestamp,
+        )
+        research_brief = self._research_brief(full_run, contract, now=timestamp)
         return {
             "schema_version": "alr-tw.research-state/v1",
             "run": assessed_run.model_dump(mode="json"),
@@ -868,6 +1113,7 @@ class ResearchService:
             "research_answer_mode": assessment.answer_mode.value,
             "sufficiency_reasons": assessment.reason_codes,
             "finalization": self._finalization_summary(contract),
+            "research_brief": research_brief,
             "awaiting_external_plan": (
                 full_run.responsibility.discovery_mode is DiscoveryMode.CLIENT_ASSISTED
                 and registered_plan is None
@@ -888,6 +1134,117 @@ class ResearchService:
                     else None
                 ),
             },
+        }
+
+    def get_evidence_bundle(
+        self,
+        run_id: str,
+        *,
+        max_sources: int = 12,
+        max_judgment_sources: int = 5,
+        max_spans_per_source: int = 8,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Return a bounded read-only view of server-verified source text."""
+
+        if isinstance(max_sources, bool) or not 1 <= max_sources <= 16:
+            raise ValueError("max_sources must be an integer between 1 and 16")
+        if isinstance(max_judgment_sources, bool) or not 1 <= max_judgment_sources <= 5:
+            raise ValueError("max_judgment_sources must be an integer between 1 and 5")
+        if isinstance(max_spans_per_source, bool) or not 1 <= max_spans_per_source <= 10:
+            raise ValueError("max_spans_per_source must be an integer between 1 and 10")
+        run = self._required_run(run_id)
+        timestamp = now or datetime.now(UTC)
+        if run.expires_at <= timestamp:
+            raise ValueError("RESEARCH_RUN_EXPIRED")
+        evidence = self.store.list_evidence(run_id)
+        evidence_by_source: dict[str, list[EvidenceSpan]] = {}
+        for item in evidence:
+            if item.eligible_for_claim_support:
+                evidence_by_source.setdefault(item.source_id, []).append(item)
+        eligible_sources = [
+            source
+            for source in self.store.list_sources(run_id)
+            if source.trust_status is TrustStatus.EVIDENCE_ELIGIBLE
+            and source.expires_at > timestamp
+            and source.source_id in evidence_by_source
+        ]
+        material_priority = {
+            MaterialType.LAW: 0,
+            MaterialType.CONSTITUTIONAL: 1,
+            MaterialType.JUDGMENT: 2,
+        }
+        eligible_sources.sort(
+            key=lambda source: (
+                material_priority.get(source.material_type, 9),
+                source.citation,
+                source.source_id,
+            )
+        )
+        non_judgment_sources = [
+            source
+            for source in eligible_sources
+            if source.material_type is not MaterialType.JUDGMENT
+        ][:max_sources]
+        judgment_budget = min(
+            max_judgment_sources,
+            max(0, max_sources - len(non_judgment_sources)),
+        )
+        selected_sources = [
+            *non_judgment_sources,
+            *[
+                source
+                for source in eligible_sources
+                if source.material_type is MaterialType.JUDGMENT
+            ][:judgment_budget],
+        ]
+        items: list[dict[str, Any]] = []
+        for source in selected_sources:
+            spans = sorted(
+                evidence_by_source[source.source_id],
+                key=lambda span: (
+                    -_evidence_query_overlap(run.query, span.exact_text),
+                    _evidence_section_priority(span.section_type),
+                    span.section_id,
+                ),
+            )
+            selected_spans = spans[:max_spans_per_source]
+            items.append(
+                {
+                    "source": {
+                        "source_id": source.source_id,
+                        "material_type": source.material_type.value,
+                        "provider_id": source.provider_id,
+                        "source_tier": source.source_tier.value,
+                        "trust_status": source.trust_status.value,
+                        "citation": source.citation,
+                        "official_identifier": source.official_identifier,
+                        "official_url": source.official_url,
+                        "verified_at": (
+                            source.verified_at.isoformat()
+                            if source.verified_at is not None
+                            else None
+                        ),
+                        "content_hash": source.content_hash,
+                    },
+                    "evidence": [item.model_dump(mode="json") for item in selected_spans],
+                    "omitted_evidence_count": len(spans) - len(selected_spans),
+                }
+            )
+        return {
+            "schema_version": "alr-tw.research-evidence-bundle/v1",
+            "run_id": run_id,
+            "status": "found" if items else "not_found_in_scope",
+            "source_count": len(items),
+            "available_source_count": len(eligible_sources),
+            "truncated": len(eligible_sources) > len(selected_sources),
+            "bounded_scope": (
+                f"max_sources={max_sources};max_judgment_sources={max_judgment_sources};"
+                f"max_spans_per_source={max_spans_per_source}"
+            ),
+            "global_absence_claim_allowed": False,
+            "answer_authorized": False,
+            "items": items,
         }
 
     def register_research_plan(
@@ -999,10 +1356,13 @@ class ResearchService:
         run = run.model_copy(
             update={
                 "source_ids": sorted(item.source_id for item in self.store.list_sources(run_id)),
-                "evidence_ids": sorted(item.evidence_id for item in self.store.list_evidence(run_id)),
+                "evidence_ids": sorted(
+                    item.evidence_id for item in self.store.list_evidence(run_id)
+                ),
             }
         )
         run = self._refresh_sufficiency(run)
+        self._sync_snapshot_receipts(run, now=datetime.now(UTC))
         self.store.save_run(run)
         return result
 
@@ -1057,7 +1417,10 @@ class ResearchService:
             limitations = set(full_run.coverage.limitations)
             limitations.update(str(item) for item in result.get("limitations", []))
             treatment = result.get("treatment_summary")
-            if isinstance(treatment, dict) and treatment.get("officially_confirmed_reversal") is True:
+            if (
+                isinstance(treatment, dict)
+                and treatment.get("officially_confirmed_reversal") is True
+            ):
                 limitations.add("JUDGMENT_LINEAGE_CONFIRMED_REVERSAL")
                 result["current_holding_use"] = "do_not_rely_as_current_holding"
             else:
@@ -1073,8 +1436,125 @@ class ResearchService:
                 }
             )
             full_run = self._refresh_sufficiency(full_run)
+            self._sync_snapshot_receipts(
+                full_run,
+                now=now or datetime.now(UTC),
+            )
             self.store.save_run(full_run)
             self.store.complete_operation(run_id, operation_id, result)
+            return result
+
+    def execute_run_to_completion(
+        self,
+        run_id: str,
+        *,
+        max_steps: int = 12,
+        operation_prefix: str | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Advance server-owned obligations in one bounded, auditable call.
+
+        The loop stops before final-answer validation because drafting remains
+        external-client owned.  Retryable provider outcomes are returned
+        immediately rather than being hammered inside the same request.
+        """
+
+        if isinstance(max_steps, bool) or not 1 <= max_steps <= 32:
+            raise ValueError("max_steps must be an integer between 1 and 32")
+        prefix = (operation_prefix or f"auto_{uuid4().hex}").strip()
+        if not prefix:
+            raise ValueError("operation_prefix must not be blank")
+
+        with self._lock:
+            execution_started = perf_counter()
+            run = self._required_run(run_id)
+            timestamp = now or datetime.now(UTC)
+            if run.expires_at <= timestamp:
+                raise ValueError("RESEARCH_RUN_EXPIRED")
+            if (
+                run.responsibility.discovery_mode is DiscoveryMode.CLIENT_ASSISTED
+                and run.registered_plan is None
+            ):
+                state = self.get_state(run_id, now=timestamp)
+                return {
+                    "schema_version": "alr-tw.research-execution/v1",
+                    "run_id": run_id,
+                    "stop_reason": "awaiting_external_plan",
+                    "step_count": 0,
+                    "steps": [],
+                    "elapsed_ms": round((perf_counter() - execution_started) * 1000, 3),
+                    "state": state,
+                    "finalization": state["finalization"],
+                }
+
+            steps: list[dict[str, Any]] = []
+            stop_reason = "max_steps_reached"
+            for index in range(max_steps):
+                run = self._required_run(run_id)
+                pending = [
+                    item
+                    for item in run.obligations
+                    if item.status is ResearchObligationStatus.PENDING
+                    and item.kind is not ResearchObligationKind.FINAL_ANSWER_VALIDATION
+                ]
+                if not pending:
+                    stop_reason = "ready_for_draft"
+                    break
+                obligation = pending[0]
+                step_started = perf_counter()
+                step_result = self.continue_run(
+                    run_id,
+                    f"{prefix}.step-{index + 1}.{obligation.kind.value}",
+                    now=now,
+                )
+                outcome = step_result.get("outcome")
+                steps.append(
+                    {
+                        "obligation": obligation.kind.value,
+                        "status": (outcome.get("status") if isinstance(outcome, dict) else None),
+                        "retryable": bool(isinstance(outcome, dict) and outcome.get("retryable")),
+                        "warnings": (
+                            list(outcome.get("warnings", [])) if isinstance(outcome, dict) else []
+                        ),
+                        "provider_calls": (
+                            list(outcome.get("provider_calls", []))
+                            if isinstance(outcome, dict)
+                            else []
+                        ),
+                        "elapsed_ms": round((perf_counter() - step_started) * 1000, 3),
+                    }
+                )
+                if isinstance(outcome, dict) and outcome.get("retryable"):
+                    stop_reason = "retry_required"
+                    break
+            else:
+                run = self._required_run(run_id)
+                if not any(
+                    item.status is ResearchObligationStatus.PENDING
+                    and item.kind is not ResearchObligationKind.FINAL_ANSWER_VALIDATION
+                    for item in run.obligations
+                ):
+                    stop_reason = "ready_for_draft"
+
+            projection_time = now or datetime.now(UTC)
+            state = self.get_state(run_id, now=projection_time)
+            result = {
+                "schema_version": "alr-tw.research-execution/v1",
+                "run_id": run_id,
+                "stop_reason": stop_reason,
+                "step_count": len(steps),
+                "elapsed_ms": round((perf_counter() - execution_started) * 1000, 3),
+                "steps": steps,
+                "state": state,
+                "finalization": state["finalization"],
+            }
+            if stop_reason == "ready_for_draft":
+                result["evidence_bundle"] = self.get_evidence_bundle(
+                    run_id,
+                    max_sources=min(16, run.max_judgment_verifications + 7),
+                    max_judgment_sources=run.max_judgment_verifications,
+                    now=projection_time,
+                )
             return result
 
     def continue_run(
@@ -1243,10 +1723,15 @@ class ResearchService:
             if not remaining:
                 run = transition_run(run, ResearchState.VERIFYING, updated_at=timestamp)
                 run = transition_run(run, ResearchState.READY_FOR_DRAFT, updated_at=timestamp)
-            elif not retryable_codes and obligation.kind in {
-                ResearchObligationKind.JUDGMENT_OFFICIAL_VERIFICATION,
-                ResearchObligationKind.EVIDENCE_SUFFICIENCY,
-            } and run.state == ResearchState.RESEARCHING:
+            elif (
+                not retryable_codes
+                and obligation.kind
+                in {
+                    ResearchObligationKind.JUDGMENT_OFFICIAL_VERIFICATION,
+                    ResearchObligationKind.EVIDENCE_SUFFICIENCY,
+                }
+                and run.state == ResearchState.RESEARCHING
+            ):
                 run = transition_run(run, ResearchState.VERIFYING, updated_at=timestamp)
             run = self._apply_outcome_coverage(
                 run,
@@ -1261,22 +1746,19 @@ class ResearchService:
                 ),
                 demote_codes=demoted_recall_codes,
             )
-            if (
-                not retryable_codes
-                and "SEMANTIC_RECALL_DEGRADED" in previous_retry_codes
-            ):
+            if not retryable_codes and "SEMANTIC_RECALL_DEGRADED" in previous_retry_codes:
                 restore_updates: dict[str, Any] = {"semantic_recall_degraded": False}
-                if (
-                    run.requested_mode is DataMode.HYBRID_VERIFIED
-                    and run.privacy_status
-                    in {
-                        PrivacyStatus.SAFE,
-                        PrivacyStatus.REDACTED_SAFE,
-                    }
-                ):
+                if run.requested_mode is DataMode.HYBRID_VERIFIED and run.privacy_status in {
+                    PrivacyStatus.SAFE,
+                    PrivacyStatus.REDACTED_SAFE,
+                }:
                     restore_updates["effective_mode"] = run.requested_mode
                 run = run.model_copy(update=restore_updates)
             run = self._refresh_sufficiency(run)
+            self._sync_snapshot_receipts(
+                run,
+                now=now or datetime.now(UTC),
+            )
             self.store.save_run(run)
             result = self._result(run, outcome, replayed=False)
             self.store.complete_operation(run_id, operation_id, result)
@@ -1514,7 +1996,14 @@ class ResearchService:
                     "answer_mode": assessed.answer_mode,
                 }
             )
-            finalization = build_finalization_from_run(assessed, now=timestamp)
+            finalization = build_finalization_from_run(
+                assessed,
+                snapshot_receipts=self._snapshot_receipts_for_finalization(
+                    assessed,
+                    now=timestamp,
+                ),
+                now=timestamp,
+            )
             claim = self.store.record_operation(
                 run_id,
                 operation_id,

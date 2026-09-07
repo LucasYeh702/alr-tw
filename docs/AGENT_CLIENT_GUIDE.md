@@ -5,9 +5,9 @@ LLM and no agent implementation. The external MCP client supplies the agent
 role; the harness records tool calls, validates citations, computes the trust
 gate, and returns a canonical trace.
 
-## v0.11.0 agent tool profiles and selection
+## v0.12.0 agent tool profiles and selection
 
-v0.11.0 provides a profile-gated MCP catalog and an optional Legislative Yuan
+v0.12.0 provides a profile-gated MCP catalog and an optional Legislative Yuan
 locator connector while preserving the server-owned trust boundary.
 
 The MCP catalog classifies tools as `server_owned`, `legacy_compatibility`, or
@@ -30,8 +30,9 @@ catalog entry directly returns `TOOL_NOT_AVAILABLE_IN_PROFILE`.
 | Use case | First choice | Boundary |
 |---|---|---|
 | Single formal authority lookup | `lookup_legal_source` | Source lookup is not answer validation |
+| Fast bounded judgment research | `/quick` with `execute_legal_research` | At most five exact official checks; verified subset only, no completeness, finality, or consensus claim |
 | Bounded appeal-chain check for a same-run verified judgment | `inspect_judgment_lineage` | TLR history is candidate metadata; related nodes require official verification, no upper record does not establish finality, and opinion comparison is not performed |
-| Multi-step research | `research_legal_question` and `continue_legal_research` | Continue server-owned obligations by `operation_id` |
+| Granular or client-assisted research | `research_legal_question` and `continue_legal_research` | Continue server-owned obligations by `operation_id` |
 | Analysis validation | `validate_legal_analysis` | Validate the untrusted analysis envelope and references |
 | Answer validation | `validate_legal_answer` | Validate claims against evidence from the same run |
 | Synthetic demo or CI | `agentic_legal_research`, `legal_search`, `run_agentic_demo`, `build_validation_report`, `exact_law_lookup`, `exact_judgment_lookup`, and `exact_constitutional_lookup` | Synthetic fixtures only; never for real cases |
@@ -69,7 +70,7 @@ answer use. Synthetic mode never calls the connector. In `official_only` or
 `lookup_legislative_history`; merely starting the stdio server or listing tools
 does not fetch Legislative Yuan data.
 
-## v0.11.0 agent-neutral research flow
+## v0.12.0 agent-neutral research flow
 
 New clients should first call `get_legal_research_capabilities`.
 
@@ -106,14 +107,44 @@ source verification:
    `validated` or `qualified` result returned by `validate_legal_answer`; a
    `refusal_only` finalization must not render a draft.
 
-The snapshot receipt is a provider-neutral contract, not a promise that the
-built-in providers issue one. The bundled `ResearchService` does not currently
-inject or persist live-provider generation receipts, so its live finalization
-is at most `conditional` or `qualified` (normally with
-`SNAPSHOT_RECEIPT_MISSING_LEGACY`). `ordinary` is reserved for a deployment
-with a receipt-aware provider adapter and a server-owned receipt binding for
-the same run. A finalization result may expose `safe_to_draft`; it never
-authorizes presentation.
+### Quick server-managed path
+
+For a judgment-finding task, the client may call `execute_legal_research` with a
+query beginning `/quick ` or `快速模式：`, or set
+`constraints.research_depth=quick`. The composite tool creates the run and
+executes its currently available server-owned obligations in one request. It
+returns a bounded evidence bundle only at `ready_for_draft`; the bundle is not
+an answer and is marked `answer_authorized=false`.
+
+Quick mode changes breadth, not authenticity. It still performs privacy
+screening in hybrid mode, candidate recall, canonical-JID/formal-citation
+resolution, at most five exact official checks, and evidence sufficiency. It
+does not schedule counter-authority or lineage expansion by default, and only
+schedules law research when the query explicitly cites a statute article. A
+verified subset with gaps is `qualified` / `conditional`; no verified source is
+`refusal_only`. In both cases the final draft must pass
+`validate_legal_answer`.
+
+When the run is incomplete or blocked, read `research_brief` from
+`get_legal_research_state`. It is the supported non-answer exit: it contains
+verified source locators, obligation progress, blockers, and safe next actions,
+but never a draft conclusion and always sets `answer_authorized=false` and
+`safe_to_present=false`. Do not bypass the service by reading its SQLite store.
+
+The evidence bundle is passage-oriented. It returns at most five judgment
+sources while reserving bounded capacity for law and constitutional sources.
+For large runs, `allowed_evidence_ids` is only a 512-ID compatibility preview;
+the full passage set is digest-bound in `evidence_authorization`, and final
+validation resolves only the IDs actually named by `claim_bindings` against
+the server-owned run.
+
+The bundled `ResearchService` issues and persists a provider-neutral snapshot
+receipt for each provider's exact, eligible official/verified-cache material
+set in the same run. Finalization recomputes that server-owned binding and does
+not trust caller receipts. `ordinary` is reachable only when the receipt set and
+all other gates pass; a missing receipt is at most `conditional`, while an
+expired, cross-run, or mismatched set fails closed. A finalization result may
+expose `safe_to_draft`; it never authorizes presentation.
 
 Do not call a full second recall workflow after selecting `server_managed`.
 Do not call TLR or an official judgment search again after selecting
@@ -132,7 +163,7 @@ Counter-authority results are bounded lexical candidate discovery followed by
 official verification; they do not establish semantic opposition, global
 absence, or practice-wide consensus.
 
-The v0.11.0 public contracts also expose structural applicability resolution,
+The v0.12.0 public contracts also expose structural applicability resolution,
 authority/judgment lineage, and public-law provider adapters. Use the
 provider-neutral interfaces for explicit source relationships, court/procedure
 metadata, administrative rules or legislative materials. These records remain

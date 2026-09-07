@@ -1,6 +1,6 @@
 # Architecture
 
-ALR-TW v0.11.0 將「agent 決定如何推理」與「server 決定何者可信」分開。外部 agent 可以提出查詢、逐步呼叫工具、提交爭點與法源 locator 並起草答案，但不能注入正式證據或跳過 obligations。v0.11.0 將這條邊界做成 agent-neutral interoperability contract，不依賴特定前端專案。
+ALR-TW v0.12.0 將「agent 決定如何推理」與「server 決定何者可信」分開。外部 agent 可以提出查詢、逐步呼叫工具、提交爭點與法源 locator 並起草答案，但不能注入正式證據或跳過 obligations。v0.12.0 將這條邊界做成 agent-neutral interoperability contract，不依賴特定前端專案。
 
 ALR-TW 是獨立的、前端無關且 provider-neutral 的公開法律研究驗證 harness，
 以 contract-first 方式提供可公開的 contracts、validators、synthetic fixtures
@@ -16,6 +16,7 @@ MCP client / external agent
 ResearchService
   - ResearchRun state machine
   - ordered obligations
+  - bounded autonomous execution
   - idempotent operations
   - final validation
   - research sufficiency / Coverage v2
@@ -31,8 +32,8 @@ ProviderObligationExecutor
   +--------------------+----------------------+-------------------+
                             ^
                             |
-                  TLR candidate-only recall
-                  (hybrid_verified + privacy gate)
+          CandidateRecallProvider / LineageCandidateProvider
+          (TLR reference adapter; candidate-only + privacy gate)
         |
         v
 SqliteStore
@@ -91,14 +92,20 @@ context 全部通過，才可通過結構與 trust validation。這仍不等於�
 
 ## Compatibility
 
-`alr_tw.*` 是 v0.11.0 中立 contracts、providers、research 與 storage 的主命名空間。`tw_legal_rag_mcp.*` 保留 legacy synthetic／trace 工具並承載 MCP stdio server。兩者共用 source tier 與 fail-closed invariants；新功能不得反向依賴 client-controlled provenance。Legacy answer／provider-promotion 邊界收到的 raw citation mappings 固定視為 caller-controlled，metadata-only answer helper 不具有答案呈現授權能力。
+`alr_tw.*` 是 v0.12.0 中立 contracts、providers、research 與 storage 的主命名空間。`tw_legal_rag_mcp.*` 保留 legacy synthetic／trace 工具並承載 MCP stdio server。兩者共用 source tier 與 fail-closed invariants；新功能不得反向依賴 client-controlled provenance。Legacy answer／provider-promotion 邊界收到的 raw citation mappings 固定視為 caller-controlled，metadata-only answer helper 不具有答案呈現授權能力。
 
-## v0.11.0 changes
+## v0.12.0 changes
 
-本版新增有界歷審檢查、TLR 行政函釋候選與長全文分頁，以及可選唯讀本機裁判
-provider。歷審關係由 TLR 提供候選，官方正文仍由設定的裁判 provider 驗證；
-主文分類不等於前後審見解的語義比較。資料層可替換，source／evidence 與答案
-授權仍由 ALR-TW 管理。
+本版新增 prompt-selectable quick mode 與 `execute_legal_research`：裁判型 quick
+query 只縮減未要求的研究廣度，仍以最多五件預算逐件完成 JID／正式字號與官方
+內容驗證。若至少一件通過，其他候選失敗或被截斷只允許
+`qualified`／`conditional`；`0` 件通過仍 fail closed。候選召回與歷審候選改由
+provider-neutral protocols 注入，TLR 為 reference adapter；source／evidence 與
+答案授權仍由 ALR-TW 管理。
+
+本版並加入 conformance-envelope CLI 與 ChronoLex-TW evaluation adapter。前者
+不宣稱能解析任意私有資料庫，後者不內附資料集或歷史法規 provider。完整候選
+邊界見 [v0.12.0 Candidate Scope](docs/V0120_RELEASE_SCOPE.md)。
 
 ## Agent 工具面與立法院資料定位
 
@@ -126,7 +133,8 @@ Agent-neutral tool selection remains small and deterministic at the contract lev
 | Intent | First tool |
 |---|---|
 | Single formal authority lookup | `lookup_legal_source` |
-| Multi-step research | `research_legal_question` + `continue_legal_research` |
+| Fast bounded judgment research | `/quick` + `execute_legal_research` |
+| Granular／client-assisted research | `research_legal_question` + `continue_legal_research` |
 | Analysis envelope validation | `validate_legal_analysis` |
 | Answer validation | `validate_legal_answer` |
 | Synthetic demo／CI | Synthetic demo catalog tools only; never for real cases |
@@ -157,8 +165,9 @@ metadata binding 與 source promotion。沒有正式公布版本時維持 `quali
 ranking 參數、private manifests、operator state、gold labels 或使用者資料。
 Live providers 是有界即時查詢，不保證外部服務可用或全域完整召回。
 
-Snapshot receipt 是 provider-neutral 的公開契約，不是內建 provider 已簽發的
-runtime 保證。v0.11.0 內建 `ResearchService` 尚未注入或持久化 live-provider
-generation receipt；因此服務端 finalization 最多為 `conditional`／`qualified`。
-`ordinary` 只保留給自行接入 receipt-aware provider adapter 並完成 server-owned
-同 run receipt binding 的部署。
+Snapshot receipt 是 provider-neutral 的公開契約。v0.12.0 內建
+`ResearchService` 會為同一 run 中通過官方／可信快取閘門的 source／evidence
+材料集合簽發、持久化 receipt，並在 finalization 時從 server-owned store 重算
+binding。只有 receipt 完整、未過期且其他閘門均通過時才可回 `ordinary`；缺失
+最高為 `conditional`，跨 run、過期或材料不一致則 fail closed。這個 receipt
+不證明 recall completeness、finality 或 consensus。

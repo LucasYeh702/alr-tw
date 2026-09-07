@@ -9,7 +9,7 @@ import json
 import re
 import zipfile
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Callable
 
 from alr_tw.contracts.providers import (
     ProviderCapabilities,
@@ -28,7 +28,7 @@ from alr_tw.contracts.sources import (
     TrustStatus,
 )
 
-from .http import HttpTransport, HttpxAllowlistedTransport
+from .http import HttpTransport, HttpxAllowlistedTransport, safe_transport_error
 
 LAW_DATA_URL = "https://law.moj.gov.tw/api/ch/law/json"
 LAW_HOST = "law.moj.gov.tw"
@@ -48,13 +48,21 @@ class OfficialLawProvider:
         timeout: float = 20.0,
         snapshot_ttl: timedelta = timedelta(hours=24),
         verify_webpage: bool = True,
+        clock: Callable[[], datetime] | None = None,
     ):
+        if snapshot_ttl <= timedelta(0):
+            raise ValueError("snapshot_ttl must be positive")
         self.transport = transport or HttpxAllowlistedTransport({LAW_HOST})
         self.timeout = timeout
         self.snapshot_ttl = snapshot_ttl
         self.verify_webpage = verify_webpage
         self._laws: list[dict[str, Any]] | None = None
         self._dataset_updated_at: str | None = None
+        self._clock = clock or (lambda: datetime.now(UTC))
+        self._dataset_fetched_at: datetime | None = None
+        self._dataset_verified_at: datetime | None = None
+        self._dataset_expires_at: datetime | None = None
+        self._dataset_digest: str | None = None
 
     def capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(
@@ -79,7 +87,7 @@ class OfficialLawProvider:
                 provider_id=self.provider_id,
                 status=ProviderHealthStatus.UNAVAILABLE,
                 error_code=ProviderErrorCode.OFFICIAL_SOURCE_UNAVAILABLE.value,
-                message=type(exc).__name__,
+                message=safe_transport_error(exc),
             )
         if response.status_code != 200:
             return ProviderHealth(
@@ -90,14 +98,62 @@ class OfficialLawProvider:
             )
         return ProviderHealth(provider_id=self.provider_id, status=ProviderHealthStatus.HEALTHY)
 
-    async def load(self, *, force: bool = False) -> ProviderResult:
-        if self._laws is not None and not force:
+    def _now(self, override: datetime | None = None) -> datetime:
+        value = override if override is not None else self._clock()
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("law provider clock must be timezone-aware")
+        return value.astimezone(UTC)
+
+    def _snapshot_is_fresh(self, timestamp: datetime) -> bool:
+        return (
+            self._laws is not None
+            and self._dataset_fetched_at is not None
+            and self._dataset_verified_at is not None
+            and self._dataset_expires_at is not None
+            and self._dataset_fetched_at <= timestamp < self._dataset_expires_at
+        )
+
+    def _clear_snapshot(self) -> None:
+        self._laws = None
+        self._dataset_updated_at = None
+        self._dataset_fetched_at = None
+        self._dataset_verified_at = None
+        self._dataset_expires_at = None
+        self._dataset_digest = None
+
+    def _snapshot_metadata(self) -> dict[str, Any]:
+        return {
+            "dataset_updated_at": self._dataset_updated_at,
+            "dataset_fetched_at": (
+                self._dataset_fetched_at.isoformat() if self._dataset_fetched_at else None
+            ),
+            "dataset_verified_at": (
+                self._dataset_verified_at.isoformat() if self._dataset_verified_at else None
+            ),
+            "dataset_expires_at": (
+                self._dataset_expires_at.isoformat() if self._dataset_expires_at else None
+            ),
+            "dataset_digest": self._dataset_digest,
+        }
+
+    async def load(
+        self, *, force: bool = False, now: datetime | None = None,
+    ) -> ProviderResult:
+        timestamp = self._now(now)
+        if not force and self._snapshot_is_fresh(timestamp):
+            assert self._laws is not None
             return ProviderResult(
                 status=ProviderResultStatus.FOUND,
                 provider_id=self.provider_id,
                 coverage_complete=True,
-                metadata={"law_count": len(self._laws), "cache": "memory"},
+                metadata={
+                    **self._snapshot_metadata(),
+                    "law_count": len(self._laws),
+                    "cache": "memory",
+                },
             )
+        # 到期或強制重新取得時先撤銷舊快照；失敗不可回退或更新舊資料時間。
+        self._clear_snapshot()
         try:
             response = await self.transport.get(
                 LAW_DATA_URL,
@@ -105,21 +161,35 @@ class OfficialLawProvider:
                 max_bytes=MAX_ARCHIVE_BYTES,
             )
         except Exception as exc:
-            return self._error(ProviderErrorCode.OFFICIAL_SOURCE_UNAVAILABLE, type(exc).__name__)
+            return self._error(
+                ProviderErrorCode.OFFICIAL_SOURCE_UNAVAILABLE,
+                safe_transport_error(exc),
+            )
         if response.status_code != 200:
             return self._error(
                 ProviderErrorCode.OFFICIAL_SOURCE_UNAVAILABLE,
                 f"HTTP_{response.status_code}",
             )
         try:
-            self._laws, self._dataset_updated_at = self.parse_archive(response.content)
+            laws, updated_at = self.parse_archive(response.content)
         except (ValueError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
             return self._error(ProviderErrorCode.OFFICIAL_PARSE_ERROR, str(exc))
+        verified_at = self._now(now)
+        expires_at = timestamp + self.snapshot_ttl
+        if not timestamp <= verified_at < expires_at:
+            return self._error(ProviderErrorCode.SOURCE_STALE, "LAW_SNAPSHOT_EXPIRED_DURING_LOAD")
+        # 完成解析後才一起安裝快照；期限以本次實際下載的起始觀察時間為準。
+        self._laws = laws
+        self._dataset_updated_at = updated_at
+        self._dataset_fetched_at = timestamp
+        self._dataset_verified_at = verified_at
+        self._dataset_expires_at = expires_at
+        self._dataset_digest = "sha256:" + hashlib.sha256(response.content).hexdigest()
         return ProviderResult(
             status=ProviderResultStatus.FOUND,
             provider_id=self.provider_id,
             coverage_complete=True,
-            metadata={"law_count": len(self._laws), "dataset_updated_at": self._dataset_updated_at},
+            metadata={**self._snapshot_metadata(), "law_count": len(laws), "cache": "network"},
         )
 
     @staticmethod
@@ -153,10 +223,16 @@ class OfficialLawProvider:
         *,
         now: datetime | None = None,
     ) -> tuple[ProviderResult, SourceRecord | None, EvidenceSpan | None]:
-        loaded = await self.load()
+        loaded = await self.load(now=now)
         if loaded.status == ProviderResultStatus.ERROR:
             return loaded, None, None
+        timestamp = self._now(now)
+        if not self._snapshot_is_fresh(timestamp):
+            return self._error(ProviderErrorCode.SOURCE_STALE, "LAW_SNAPSHOT_EXPIRED"), None, None
         assert self._laws is not None
+        assert self._dataset_fetched_at is not None
+        assert self._dataset_verified_at is not None
+        assert self._dataset_expires_at is not None
         normalized_name = law_name.strip()
         normalized_article = self.normalize_article_no(article_no)
         law = next((item for item in self._laws if item.get("LawName") == normalized_name), None)
@@ -179,7 +255,6 @@ class OfficialLawProvider:
         text = str(article.get("ArticleContent", "")).strip()
         if not text:
             return self._error(ProviderErrorCode.OFFICIAL_PARSE_ERROR, "ARTICLE_CONTENT_EMPTY"), None, None
-        timestamp = now or datetime.now(UTC)
         official_url = str(law["LawURL"])
         if not self._is_official_url(official_url):
             return self._error(ProviderErrorCode.OFFICIAL_SCHEMA_CHANGED, "LAW_URL_NOT_OFFICIAL"), None, None
@@ -203,9 +278,9 @@ class OfficialLawProvider:
             official_url=official_url,
             citation=f"{normalized_name}第{normalized_article}條",
             title=normalized_name,
-            fetched_at=timestamp,
-            verified_at=timestamp,
-            expires_at=timestamp + self.snapshot_ttl,
+            fetched_at=self._dataset_fetched_at,
+            verified_at=self._dataset_verified_at,
+            expires_at=self._dataset_expires_at,
             content_hash=content_hash,
             normalized_content_hash=content_hash,
             normalized_text=text,
@@ -213,7 +288,8 @@ class OfficialLawProvider:
                 "law_modified_date": law.get("LawModifiedDate"),
                 "law_effective_date": law.get("LawEffectiveDate"),
                 "law_abandon_note": law.get("LawAbandonNote"),
-                "dataset_updated_at": self._dataset_updated_at,
+                **self._snapshot_metadata(),
+                "lookup_checked_at": timestamp.isoformat(),
                 "article_no": normalized_article,
             },
             warnings=["LAW_REPEALED"] if law.get("LawAbandonNote") else [],
@@ -228,7 +304,14 @@ class OfficialLawProvider:
         )
         conflict = False
         if self.verify_webpage and not law.get("LawAbandonNote"):
-            source, evidence, conflict = await self._verify_webpage(source, evidence)
+            source, evidence, conflict = await self._verify_webpage(source, evidence, now=now)
+        # 網頁複核不得替結構化快照續期；長時間查詢跨過期限也不得輸出可用證據。
+        if not source.fetched_at <= self._now(now) < source.expires_at:
+            return (
+                self._error(ProviderErrorCode.SOURCE_STALE, "LAW_SNAPSHOT_EXPIRED_DURING_LOOKUP"),
+                None,
+                None,
+            )
         status = ProviderResultStatus.FOUND
         result = ProviderResult(
             status=ProviderResultStatus.ERROR if conflict else status,
@@ -246,6 +329,8 @@ class OfficialLawProvider:
         self,
         source: SourceRecord,
         evidence: EvidenceSpan,
+        *,
+        now: datetime | None = None,
     ) -> tuple[SourceRecord, EvidenceSpan, bool]:
         assert source.official_url is not None
         try:
@@ -255,7 +340,7 @@ class OfficialLawProvider:
                 max_bytes=MAX_WEBPAGE_BYTES,
             )
         except Exception as exc:
-            warning = f"OFFICIAL_WEB_RECHECK_UNAVAILABLE:{type(exc).__name__}"
+            warning = f"OFFICIAL_WEB_RECHECK_UNAVAILABLE:{safe_transport_error(exc)}"
             return source.model_copy(update={"warnings": source.warnings + [warning]}), evidence, False
         if response.status_code != 200:
             warning = f"OFFICIAL_WEB_RECHECK_UNAVAILABLE:HTTP_{response.status_code}"
@@ -273,7 +358,15 @@ class OfficialLawProvider:
         normalized_page = re.sub(r"\s+", "", visible)
         normalized_evidence = re.sub(r"\s+", "", evidence.exact_text)
         if normalized_evidence in normalized_page:
-            return source, evidence, False
+            # 額外複核時間與資料集取得／解析時間分離，既有期限保持不變。
+            return (
+                source.model_copy(update={"metadata": {
+                    **source.metadata,
+                    "webpage_verified_at": self._now(now).isoformat(),
+                }}),
+                evidence,
+                False,
+            )
         return (
             source.model_copy(
                 update={

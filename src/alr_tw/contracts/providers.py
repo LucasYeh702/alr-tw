@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from enum import Enum
+from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
+
+from .sources import SourceRecord
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -91,6 +94,7 @@ class ProviderErrorCode(str, Enum):
     JUDGMENT_CONTENT_MISSING = "JUDGMENT_CONTENT_MISSING"
     JUDGMENT_TEXT_EMPTY = "JUDGMENT_TEXT_EMPTY"
     CANDIDATE_OFFICIAL_ID_MISMATCH = "CANDIDATE_OFFICIAL_ID_MISMATCH"
+    PROVIDER_RESULT_CONTRACT_VIOLATION = "PROVIDER_RESULT_CONTRACT_VIOLATION"
 
 
 class CandidateIdentity(BaseModel):
@@ -147,6 +151,44 @@ class LegalSourceProvider(Protocol):
     def capabilities(self) -> ProviderCapabilities: ...
 
     async def health_check(self) -> ProviderHealth: ...
+
+
+@runtime_checkable
+class CandidatePrivacyDecision(Protocol):
+    """Minimum provider-neutral privacy receipt required by candidate recall."""
+
+    @property
+    def status(self) -> object: ...
+
+    @property
+    def allowed(self) -> bool: ...
+
+
+@runtime_checkable
+class CandidateRecallProvider(Protocol):
+    """Candidate-only fuzzy retrieval; returned text never becomes evidence."""
+
+    @property
+    def provider_id(self) -> str: ...
+
+    async def search(
+        self,
+        query: str,
+        *,
+        top_k: int = 5,
+        now: datetime | None = None,
+    ) -> tuple[ProviderResult, list[SourceRecord], CandidatePrivacyDecision]: ...
+
+
+@runtime_checkable
+class LineageCandidateProvider(CandidateRecallProvider, Protocol):
+    """Candidate-only appellate history lookup used before exact verification."""
+
+    async def case_history(
+        self,
+        provider_document_id: str,
+        result_token: str,
+    ) -> tuple[ProviderResult, Any | None]: ...
 
 
 class BrowserSessionProvider(Protocol):

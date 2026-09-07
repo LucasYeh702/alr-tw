@@ -48,7 +48,7 @@ def test_mcp_initialize_returns_server_metadata():
     assert response["result"]["protocolVersion"] == "2024-11-05"
     assert response["result"]["serverInfo"] == {
         "name": "alr-tw",
-        "version": "0.11.0",
+        "version": "0.12.0",
     }
     assert response["result"]["capabilities"] == {"tools": {}}
 

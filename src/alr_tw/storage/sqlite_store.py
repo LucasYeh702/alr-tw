@@ -13,6 +13,7 @@ import sqlite3
 from threading import RLock
 from typing import Any
 
+from alr_tw.contracts.provider_snapshot import ProviderSnapshotReceipt
 from alr_tw.contracts.providers import ProviderCandidate
 from alr_tw.contracts.civil_analysis import CounterAuthorityRelationReceipt
 from alr_tw.contracts.research import ResearchRun
@@ -85,11 +86,23 @@ CREATE TABLE IF NOT EXISTS counter_authority_relation_receipts (
     validated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS provider_snapshot_receipts (
+    run_id TEXT NOT NULL REFERENCES research_runs(run_id) ON DELETE CASCADE,
+    provider_id TEXT NOT NULL,
+    receipt_id TEXT NOT NULL UNIQUE,
+    payload_json TEXT NOT NULL,
+    issued_at TEXT NOT NULL,
+    expires_at TEXT,
+    PRIMARY KEY (run_id, provider_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_research_runs_expires ON research_runs(expires_at);
 CREATE INDEX IF NOT EXISTS idx_source_records_expires ON source_records(expires_at);
 CREATE INDEX IF NOT EXISTS idx_evidence_run ON evidence_spans(run_id);
 CREATE INDEX IF NOT EXISTS idx_counter_relation_run
     ON counter_authority_relation_receipts(run_id);
+CREATE INDEX IF NOT EXISTS idx_provider_snapshot_run
+    ON provider_snapshot_receipts(run_id);
 """
 
 
@@ -430,9 +443,59 @@ class SqliteStore:
                 (run_id,),
             ).fetchall()
         return [
-            CounterAuthorityRelationReceipt.model_validate_json(row["payload_json"])
-            for row in rows
+            CounterAuthorityRelationReceipt.model_validate_json(row["payload_json"]) for row in rows
         ]
+
+    def replace_provider_snapshot_receipts(
+        self,
+        run_id: str,
+        receipts: list[ProviderSnapshotReceipt],
+    ) -> None:
+        """Atomically replace the current server-owned receipt set for one run."""
+
+        provider_ids = [item.provider_id for item in receipts]
+        receipt_ids = [item.receipt_id for item in receipts]
+        if len(provider_ids) != len(set(provider_ids)):
+            raise ValueError("snapshot receipt provider IDs must be unique per run")
+        if len(receipt_ids) != len(set(receipt_ids)):
+            raise ValueError("snapshot receipt IDs must be unique")
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._require_run(connection, run_id)
+            connection.execute(
+                "DELETE FROM provider_snapshot_receipts WHERE run_id = ?",
+                (run_id,),
+            )
+            connection.executemany(
+                """
+                INSERT INTO provider_snapshot_receipts(
+                    run_id, provider_id, receipt_id, payload_json, issued_at, expires_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        run_id,
+                        item.provider_id,
+                        item.receipt_id,
+                        item.model_dump_json(),
+                        item.issued_at.isoformat(),
+                        item.expires_at.isoformat() if item.expires_at is not None else None,
+                    )
+                    for item in receipts
+                ],
+            )
+            connection.commit()
+
+    def list_provider_snapshot_receipts(self, run_id: str) -> list[ProviderSnapshotReceipt]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT payload_json FROM provider_snapshot_receipts
+                WHERE run_id = ? ORDER BY provider_id, receipt_id
+                """,
+                (run_id,),
+            ).fetchall()
+        return [ProviderSnapshotReceipt.model_validate_json(row["payload_json"]) for row in rows]
 
     def get_operation(self, run_id: str, operation_id: str) -> dict[str, Any] | None:
         with self._connection() as connection:
