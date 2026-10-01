@@ -37,7 +37,7 @@ def _run(run_id: str) -> ResearchRun:
 def test_cli_purge_run_uses_managed_store(tmp_path: Path, capsys) -> None:
     root = tmp_path / "cache"
     store = SqliteStore(root)
-    store.save_run(_run("run-cli"))
+    store.create_run(_run("run-cli"))
 
     exit_code = main(
         ["purge", "--run", "run-cli", "--confirm", "--storage-path", str(root)]

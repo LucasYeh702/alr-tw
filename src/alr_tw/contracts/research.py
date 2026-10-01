@@ -15,6 +15,7 @@ from .interop import (
     ResearchResponsibility,
 )
 from .providers import DataMode
+from .budget import ResearchBudget
 
 
 _PROVIDER_SCOPE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -275,6 +276,7 @@ def _is_aware(value: datetime) -> bool:
 class ResearchRun(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    budget: ResearchBudget = Field(default_factory=ResearchBudget)
     schema_version: str = "alr-tw.research-run/v1"
     run_id: str = Field(min_length=1)
     query: str = Field(min_length=1)

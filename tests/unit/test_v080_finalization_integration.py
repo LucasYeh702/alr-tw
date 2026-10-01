@@ -308,7 +308,7 @@ def test_refusal_does_not_echo_draft_and_operation_replay_is_idempotent(tmp_path
     assert isinstance(result["required_qualification"], list)
     assert secret_draft not in encoded
 
-    replay = service.validate_answer(run_id, "另一份草稿", "validate-refusal", now=NOW)
+    replay = service.validate_answer(run_id, secret_draft, "validate-refusal", now=NOW)
     assert replay == result
     persisted = service.get_run(run_id)
     assert persisted is not None

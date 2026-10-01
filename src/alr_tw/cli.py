@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -166,6 +167,67 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="alr-tw")
     subcommands = parser.add_subparsers(dest="command", required=True)
 
+    quick = subcommands.add_parser("quick-research", help="快速召回並回查至多五件裁判")
+    quick.add_argument("--query", required=True)
+    quick.add_argument("--max-judgments", type=int, choices=range(1, 6), default=5)
+    quick.add_argument("--max-steps", type=int, choices=range(1, 33), default=12)
+    quick.add_argument("--as-of-date")
+    quick.add_argument("--storage-path")
+
+    status = subcommands.add_parser("research-status", help="查看研究進度與待補資料")
+    status.add_argument("--run", dest="run_id", required=True)
+    status.add_argument("--storage-path")
+
+    draft = subcommands.add_parser("validate-draft", help="以同次研究證據驗證草稿 JSON")
+    draft.add_argument("--run", dest="run_id", required=True)
+    draft.add_argument("--input", dest="input_path", required=True)
+    draft.add_argument("--operation-id")
+    draft.add_argument("--storage-path")
+
+    for command in ("review-draft", "complete-research", "advise-draft"):
+        workflow = subcommands.add_parser(command, help="檢視內部草稿或接續研究並嚴格驗證")
+        workflow.add_argument("--run", dest="run_id", required=True)
+        workflow.add_argument("--input", dest="input_path", required=True)
+        workflow.add_argument("--storage-path")
+        if command == "advise-draft":
+            workflow.add_argument("--gateway-config", required=True)
+        if command == "complete-research":
+            workflow.add_argument("--operation-id", required=True)
+            workflow.add_argument("--max-steps", type=int, choices=range(1, 33), default=12)
+
+    pack = subcommands.add_parser("import-pack", help="驗證並匯入經認證的離線裁判資料包")
+    pack.add_argument("input_path")
+    pack.add_argument("--manifest", required=True)
+    pack.add_argument("--key-file", required=True)
+    pack.add_argument("--destination", required=True)
+
+    builder = subcommands.add_parser("build-pack", help="由本機核對過的匯出資料建置資料包")
+    builder.add_argument("input_path")
+    builder.add_argument("--key-file", required=True)
+    builder.add_argument("--destination", required=True)
+    inspector = subcommands.add_parser("inspect-pack", help="驗證資料包並顯示品質摘要")
+    inspector.add_argument("input_path")
+    inspector.add_argument("--key-file", required=True)
+
+    audit = subcommands.add_parser("audit-dataset", help="在評測端稽核固定 CSV，不修改原始資料")
+    audit.add_argument("input_path")
+    audit.add_argument("--revision", required=True)
+    audit.add_argument("--sha256", required=True)
+    audit.add_argument("--overlay")
+
+    historical = subcommands.add_parser("lookup-historical-law", help="回查有限範圍官方歷史法條")
+    historical.add_argument("--law-code", required=True)
+    historical.add_argument("--article", required=True)
+    historical.add_argument("--as-of", required=True)
+    interpretation = subcommands.add_parser("lookup-interpretation", help="精確回查法務部函釋全文")
+    interpretation.add_argument("--document-id", required=True)
+    interpretation.add_argument("--number", required=True)
+    quote = subcommands.add_parser("map-quote", help="將搜尋文字映回同次研究的權威原文")
+    quote.add_argument("--run", dest="run_id", required=True)
+    quote.add_argument("--source", required=True)
+    quote.add_argument("--query", required=True)
+    quote.add_argument("--storage-path")
+
     purge = subcommands.add_parser("purge", help="Delete managed research storage")
     target = purge.add_mutually_exclusive_group(required=True)
     target.add_argument("--run", dest="run_id", metavar="RUN_ID")
@@ -198,7 +260,65 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     exit_code = 0
     try:
-        if args.command == "purge":
+        if args.command in {"quick-research", "research-status", "validate-draft", "review-draft", "complete-research", "advise-draft"}:
+            from alr_tw.workflow_cli import run_workflow
+
+            payload = run_workflow(args, Settings.from_env())
+            if args.command in {"validate-draft", "complete-research"} and payload.get("safe_to_present") is not True:
+                exit_code = 1
+            if args.command == "review-draft" and payload.get("draft_text") is None:
+                exit_code = 1
+            if args.command == "advise-draft" and (
+                payload.get("blockers") or payload.get("review", {}).get("decision") == "blocked"
+            ):
+                exit_code = 1
+        elif args.command == "audit-dataset":
+            from alr_tw.evaluation.dataset_audit import AuditDisposition, audit_csv
+            from alr_tw.providers.data_pack import bounded_read
+            dispositions = []
+            if args.overlay:
+                dispositions = [AuditDisposition.model_validate(item) for item in
+                                json.loads(bounded_read(Path(args.overlay), 1000000))]
+            payload = audit_csv(bounded_read(Path(args.input_path), 20000000),
+                                revision=args.revision, expected_sha256=args.sha256,
+                                law_aliases={"中華民國刑法": "刑法", "刑法": "刑法", "民法": "民法",
+                                             "刑事訴訟法": "刑事訴訟法", "民事訴訟法": "民事訴訟法",
+                                             "行政訴訟法": "行政訴訟法", "行政程序法": "行政程序法"},
+                                dispositions=dispositions)
+        elif args.command in {"lookup-historical-law", "lookup-interpretation"}:
+            from datetime import date
+            from alr_tw.contracts.historical_law import HistoricalLawQuery
+            from alr_tw.providers.official.bounded_law import (
+                OfficialHistoricalLawProvider, OfficialInterpretationProvider,
+            )
+            if args.command == "lookup-historical-law":
+                query = HistoricalLawQuery(query_id="cli-historical", law_identifier=args.law_code,
+                                           as_of_date=date.fromisoformat(args.as_of),
+                                           bounded_scope="one-official-historical-article")
+                historical_result = asyncio.run(OfficialHistoricalLawProvider().lookup(query, args.article))
+                source_result = historical_result.model_dump(mode="json")
+            else:
+                interpretation_result = asyncio.run(OfficialInterpretationProvider().lookup(args.document_id, args.number))
+                source_result = interpretation_result.model_dump(mode="json")
+            payload = {"result": source_result, "final_answer_authorized": False}
+        elif args.command == "map-quote":
+            from alr_tw.research.quote_workspace import map_source_quote
+            settings = Settings.from_env()
+            payload = map_source_quote(SqliteStore(_storage_root(settings, args.storage_path)),
+                                       args.run_id, args.source, args.query)
+        elif args.command in {"build-pack", "inspect-pack"}:
+            from alr_tw.providers.pack_builder import build_pack, inspect_pack
+
+            if args.command == "build-pack":
+                payload = build_pack(Path(args.input_path), Path(args.key_file), Path(args.destination))
+            else:
+                payload = inspect_pack(Path(args.input_path), Path(args.key_file))
+        elif args.command == "import-pack":
+            from alr_tw.providers.data_pack import import_pack
+
+            payload = import_pack(Path(args.input_path), Path(args.manifest),
+                                  Path(args.key_file), Path(args.destination))
+        elif args.command == "purge":
             settings = Settings.from_env()
             store = SqliteStore(_storage_root(settings, args.storage_path))
             scope = "all" if args.purge_all else "run"
@@ -216,10 +336,25 @@ def main(argv: Sequence[str] | None = None) -> int:
                 live_diagnostics = asyncio.run(_doctor_live_checks())
                 if not live_diagnostics["live_ready"]:
                     exit_code = 1
+            pack_diagnostics: dict[str, Any] = {"configured": (settings.data_pack_root is not None or settings.remote_pack_endpoint is not None)}
+            if settings.data_pack_root is not None or settings.remote_pack_endpoint:
+                from alr_tw.providers.data_pack import configured_pack_provider
+
+                pack_provider = configured_pack_provider(settings)
+                pack_diagnostics.update(
+                    health=asyncio.run(pack_provider.health_check()).status.value,
+                    snapshot_id=(settings.remote_pack_snapshot if settings.remote_pack_endpoint
+                                 else pack_provider.manifest.snapshot_id),
+                    active=settings.data_mode.value != "synthetic",
+                    coverage_complete=False,
+                    external_query_transfer=bool(settings.remote_pack_endpoint),
+                    network_checked=False,
+                )
             payload = {
                 "ok": True,
+                "data_pack": pack_diagnostics,
                 "data_mode": settings.data_mode.value,
-                "storage_path": str(_storage_root(settings, args.storage_path)),
+                "storage_configured": True,
                 "retention_seconds": settings.storage_policy.retention_seconds,
                 "external_query_enabled": settings.external_query_enabled,
                 "tlr_api_key_configured": settings.tlr_api_key is not None,
@@ -231,7 +366,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             if payload["decision"] == ProviderConformanceStatus.BLOCKED.value:
                 exit_code = 1
     except (ValueError, OSError, json.JSONDecodeError) as exc:
-        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
+        error = str(exc)
+        if args.command in {
+            "audit-dataset", "map-quote", "lookup-historical-law", "lookup-interpretation",
+            "build-pack", "inspect-pack", "import-pack", "doctor",
+        } and not re.fullmatch(r"[A-Z][A-Z0-9_]{2,100}", error):
+            error = ("CONFIG_MODE_REQUIRED" if error.startswith("CONFIG_MODE_REQUIRED:")
+                     else "REQUEST_FAILED")
+        failure: dict[str, Any] = {"ok": False, "error": error}
+        if args.command in {"quick-research", "research-status", "validate-draft", "review-draft", "complete-research", "advise-draft"}:
+            from alr_tw.research.workflow_guidance import build_error_guidance
+
+            failure["workflow_guidance"] = build_error_guidance(str(exc))
+        print(json.dumps(failure, ensure_ascii=False))
         return 2
     print(json.dumps({"ok": True, "data": payload}, ensure_ascii=False, sort_keys=True))
     return exit_code

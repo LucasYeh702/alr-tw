@@ -114,6 +114,15 @@ def test_plan_compresses_long_natural_language_into_official_search_queries() ->
     assert any("示範法第27條" in item.text for item in plan.queries)
 
 
+def test_plan_preserves_subarticle_number_in_counter_queries() -> None:
+    plan = build_counter_authority_plan(
+        "示範程序法第84條之1與合成條件的適用方式為何？"
+    )
+
+    assert all("示範程序法第84條之1" in item.text for item in plan.queries)
+    assert all("第84條 之1" not in item.text for item in plan.queries)
+
+
 def test_verified_hit_requires_exact_server_evidence() -> None:
     calls: list[str] = []
     candidate = _candidate()

@@ -1,6 +1,9 @@
 # Storage and Purge
 
-ALR-TW v0.12.0 使用單一 managed SQLite store（受管理 SQLite 儲存）保存短期研究狀態。預設位置是 `~/.cache/alr-tw/alr_tw_storage.sqlite3`，可用 `ALR_TW_STORAGE_PATH` 改寫。
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
+ALR-TW v1.0.0 使用單一 managed SQLite store（受管理 SQLite 儲存）保存短期研究狀態。預設位置是 `~/.cache/alr-tw/alr_tw_storage.sqlite3`，可用 `ALR_TW_STORAGE_PATH` 改寫。
 
 ## 保存內容
 
@@ -19,9 +22,12 @@ ALR-TW v0.12.0 使用單一 managed SQLite store（受管理 SQLite 儲存）保
 
 ## Retention
 
-`ALR_TW_RETENTION` 預設為 `24h`，格式為正整數加 `s`、`m`、`h` 或 `d`，公開預覽上限 `7d`。MCP `research_legal_question.constraints.retention` 可指定相同格式，或使用 `ephemeral`：final validation 回傳後同步刪除該 run。
+`ALR_TW_RETENTION` 預設為 `24h`，格式為正整數加 `s`、`m`、`h` 或 `d`，上限 `7d`。MCP `research_legal_question.constraints.retention` 可指定相同格式，或使用 `ephemeral`：final validation 回傳後同步刪除該 run。
 
-TTL 到期不會自動延長。背景 cleanup 與明確 purge 都必須同時處理 run、source link、evidence、candidate、operation、snapshot receipt 與不再被其他 run 引用的 source。
+TTL 到期會使研究／證據失去使用資格，不會自動延長，也不等於磁碟內容已刪除。
+本版提供 `cleanup_expired` 儲存方法，但不內建背景排程器；部署者須安排清理，或透過 CLI／MCP 明確 purge。
+清理涵蓋研究及其來源關聯、證據、候選、操作、快照回執與不再被其他研究引用的來源；
+外部備份與檔案系統快照不在受管清除範圍。
 
 ## CLI
 
@@ -42,3 +48,6 @@ alr-tw purge --all --confirm
 - filesystem、SSD 與備份系統可能保留底層歷史區塊；
 - process crash 後仍應執行 cleanup／purge audit；
 - 使用者自行匯出的 trace、log 或 answer 不在 managed store 刪除範圍內。
+
+
+本版的本機受管操作以程序鎖互斥；程序終止後可用新操作編號接續，舊操作不改為成功。舊版無鎖紀錄不自動接管，亦不得混跑舊／新版 writer。詳細範圍見 [1.0 操作與限制](V1_RELEASE.md)。

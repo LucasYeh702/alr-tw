@@ -1,0 +1,22 @@
+{
+  "snapshot_id": "synthetic-liability-1",
+  "release_id": "synthetic-demo",
+  "key_id": "local-demo-key",
+  "provenance": "synthetic_fixture",
+  "issued_at": "2026-01-01T00:00:00Z",
+  "expires_at": "2030-01-01T00:00:00Z",
+  "records": [
+    {
+      "jid": "DEMO,130,測,1,20990101,1",
+      "title": "合成責任規則",
+      "text": "本合成案例僅供工程演示。限於符合合成條件者，行為人應負合成責任。",
+      "section_type": "court_holding"
+    },
+    {
+      "jid": "DEMO,130,測,2,20990102,1",
+      "title": "合成當事人主張",
+      "text": "本合成案例僅供工程演示。當事人主張所有行為均應負合成責任；此為當事人說法。",
+      "section_type": "party_argument"
+    }
+  ]
+}

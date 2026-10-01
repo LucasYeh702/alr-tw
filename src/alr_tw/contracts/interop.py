@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 import hashlib
 import json
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -239,6 +239,7 @@ class InteroperabilityCapabilities(BaseModel):
     interface_family: Literal["agent_neutral_legal_research"] = (
         "agent_neutral_legal_research"
     )
+    workflow_guidance: dict[str, Any] = Field(default_factory=dict)
     active_data_mode: DataMode
     active_mcp_tool_profile: ToolProfile | None = None
     available_mcp_tool_names: list[str] = Field(default_factory=list)
@@ -289,7 +290,10 @@ def interoperability_capabilities(
     active_mcp_tool_profile: ToolProfile | None = None,
     available_mcp_tool_names: list[str] | None = None,
 ) -> InteroperabilityCapabilities:
+    from alr_tw.research.drafting_rules import drafting_guidance
+
     return InteroperabilityCapabilities(
+        workflow_guidance={"drafting": drafting_guidance()},
         active_data_mode=data_mode,
         active_mcp_tool_profile=active_mcp_tool_profile,
         available_mcp_tool_names=list(available_mcp_tool_names or ()),

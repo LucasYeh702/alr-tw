@@ -1,5 +1,8 @@
 # ALR-TW Validation Report
 
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
 `build_validation_report()` converts an `AgenticRunTrace` into Markdown for review.
 
 Required sections:

@@ -439,3 +439,81 @@ def test_lane_c_pass_and_refuse_paths_finish_under_ten_minutes(tmp_path: Path) -
     assert refused["safe_to_present"] is False
     assert refused["answer_text"] is None
     assert refused["structured_refusal"]["safe_next_actions"]
+
+
+def test_cli_quick_status_and_bound_draft_use_mcp_gates(tmp_path, monkeypatch, capsys):
+    from alr_tw.cli import main
+    import alr_tw.workflow_cli as workflow_cli
+
+    session = _mcp_session(tmp_path)
+    monkeypatch.setattr(workflow_cli, "McpSession", lambda **kwargs: session)
+    assert main(["quick-research", "--query", "示範責任法第7條"]) == 0
+    quick = json.loads(capsys.readouterr().out)["data"]
+    assert quick["state"]["workflow_guidance"]["answer_authorized"] is False
+    run_id = quick["run_id"]
+    assert main(["research-status", "--run", run_id]) == 0
+    status = json.loads(capsys.readouterr().out)["data"]
+    assert status["research_brief"]["answer_authorized"] is False
+    assert status["workflow_guidance"]["verified_source_count"] == 1
+    evidence_id = quick["evidence_bundle"]["items"][0]["evidence"][0]["evidence_id"]
+    draft = tmp_path / "draft.json"
+    draft.write_text(json.dumps({
+        "answer_text": _LAW_TEXTS["7"],
+        "claim_bindings": [{
+            "claim_id": "claim-7", "claim_text": _LAW_TEXTS["7"],
+            "claim_type": "law_rule", "evidence_ids": [evidence_id],
+        }],
+    }, ensure_ascii=False))
+    assert main(["validate-draft", "--run", run_id, "--input", str(draft)]) == 0
+    result = json.loads(capsys.readouterr().out)["data"]
+    assert result["decision"] == "validated"
+    assert result["safe_to_present"] is True
+    assert result["workflow_guidance"]["answer_authorized"] is False
+
+
+def test_cli_unbound_draft_is_blocked_without_echo(tmp_path, monkeypatch, capsys):
+    from alr_tw.cli import main
+    import alr_tw.workflow_cli as workflow_cli
+
+    session = _mcp_session(tmp_path)
+    run_id, _ = _advance_by_mcp(session, "示範責任法第7條")
+    monkeypatch.setattr(workflow_cli, "McpSession", lambda **kwargs: session)
+    draft = tmp_path / "draft.json"
+    draft.write_text(json.dumps({"answer_text": _LAW_TEXTS["7"], "claim_bindings": []}))
+    assert main(["validate-draft", "--run", run_id, "--input", str(draft)]) == 1
+    result = json.loads(capsys.readouterr().out)["data"]
+    assert result["safe_to_present"] is False
+    assert result["answer_text"] is None
+    assert result["workflow_guidance"]["scenario"] == "draft_blocked"
+    assert any("綁定" in value for value in result["workflow_guidance"]["missing_items"])
+
+
+def test_validated_replay_requires_unchanged_server_material(tmp_path):
+    import pytest
+
+    first = _positive_law_flow(tmp_path, "7")
+    session = _mcp_session(tmp_path)
+    service = session.research_service()
+    run_id = first["run_id"]
+    evidence = service.store.list_evidence(run_id)[0]
+    bindings = [{
+        "claim_id": "claim-law-7", "claim_text": _LAW_TEXTS["7"],
+        "claim_type": "law_rule", "importance": "core",
+        "evidence_ids": [evidence.evidence_id],
+    }]
+    assert service.validate_answer(
+        run_id, _LAW_TEXTS["7"], "lane-c-validate-law-7", claim_bindings=bindings,
+    ) == first
+    changed_text = "合成來源已更正，不能沿用舊授權。"
+    with pytest.raises(ValueError, match="immutable"):
+        service.store.save_evidence(run_id, evidence.model_copy(update={
+            "exact_text": changed_text, "text_hash": EvidenceSpan.hash_text(changed_text),
+        }))
+    service.store.save_evidence(run_id, evidence.model_copy(update={
+        "evidence_id": "new-synthetic-passage",
+        "exact_text": changed_text, "text_hash": EvidenceSpan.hash_text(changed_text),
+    }))
+    with pytest.raises(ValueError, match="OPERATION_REQUEST_MISMATCH"):
+        service.validate_answer(
+            run_id, _LAW_TEXTS["7"], "lane-c-validate-law-7", claim_bindings=bindings,
+        )

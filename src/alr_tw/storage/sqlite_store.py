@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import UTC, datetime
+import hashlib
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -19,6 +22,15 @@ from alr_tw.contracts.civil_analysis import CounterAuthorityRelationReceipt
 from alr_tw.contracts.research import ResearchRun
 from alr_tw.contracts.sources import EvidenceSpan, SourceRecord
 from alr_tw.contracts.storage import CleanupResult, OperationRecordResult, PurgeResult
+from alr_tw.storage.path_identity import identity, prepare_directory, prepare_file
+
+_ACTIVE_CLAIMS: ContextVar[list[tuple["SqliteStore", str, str]] | None] = ContextVar(
+    "alr_active_operation_claims", default=None,
+)
+
+_ACTIVE_WRITER: ContextVar["SqliteStore | None"] = ContextVar("alr_writer", default=None)
+
+_ACTIVE_STORAGE: ContextVar["SqliteStore | None"] = ContextVar("alr_storage", default=None)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS research_runs (
@@ -118,60 +130,180 @@ class SqliteStore:
         self.database_path = self.root_path / "alr_tw_storage.sqlite3"
         self.temp_path = self.root_path / "tmp"
         self._lock = RLock()
+        self._root_identity: tuple[int, int] | None = None
+        self._database_identity: tuple[int, int] | None = None
+        self._purged = False
         with self._connection():
             pass
 
     def _prepare_paths(self) -> None:
-        self.root_path.mkdir(parents=True, exist_ok=True, mode=0o700)
-        os.chmod(self.root_path, 0o700)
+        self._root_identity = prepare_directory(self.root_path, self._root_identity)
+        self._check_paths()
+
+    @contextmanager
+    def _storage_attempt(self) -> Iterator[None]:
+        """One bounded, reentrant coordinator for connections, writes and deletion."""
+        if not self._lock.acquire(blocking=False):
+            raise ValueError("OPERATION_IN_PROGRESS")
+        try:
+            if self._purged:
+                raise ValueError("STORAGE_PURGED")
+            if _ACTIVE_STORAGE.get() is self:
+                yield
+                return
+            self._prepare_paths()
+            with self._directory_handle() as descriptor:
+                try:
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    raise ValueError("OPERATION_IN_PROGRESS") from None
+                storage_context_reset = _ACTIVE_STORAGE.set(self)
+                try:
+                    yield
+                finally:
+                    _ACTIVE_STORAGE.reset(storage_context_reset)
+                    fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            self._lock.release()
+
+    @contextmanager
+    def _writer_attempt(self) -> Iterator[None]:
+        """Recover interrupted operations only while holding the shared coordinator."""
+        if _ACTIVE_WRITER.get() is self:
+            yield
+            return
+        with self._storage_attempt():
+            writer_context_reset = _ACTIVE_WRITER.set(self)
+            try:
+                with self._connection() as connection:
+                    connection.execute(
+                        "UPDATE operations SET result_json = ? "
+                        "WHERE recovery_managed = 1 "
+                        "AND json_extract(result_json, '$.status') = 'in_progress'",
+                        (_json_dump({"status": "failed", "error_code": "OPERATION_INTERRUPTED",
+                                     "next_action": "resume_with_new_operation_id"}),),
+                    )
+                    connection.commit()
+                yield
+            finally:
+                _ACTIVE_WRITER.reset(writer_context_reset)
+
+    @contextmanager
+    def operation_attempt(self) -> Iterator[None]:
+        """Close only claims created by this call when a catchable failure interrupts it."""
+        claims: list[tuple[SqliteStore, str, str]] = []
+        context_reset = _ACTIVE_CLAIMS.set(claims)
+        try:
+            with self._writer_attempt():
+                yield
+        except Exception:
+            for store, run_id, operation_id in claims:
+                try:
+                    with store._connection() as connection:
+                        connection.execute(
+                            "UPDATE operations SET result_json = ? WHERE run_id = ? "
+                            "AND operation_id = ? "
+                            "AND json_extract(result_json, '$.status') = 'in_progress'",
+                            (_json_dump({"status": "failed", "error_code": "OPERATION_FAILED"}),
+                             run_id, operation_id),
+                        )
+                        connection.commit()
+                except (OSError, ValueError, sqlite3.Error):
+                    # Preserve the original failure; inaccessible storage is not marked complete.
+                    pass
+            raise
+        finally:
+            _ACTIVE_CLAIMS.reset(context_reset)
+
+    def _check_paths(self) -> None:
+        if identity(self.root_path, directory=True) != self._root_identity:
+            raise ValueError("STORAGE_PATH_CHANGED")
+        for suffix in ("", "-wal", "-shm", "-journal"):
+            path = Path(f"{self.database_path}{suffix}")
+            try:
+                current = identity(path)
+            except FileNotFoundError:
+                if not suffix and self._database_identity is not None:
+                    raise ValueError("STORAGE_PATH_CHANGED") from None
+                continue
+            if not suffix and self._database_identity not in (None, current):
+                raise ValueError("STORAGE_PATH_CHANGED")
+        if self.temp_path.exists() or self.temp_path.is_symlink():
+            identity(self.temp_path, directory=True)
+
+    @contextmanager
+    def _directory_handle(self) -> Iterator[int]:
+        descriptor = os.open(self.root_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            opened = os.fstat(descriptor)
+            if (opened.st_dev, opened.st_ino) != self._root_identity:
+                raise ValueError("STORAGE_PATH_CHANGED")
+            yield descriptor
+        finally:
+            os.close(descriptor)
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
-        with self._lock:
+        with self._storage_attempt():
             self._prepare_paths()
-            connection = sqlite3.connect(self.database_path, timeout=10.0)
+            with self._directory_handle() as descriptor:
+                self._database_identity = prepare_file(
+                    self.database_path, directory_fd=descriptor,
+                    expected_identity=self._database_identity,
+                )
+            self._check_paths()
+            connection = sqlite3.connect(
+                self.database_path.absolute().as_uri() + "?mode=rw", uri=True, timeout=10.0,
+            )
             try:
-                os.chmod(self.database_path, 0o600)
+                self._check_paths()
                 connection.row_factory = sqlite3.Row
                 connection.execute("PRAGMA foreign_keys = ON")
                 connection.execute("PRAGMA secure_delete = ON")
                 connection.execute("PRAGMA journal_mode = WAL")
                 connection.executescript(_SCHEMA)
+                connection.execute("BEGIN IMMEDIATE")
+                columns = {row[1] for row in connection.execute("PRAGMA table_info(operations)")}
+                if "request_digest" not in columns:
+                    connection.execute("ALTER TABLE operations ADD COLUMN request_digest TEXT")
+                if "recovery_managed" not in columns:
+                    connection.execute("ALTER TABLE operations ADD COLUMN recovery_managed INTEGER NOT NULL DEFAULT 0")
                 connection.commit()
                 yield connection
             finally:
                 connection.close()
 
+    def create_run(self, run: ResearchRun) -> None:
+        """Explicit creation; routine updates can never recreate deleted research."""
+        self._write_run(run, create=True)
+
     def save_run(self, run: ResearchRun) -> None:
+        self._write_run(run, create=False)
+
+    def _write_run(self, run: ResearchRun, *, create: bool) -> None:
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            connection.execute(
-                """
-                INSERT INTO research_runs(run_id, payload_json, created_at, updated_at, expires_at)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(run_id) DO UPDATE SET
-                    payload_json = excluded.payload_json,
-                    updated_at = excluded.updated_at,
-                    expires_at = excluded.expires_at
-                """,
-                (
-                    run.run_id,
-                    run.model_dump_json(),
-                    run.created_at.isoformat(),
-                    run.updated_at.isoformat(),
-                    run.expires_at.isoformat(),
-                ),
-            )
+            if create:
+                connection.execute(
+                    "INSERT INTO research_runs(run_id,payload_json,created_at,updated_at,expires_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (run.run_id, run.model_dump_json(), run.created_at.isoformat(),
+                     run.updated_at.isoformat(), run.expires_at.isoformat()),
+                )
+            else:
+                updated = connection.execute(
+                    "UPDATE research_runs SET payload_json=?, updated_at=?, expires_at=? "
+                    "WHERE run_id=? AND created_at=?",
+                    (run.model_dump_json(), run.updated_at.isoformat(), run.expires_at.isoformat(),
+                     run.run_id, run.created_at.isoformat()),
+                )
+                if updated.rowcount != 1:
+                    raise ValueError("RESEARCH_RUN_NOT_FOUND_OR_REPLACED")
             connection.execute("DELETE FROM research_obligations WHERE run_id = ?", (run.run_id,))
             connection.executemany(
-                """
-                INSERT INTO research_obligations(run_id, kind, payload_json)
-                VALUES (?, ?, ?)
-                """,
-                [
-                    (run.run_id, obligation.kind.value, obligation.model_dump_json())
-                    for obligation in run.obligations
-                ],
+                "INSERT INTO research_obligations(run_id, kind, payload_json) VALUES (?, ?, ?)",
+                [(run.run_id, obligation.kind.value, obligation.model_dump_json())
+                 for obligation in run.obligations],
             )
             connection.commit()
 
@@ -497,38 +629,90 @@ class SqliteStore:
             ).fetchall()
         return [ProviderSnapshotReceipt.model_validate_json(row["payload_json"]) for row in rows]
 
-    def get_operation(self, run_id: str, operation_id: str) -> dict[str, Any] | None:
+    @staticmethod
+    def _request_digest(request: dict[str, Any] | None) -> str | None:
+        return hashlib.sha256(_json_dump(request).encode()).hexdigest() if request else None
+
+    def validation_material_digest(self, run_id: str) -> str:
+        """Bind cached validation to current server-owned materials, not only caller IDs."""
+        with self._connection() as connection:
+            sources = connection.execute(
+                "SELECT s.payload_json FROM source_records s JOIN run_sources r "
+                "ON r.source_id = s.source_id WHERE r.run_id = ? ORDER BY s.source_id",
+                (run_id,),
+            ).fetchall()
+            evidence = connection.execute(
+                "SELECT payload_json FROM evidence_spans WHERE run_id = ? ORDER BY evidence_id",
+                (run_id,),
+            ).fetchall()
+            receipts = connection.execute(
+                "SELECT payload_json FROM provider_snapshot_receipts "
+                "WHERE run_id = ? ORDER BY provider_id", (run_id,),
+            ).fetchall()
+        payload = [[row[0] for row in rows] for rows in (sources, evidence, receipts)]
+        return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
+
+    @classmethod
+    def _operation_result(
+        cls, row: sqlite3.Row, request: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        if request is not None and row["request_digest"] != cls._request_digest(request):
+            raise ValueError("OPERATION_REQUEST_MISMATCH")
+        result: dict[str, Any] = json.loads(row["result_json"])
+        if request is not None and result.get("status") == "in_progress":
+            raise ValueError("OPERATION_IN_PROGRESS")
+        if request is not None and result.get("status") == "failed":
+            raise ValueError("OPERATION_FAILED")
+        return result
+
+    def get_operation(
+        self, run_id: str, operation_id: str, *, request: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
         with self._connection() as connection:
             row = connection.execute(
-                "SELECT result_json FROM operations WHERE run_id = ? AND operation_id = ?",
+                "SELECT result_json, request_digest FROM operations "
+                "WHERE run_id = ? AND operation_id = ?",
                 (run_id, operation_id),
             ).fetchone()
-        return json.loads(row["result_json"]) if row is not None else None
+        return self._operation_result(row, request) if row is not None else None
 
     def record_operation(
         self,
         run_id: str,
         operation_id: str,
         result: dict[str, Any],
+        *,
+        request: dict[str, Any] | None = None,
     ) -> OperationRecordResult:
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             self._require_run(connection, run_id)
             row = connection.execute(
-                "SELECT result_json FROM operations WHERE run_id = ? AND operation_id = ?",
+                "SELECT result_json, request_digest FROM operations "
+                "WHERE run_id = ? AND operation_id = ?",
                 (run_id, operation_id),
             ).fetchone()
             if row is not None:
                 connection.commit()
-                return OperationRecordResult(created=False, result=json.loads(row["result_json"]))
+                return OperationRecordResult(created=False, result=self._operation_result(row, request))
+            if request is not None and connection.execute(
+                "SELECT 1 FROM operations WHERE run_id = ? "
+                "AND json_extract(result_json, '$.status') = 'in_progress' LIMIT 1",
+                (run_id,),
+            ).fetchone() is not None:
+                raise ValueError("OPERATION_IN_PROGRESS")
             connection.execute(
                 """
-                INSERT INTO operations(run_id, operation_id, result_json, created_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO operations(run_id, operation_id, result_json, created_at, request_digest, recovery_managed)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (run_id, operation_id, _json_dump(result), datetime.now(UTC).isoformat()),
+                (run_id, operation_id, _json_dump(result), datetime.now(UTC).isoformat(),
+                 self._request_digest(request), int(_ACTIVE_WRITER.get() is self)),
             )
             connection.commit()
+            active = _ACTIVE_CLAIMS.get()
+            if active is not None:
+                active.append((self, run_id, operation_id))
             return OperationRecordResult(created=True, result=result)
 
     def complete_operation(
@@ -539,6 +723,12 @@ class SqliteStore:
     ) -> OperationRecordResult:
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                "SELECT result_json FROM operations WHERE run_id = ? AND operation_id = ?",
+                (run_id, operation_id),
+            ).fetchone()
+            if existing is not None and json.loads(existing["result_json"]).get("status") != "in_progress":
+                raise ValueError("OPERATION_ALREADY_COMPLETED")
             cursor = connection.execute(
                 """
                 UPDATE operations
@@ -612,21 +802,26 @@ class SqliteStore:
 
     def purge_all(self) -> PurgeResult:
         failures: list[str] = []
-        with self._lock:
-            for path in (
-                self.database_path,
-                Path(f"{self.database_path}-wal"),
-                Path(f"{self.database_path}-shm"),
-            ):
+        with self._storage_attempt():
+            self._check_paths()
+            with self._directory_handle() as descriptor:
+                for suffix in ("", "-wal", "-shm", "-journal"):
+                    name = self.database_path.name + suffix
+                    try:
+                        os.unlink(name, dir_fd=descriptor)
+                    except FileNotFoundError:
+                        pass
+                    except OSError:
+                        failures.append(name)
                 try:
-                    path.unlink(missing_ok=True)
+                    if self.temp_path.exists():
+                        if not shutil.rmtree.avoids_symlink_attacks:
+                            raise ValueError("STORAGE_PATH_PLATFORM_UNSUPPORTED")
+                        shutil.rmtree("tmp", dir_fd=descriptor)
                 except OSError:
-                    failures.append(path.name)
-            try:
-                if self.temp_path.exists():
-                    shutil.rmtree(self.temp_path)
-            except OSError:
-                failures.append("tmp")
+                    failures.append("tmp")
+            if not failures:
+                self._purged = True
         return PurgeResult(
             success=not failures,
             scope="all",

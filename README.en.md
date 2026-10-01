@@ -1,8 +1,13 @@
-# ALR-TW: Agentic Legal RAG / MCP Harness for Taiwan Law
+# ALR-TW: Taiwan Legal Research and Verification Framework
+
+Connect AI agents to Taiwan’s official legal sources with research workflows, source verification, evidence binding, and answer validation.
+
+Current version: **v1.0.0** (package `1.0.0`). See [1.0 functionality and limits](docs/V1_RELEASE.md). This document describes the 1.0 release.
+
 
 [繁體中文](README.zh-TW.md) | English
 
-ALR-TW v0.12.0 is the agent-neutral public preview of the Taiwan-law research safety harness. An external agent or LLM may create and advance a research run over MCP and propose issues or authority locators, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
+ALR-TW v1.0.0 is the agent-neutral release of the Taiwan legal research and verification framework. An external agent or LLM may create and advance a research run over MCP and propose issues or authority locators, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
 
 In `hybrid_verified` mode, this project uses [TLR (Taiwan Legal RAG)](https://github.com/aa0101181514/tw-legal-rag) to recall ordinary-judgment candidates, then asks ALR-TW to verify them against Judicial Yuan official full text. The TLR provider can also return typed administrative-interpretation candidates and read long judgment text through bounded paging. No TLR result is final citation evidence by itself.
 
@@ -15,10 +20,20 @@ This project is neither legal advice nor a complete Taiwan legal database.
 
 This repository does not ship an LLM or agent implementation. Planning, tool selection, and natural-language reasoning come from the external caller; ALR-TW supplies auditable tools and deterministic gates. The demo ranking parameters are illustrative test settings, not production ranking configuration.
 
-> v0.12.0 remains a public preview (package version `0.12.0`). A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
+> v1.0.0 defines a stable research interface (package version `1.0.0`). A qualified professional must still verify every answer against official text, the applicable legal time, and the facts of the matter.
 
-> This tree targets v0.12.0; publication is tracked by the matching tag and
-> GitHub Release. It does not claim complete production legal reasoning.
+
+## 1.0 available workflows
+
+- Authenticated HTTPS/HMAC exact packs, bounded official historical-law and interpretation commands, quote mapping, and pinned dataset audits.
+- Scope and evidence: [integration record](docs/V1_RELEASE.md).
+
+- `complete-research`: resume bounded research, strictly validate a draft, and reassess revisions with new operation IDs.
+- `review-draft`: read-only internal annotations; no final-answer authorization.
+- `import-pack`: authenticate and import a local judgment pack; activate it with an externally managed trust key.
+- `advise-draft`: explicitly enable a semantic model gateway for revision advice. Advice cannot authorize evidence or answers.
+
+See [1.0 setup and limits](docs/V1_RELEASE.md). Functional readiness comes first; model comparisons remain lower priority.
 
 ## Agentic RAG capabilities
 
@@ -35,7 +50,7 @@ User query
   -> validated | qualified | blocked
 ```
 
-The v0.12.0 surface provides legacy `hlExportPDF` and
+The v1.0.0 surface provides legacy `hlExportPDF` and
 `/EXPORTFILE/ExportToPdf.aspx` compatibility, official identity verification
 for five-part TLR document IDs, agent-neutral interoperability, and one unified
 legal-analysis envelope with composable branches for civil substantive law,
@@ -43,7 +58,7 @@ civil procedure, substantive criminal law, criminal procedure, administrative
 law, and constitutional review. The administrative branch contains separate
 legality and remedy tracks.
 These checks validate structure and trust references, not semantic entailment.
-The v0.12.0 surface also includes a provider-neutral applicability resolver for
+The v1.0.0 surface also includes a provider-neutral applicability resolver for
 explicit special/general, superior/inferior, and successor/version metadata;
 authority and judgment-lineage contracts for court level, procedural posture,
 appeal/review edges, and bounded negative-treatment results; and public-law
@@ -61,7 +76,7 @@ support a legal answer. Counter-authority remains bounded lexical candidate
 discovery followed by official verification; there is no semantic opposition
 classifier and no basis for global absence or consensus claims.
 
-The current v0.12.0 contracts also provide an optional semantic
+The current v1.0.0 contracts also provide an optional semantic
 verifier sidecar, common provider conformance, a receipt-aware adapter, and a
 deployer boundary validator. Sidecars remain shadow/advisory-only; provider
 source/evidence references require independent server binding and snapshot
@@ -71,7 +86,7 @@ semantic entailment or legal-answer authorization.
 
 ### Snapshot receipts and bundled-runtime limits
 
-In v0.12.0 the bundled `ResearchService` issues and persists a provider-neutral
+In v1.0.0 the bundled `ResearchService` issues and persists a provider-neutral
 snapshot receipt for each provider's exact, unexpired official/verified-cache
 source and claim-supporting evidence set in the same run. Finalization reads the
 server-owned set and recomputes its material digest; caller-supplied, cross-run,
@@ -126,7 +141,7 @@ External agent asks and drafts
 | Mode | Behavior |
 |---|---|
 | `synthetic` | Default; offline demos, tests, and CI |
-| `official_only` | Connect only to official law, judgment, and Constitutional Court sources |
+| `official_only` | Use official sources by default; explicitly enabled remote packs follow deployment configuration |
 | `hybrid_verified` | After a local privacy gate, send a safe query to TLR for recall, then verify candidates against official sources |
 
 In `hybrid_verified`, query text that passes the privacy gate is transmitted to TLR. Do not send personal secrets, unpublished case facts, private contracts, litigation strategy, evidentiary weaknesses, or negotiation limits. See [TLR Provider](docs/TLR_PROVIDER.md) and [Data Policy](DATA_POLICY.md).
@@ -180,13 +195,23 @@ Ordinary-judgment lookup does not require a Judicial Yuan API token. In a live m
 
 Secrets are redacted from `doctor` output and must not be committed, traced, or persisted in SQLite.
 
-## v0.12.0 MCP tools
+## Common workflow commands
+
+Use `alr-tw quick-research` for bounded source verification,
+`alr-tw research-status` for progress, and `alr-tw validate-draft` for a draft
+bound to passages from the same run. See the [workflow guide](docs/RESEARCH_WORKFLOWS.md)
+and [research-task evaluation](docs/RESEARCH_TASK_EVALUATION.md) (Traditional Chinese).
+The 36 authored tasks await expert review; engineering tests do not establish legal accuracy.
+
+## v1.0.0 MCP tools
 
 | Tool | Purpose |
 |---|---|
 | `get_legal_research_capabilities` | Report active modes, supported profiles, and fixed trust ownership |
 | `research_legal_question` | Create a server-owned research run without drafting an answer |
 | `execute_legal_research` | Create a run and execute bounded server-owned obligations in one call, returning elapsed time and a draft-stage evidence bundle |
+| `review_legal_draft` | Read-only internal draft and reference annotations; never authorizes a final answer |
+| `complete_legal_research` | Resume bounded research and strictly validate a bound draft; revised drafts use new operation IDs |
 | `submit_legal_research_plan` | Register an untrusted client-assisted issue and locator plan |
 | `continue_legal_research` | Execute exactly one next obligation using an idempotent `operation_id` |
 | `get_legal_research_state` | Read run state and its non-answer `research_brief` without network activity or TTL extension |
@@ -328,7 +353,7 @@ Choose data mode
   -> run alr-tw doctor --live
   -> retrieve candidate sources
   -> resolve official identifier and content
-  -> create server-owned evidence (bind a receipt only when the adapter issues one)
+  -> create server-owned evidence and bind an eligible same-run snapshot receipt
   -> validate draft claims and citations
   -> present or fail closed
 ```
@@ -364,3 +389,19 @@ entailment or semantic opposition classification.
 ## Legal notice
 
 ALR-TW is provided for software architecture, research, and testing. It is not legal advice, a legal service, or a case-specific conclusion, and it does not guarantee completeness, accuracy, currency, or applicability.
+
+### v1.0.0 acceptance
+
+See [1.0 acceptance](docs/V1_RELEASE.md) for the current scope and
+measurement limits. Managed storage now requires POSIX safe-open capabilities; unsupported
+platforms fail explicitly. Bounded human checks do not establish general legal accuracy.
+
+## macOS 同步目錄與研究儲存
+
+若啟用桌面／文件的雲端同步，建議將工作目錄、虛擬環境及持續寫入的 SQLite
+研究儲存放在不受同步管理的使用者專用目錄。這可減少同步與高頻 I/O 的干擾，
+但不能據此將所有逾時或資料庫鎖定歸因於 iCloud；也應檢查多程序寫入與檔案權限。
+
+使用 `ALR_TW_STORAGE_PATH` 指定研究儲存目錄（不是 `ALR_TW_STORAGE_DIR`）。
+搬移前停止寫入程序並保留完整備份，勿在資料庫仍開啟時只複製主資料庫檔。
+不要以共用暫存目錄作為敏感研究的持久儲存，也不需要停用系統的全部同步功能。

@@ -1,8 +1,11 @@
 # ALR-TW Agentic Workflow
 
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
 This repository does not ship an LLM or agent implementation. The external client supplies planning and drafting; the server owns research state and trust decisions.
 
-## v0.12.0 agent-neutral client-assisted workflow
+## v1.0.0 agent-neutral client-assisted workflow
 
 1. 呼叫 `get_legal_research_capabilities`，不得假設 provider 或研究能力存在。
 2. 以 `discovery_mode=client_assisted` 建立 run。
@@ -25,7 +28,7 @@ This repository does not ship an LLM or agent implementation. The external clien
 兩者都不能改變 server-owned trust boundary。詳見
 [Interoperability Contract](INTEROPERABILITY_CONTRACT.md)。
 
-v0.12.0 另提供 provider-neutral applicability、authority／judgment-lineage 與
+v1.0.0 另提供 provider-neutral applicability、authority／judgment-lineage 與
 public-law contracts，以及可替換 provider SDK。它們只承載 server-owned
 metadata、來源角色、時點、程序及 bounded 關係；不能從來源文字推導法律效果，
 也不能把 `not_found_in_scope` 轉成全球不存在或實務一致。
@@ -38,7 +41,7 @@ other gate pass; a missing receipt is at most `conditional`, while an expired,
 cross-run, or mismatched set fails closed. Finalization is pre-draft
 (`safe_to_draft`) only; presentation still requires `validate_legal_answer`.
 
-## v0.12.0 server-managed workflow
+## v1.0.0 server-managed workflow
 
 1. 一般 client 可用 `execute_legal_research` 建立 run 並一次順序執行 server-owned
    obligations；需要逐步除錯時，改用 `research_legal_question` 建立 run。
@@ -113,3 +116,7 @@ true and `final_action` is `answer`.
 - `fail_overstated_case_specific_rule`: claim over-generalized a case-specific finding.
 - `fail_unsupported_paraphrase`: claim paraphrase does not match supporting segments.
 - `human_review_claim_unchecked`: source exists, but claim support was intentionally unchecked.
+
+## Draft revision
+
+After research returns an evidence bundle, `review_legal_draft` provides internal annotations and `complete_legal_research` resumes research before strict validation. Neither exploratory labels nor semantic advice authorize final answers. See [1.0 操作與限制](V1_RELEASE.md).

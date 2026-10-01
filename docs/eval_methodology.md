@@ -1,6 +1,9 @@
 # Evaluation Methodology
 
-This v0.12.0 repository includes a small synthetic test set only. Synthetic
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
+This v1.0.0 repository includes a small synthetic test set only. Synthetic
 records are contract fixtures and cannot support a legal answer.
 
 The evaluation checks:

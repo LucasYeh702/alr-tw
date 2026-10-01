@@ -29,6 +29,7 @@ from alr_tw.contracts.sources import (
 )
 
 from .http import HttpTransport, HttpxAllowlistedTransport, safe_transport_error
+from .law_aliases import LAW_ALIASES, resolve_law_name
 
 LAW_DATA_URL = "https://law.moj.gov.tw/api/ch/law/json"
 LAW_HOST = "law.moj.gov.tw"
@@ -233,7 +234,9 @@ class OfficialLawProvider:
         assert self._dataset_fetched_at is not None
         assert self._dataset_verified_at is not None
         assert self._dataset_expires_at is not None
-        normalized_name = law_name.strip()
+        normalized_name, resolution = resolve_law_name(
+            law_name, {str(item.get("LawName", "")) for item in self._laws},
+        )
         normalized_article = self.normalize_article_no(article_no)
         law = next((item for item in self._laws if item.get("LawName") == normalized_name), None)
         if law is None:
@@ -321,7 +324,8 @@ class OfficialLawProvider:
             error_code=ProviderErrorCode.OFFICIAL_CONTENT_CONFLICT if conflict else None,
             message="OFFICIAL_CONTENT_CONFLICT" if conflict else "",
             coverage_complete=not conflict,
-            metadata={"repealed": bool(law.get("LawAbandonNote"))},
+            metadata={"repealed": bool(law.get("LawAbandonNote")),
+                      **({"name_resolution": resolution} if resolution else {})},
         )
         return result, source, evidence
 
@@ -383,7 +387,9 @@ class OfficialLawProvider:
         if loaded.status == ProviderResultStatus.ERROR:
             return loaded
         assert self._laws is not None
-        needle = query.strip()
+        needle, resolution = resolve_law_name(
+            query, {str(item.get("LawName", "")) for item in self._laws},
+        )
         if not needle:
             raise ValueError("query is required")
         matches: list[dict[str, Any]] = []
@@ -410,11 +416,12 @@ class OfficialLawProvider:
             provider_id=self.provider_id,
             error_code=None if matches else ProviderErrorCode.OFFICIAL_SOURCE_NOT_FOUND,
             coverage_complete=True,
-            metadata={"matches": matches},
+            metadata={"matches": matches,
+                      **({"name_resolution": resolution} if resolution else {})},
         )
 
     async def resolve_citations(self, text: str, *, limit: int = 5) -> list[tuple[str, str]]:
-        """Resolve law names from the official catalog, not a fixed local name list."""
+        """Resolve catalog names and bounded aliases whose target exists in that catalog."""
 
         loaded = await self.load()
         if loaded.status == ProviderResultStatus.ERROR:
@@ -427,14 +434,23 @@ class OfficialLawProvider:
             key=len,
             reverse=True,
         )
-        for name in names:
+        canonical_names = set(names)
+        display_names = sorted(canonical_names | {
+            alias for alias, target in LAW_ALIASES.items() if target in canonical_names
+        }, key=len, reverse=True)
+        occupied: list[tuple[int, int]] = []
+        for name in display_names:
             if not name:
                 continue
             pattern = re.compile(
-                rf"{re.escape(name)}第?(?P<article>\d+(?:(?:之|-)\d+)*)條"
+                rf"{re.escape(name)}第?(?P<article>\d+(?:(?:之|-)\d+)*條(?:之\d+)*)(?![之\d-])"
             )
             for citation in pattern.finditer(compact):
-                pair = (name, self.normalize_article_no(citation.group("article")))
+                if any(start <= citation.start() < end for start, end in occupied):
+                    continue
+                occupied.append(citation.span())
+                canonical, _ = resolve_law_name(name, canonical_names)
+                pair = (canonical, self.normalize_article_no(citation.group("article")))
                 if pair not in matches:
                     matches.append(pair)
                 if len(matches) >= max(1, min(limit, 20)):

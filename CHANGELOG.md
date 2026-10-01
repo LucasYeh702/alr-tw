@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.0 - 2026-10-01
+
+- Define the stable 1.x MCP and CLI contract and bounded support matrix.
+- Add read-only draft review, citation preparation, research completion, and persistent research budgets.
+- Add authenticated optional data packs and bounded query preparation with separate law-search terms.
+- Harden claim coverage, citation equivalence, adjacent citation sentences, replay, expiry, purge, and provider identity checks.
+- Preserve immutable snapshots when local sources are reverified; retain complete supplemental article numbers.
+- Support upgrade from public 0.12.0. Back up storage before upgrading; rollback requires the pre-upgrade backup.
+- Research readiness is not answer authorization. Source coverage and legal reasoning remain bounded.
+
+
 ## 0.12.0 - 2026-09-05
 
 ### Added

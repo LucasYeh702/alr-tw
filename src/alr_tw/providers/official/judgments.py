@@ -121,6 +121,7 @@ class FormalCitation:
     case: str
     number: str
     system: str | None = None
+    kind: str | None = None
 
 
 @dataclass(frozen=True)
@@ -201,6 +202,7 @@ class OfficialJudgmentProvider:
         *,
         now: datetime | None = None,
     ) -> tuple[ProviderResult, SourceRecord | None, list[EvidenceSpan]]:
+        citation = None
         lookup_jid = self.jid_from_identifier(identifier)
         if lookup_jid is None:
             lookup_jid = self.partial_jid_from_identifier(identifier)
@@ -249,6 +251,9 @@ class OfficialJudgmentProvider:
             }
             code = error_codes.get(str(exc), ProviderErrorCode.OFFICIAL_PARSE_ERROR)
             return self._error(code, str(exc)), None, []
+
+        if citation is not None and citation.kind and re.findall(r"判決|裁定", str(parsed["title"]))[-1:] != [citation.kind]:
+            return self._error(ProviderErrorCode.OFFICIAL_IDENTIFIER_MISMATCH, "JUDGMENT_KIND_MISMATCH"), None, []
 
         timestamp = now or datetime.now(UTC)
         source, evidence = self._build_snapshot(parsed, timestamp)
@@ -363,7 +368,7 @@ class OfficialJudgmentProvider:
         list_href, total_count = self.parse_result_list_reference(result_page)
         if not hits:
             if list_href is None:
-                if self._looks_not_found(result_page):
+                if self._looks_search_empty(result_page):
                     return self._search_not_found()
                 return self._error(
                     ProviderErrorCode.OFFICIAL_PARSE_ERROR,
@@ -379,7 +384,10 @@ class OfficialJudgmentProvider:
             except ValueError as exc:
                 return self._error(ProviderErrorCode.OFFICIAL_PARSE_ERROR, str(exc))
         if not hits:
-            return self._search_not_found()
+            assert list_page is not None
+            if self._looks_search_empty(list_page):
+                return self._search_not_found()
+            return self._error(ProviderErrorCode.OFFICIAL_PARSE_ERROR, "RESULT_LIST_CONTENT_MISSING")
         candidates = [
             self._candidate_from_hit(hit, query, rank=rank)
             for rank, hit in enumerate(hits, start=1)
@@ -508,6 +516,8 @@ class OfficialJudgmentProvider:
             return self._error(self._error_code_for_transport(error), error)
         list_href, _ = self.parse_result_list_reference(result_page)
         if list_href is None:
+            if not self._looks_search_empty(result_page):
+                return self._error(ProviderErrorCode.OFFICIAL_PARSE_ERROR, "RESULT_LIST_REFERENCE_MISSING")
             return ProviderResult(
                 status=ProviderResultStatus.NOT_FOUND,
                 provider_id=self.provider_id,
@@ -525,6 +535,8 @@ class OfficialJudgmentProvider:
             hits = self.parse_search_hits(list_page)
         except ValueError as exc:
             return self._error(ProviderErrorCode.OFFICIAL_PARSE_ERROR, str(exc))
+        if not hits and not self._looks_search_empty(list_page):
+            return self._error(ProviderErrorCode.OFFICIAL_PARSE_ERROR, "RESULT_LIST_CONTENT_MISSING")
         unique = sorted(
             {
                 hit.jid
@@ -656,7 +668,7 @@ class OfficialJudgmentProvider:
                 href = candidate
                 break
         if reference is None:
-            return None, 0 if OfficialJudgmentProvider._looks_not_found(document) else None
+            return None, 0 if OfficialJudgmentProvider._looks_search_empty(document) else None
         if not href:
             return None, None
         badge = reference.select_one(".badge") if reference.name == "a" else None
@@ -1066,8 +1078,8 @@ class OfficialJudgmentProvider:
     def normalize_formal_citation(value: str) -> FormalCitation | None:
         compact = re.sub(r"\s+", "", value.strip())
         match = re.fullmatch(
-            r"(?P<court>.+?法院)(?P<year>\d{1,3})年度(?P<case>[^,，\r\n]{1,20})字"
-            r"第(?P<number>\d{1,12})號(?:(?P<system>民事|刑事|行政|懲戒)(?:判決|裁定)?)?",
+            r"(?P<court>.+?法院)(?P<year>\d{1,3})年(?:度)?(?P<case>[^,，\r\n]{1,20})字"
+            r"第(?P<number>\d{1,12})號(?P<system>民事|刑事|行政|懲戒)?(?P<kind>判決|裁定)?",
             compact,
         )
         if match is None:
@@ -1081,6 +1093,7 @@ class OfficialJudgmentProvider:
             case=match.group("case"),
             number=match.group("number"),
             system=_SYSTEM_CODES.get(system_name) if system_name else None,
+            kind=match.group("kind"),
         )
 
     @staticmethod
@@ -1098,6 +1111,8 @@ class OfficialJudgmentProvider:
         hit: JudgmentSearchHit,
         citation: FormalCitation,
     ) -> bool:
+        if citation.kind and re.findall(r"判決|裁定", hit.title)[-1:] != [citation.kind]:
+            return False
         parts = hit.jid.split(",")
         if parts[1] != citation.year or parts[3] != citation.number:
             return False
@@ -1141,6 +1156,34 @@ class OfficialJudgmentProvider:
     @staticmethod
     def _normalize_inline(value: str) -> str:
         return re.sub(r"[\s\u00a0\u3000]+", " ", html.unescape(value)).strip()
+
+    @staticmethod
+    def _looks_search_empty(document: str) -> bool:
+        soup = OfficialJudgmentProvider._soup(document)
+        for node in soup.select("script, style, template"):
+            node.decompose()
+        text = re.sub(r"\s+", "", soup.get_text())
+        if any(marker in text.lower() for marker in (
+            "登入", "驗證", "錯誤", "系統忙碌", "captcha", "accessdenied", "error",
+        )) or soup.select_one('input[type="password"]') is not None:
+            return False
+        if OfficialJudgmentProvider._looks_not_found(text) or "查無您所查詢之裁判資料" in text:
+            return True
+        # A count belongs to its directly enclosing result label, not an
+        # unrelated navigation badge or an arbitrary zero elsewhere on a page.
+        counts = []
+        for badge in soup.select(".badge"):
+            parent = badge.parent
+            if parent is None or len(parent.select(".badge")) != 1:
+                continue
+            label = ''.join(str(child) for child in parent.children if isinstance(child, str))
+            if re.sub(r"\s+", "", label) not in {"查詢結果", "裁判查詢結果"}:
+                continue
+            value = badge.get_text(strip=True)
+            if not value.isascii() or not value.isdigit():
+                return False
+            counts.append(int(value))
+        return bool(counts) and all(count == 0 for count in counts)
 
     @staticmethod
     def _looks_not_found(document: str) -> bool:

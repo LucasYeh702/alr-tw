@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from alr_tw.budget import charge_http_request
+
 import hashlib
 import importlib
 import json
@@ -208,6 +210,7 @@ class HttpxTlrTransport:
             follow_redirects=False,
             verify=system_truststore_context(),
         ) as client:
+            charge_http_request()
             async with client.stream(
                 method,
                 url,

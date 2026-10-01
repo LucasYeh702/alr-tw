@@ -1,12 +1,15 @@
 # Architecture Contract
 
-## v0.12.0 agent-neutral contract
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
+## v1.0.0 agent-neutral contract
 
 ALR-TW is an independently implemented, public-safe contract and validator
 runtime. It is agent-neutral and provider-neutral; no non-public deployment
 artifact, corpus, index, manifest, or operational state is a package dependency.
 
-The v0.12.0 contract includes an optional untrusted planning boundary and a
+The v1.0.0 contract includes an optional untrusted planning boundary and a
 server-owned sufficiency/finalization boundary:
 
 ```text
@@ -32,7 +35,7 @@ taxonomy, per-element burden records, temporal applicability, authority status,
 and legal validity. They do not duplicate citation support or privacy logic and
 do not perform semantic entailment.
 
-## v0.12.0 server-owned contract
+## v1.0.0 server-owned contract
 
 新整合應以 `alr_tw.contracts` 的 provider-neutral models、`ResearchService`、`ProviderObligationExecutor` 與 `SqliteStore` 為主。外部 agent 只能建立／推進 run 與提交 draft；不得提交 evidence span 讓 final validation 採信。
 
@@ -45,13 +48,13 @@ ResearchRun -> ordered obligations -> ProviderResult
 `ProviderCandidate` 永遠不是 `EvidenceSpan`。官方即時內容只有在 provider 完成 origin、schema、content 與 freshness 檢查並由 server 儲存後，才能成為 `evidence_eligible`。Source identifier、hash、role 與 timestamp 不可由 MCP caller 自我認證。
 
 早期的 `tw_legal_rag_mcp.contracts` 仍為 legacy synthetic contract，相容期間不得與
-v0.12.0 server-owned records 混作同一 authority store。`ready_for_draft` 只代表
+v1.0.0 server-owned records 混作同一 authority store。`ready_for_draft` 只代表
 workflow completion；`ResearchSufficiency`、Coverage v2 與
 `get_legal_research_finalization` 只決定起草前答案姿態。真正可呈現的
 `validated`／`qualified` 仍必須由 `validate_legal_answer` 回傳；synthetic records
 不得支撐法律答案。
 
-Snapshot receipt 是 provider-neutral 的公開契約與一致性檢查介面。v0.12.0
+Snapshot receipt 是 provider-neutral 的公開契約與一致性檢查介面。v1.0.0
 內建 `ResearchService` 會依同一 run 中符合資格的官方／可信快取 source 與
 evidence 精確集合簽發並持久化 receipt，finalization 再重算 server-owned binding。
 receipt 完整且其他閘門均通過時 `ordinary` 可達；缺失最高為 `conditional`，跨
@@ -174,3 +177,7 @@ local `verified_cache`.
 5. The public contract output does not expose production retrieval parameters such as chunk size, HNSW settings, ranking weights, or embedding model names.
 
 These tests do not claim production retrieval quality. They only assert the architecture contract that a production implementation should preserve.
+
+## Draft and provider interfaces
+
+The draft workspace is read-only and advisory. Research completion reuses existing finalization and claim checks. Authenticated local packs are a separate judgment provider; the optional command-based semantic gateway cannot promote evidence or authorize answers. See [1.0 操作與限制](V1_RELEASE.md).

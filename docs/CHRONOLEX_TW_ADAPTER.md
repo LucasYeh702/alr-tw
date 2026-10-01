@@ -1,5 +1,8 @@
 # ChronoLex-TW adapter
 
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
 ALR-TW 提供一個 public-safe、離線、資料集版本固定的 ChronoLex-TW adapter。它不內附
 501 題資料、不自動下載 Hugging Face 檔案，也不把模型自稱的版本日期當成歷史法規證據。
 

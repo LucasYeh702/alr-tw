@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from alr_tw.config import Settings
@@ -11,10 +12,19 @@ from alr_tw.contracts.providers import (
     ProviderResult,
     ProviderResultStatus,
 )
+from alr_tw.contracts.sources import (
+    EvidenceSectionType,
+    EvidenceSpan,
+    MaterialType,
+    SourceRecord,
+    SourceTier,
+    TrustStatus,
+)
 from alr_tw.providers.local_portal import (
     LocalPortalJudgmentProvider,
     local_portal_root_from_env,
 )
+from alr_tw.research.provider_executor import ProviderObligationExecutor
 
 
 DEMO_JID = "DEMO,130,測,1,20990101,1"
@@ -64,6 +74,53 @@ class FakeOfficial:
 class ExplodingOfficial(FakeOfficial):
     async def exact_lookup(self, identifier: str, *, now=None):
         raise AssertionError(f"official lookup should not run: {identifier}")
+
+
+class FoundOfficial(FakeOfficial):
+    async def exact_lookup(self, identifier: str, *, now=None):
+        timestamp = now or datetime.now(UTC)
+        text = "法院認定之工資計算理由。"
+        text_hash = EvidenceSpan.hash_text(text)
+        source = SourceRecord(
+            source_id="src_official_judgment_fixture",
+            source_key=f"judgment:{identifier}",
+            source_version_id=f"{identifier}:fixture",
+            material_type=MaterialType.JUDGMENT,
+            provider_id=self.provider_id,
+            source_tier=SourceTier.OFFICIAL,
+            trust_status=TrustStatus.OFFICIAL_VERIFIED,
+            official_identifier=identifier,
+            citation="示範裁判",
+            title="示範裁判",
+            fetched_at=timestamp,
+            verified_at=timestamp,
+            expires_at=timestamp + timedelta(hours=1),
+            content_hash=text_hash,
+            normalized_content_hash=text_hash,
+            normalized_text=text,
+        )
+        evidence = EvidenceSpan.from_exact_text(
+            evidence_id="ev_official_judgment_fixture",
+            source_id=source.source_id,
+            section_id="reasoning-1",
+            section_type=EvidenceSectionType.COURT_REASONING,
+            exact_text=text,
+            eligible_for_claim_support=True,
+        )
+        result = ProviderResult(
+            status=ProviderResultStatus.FOUND,
+            provider_id=self.provider_id,
+            source_ids=[source.source_id],
+            evidence_ids=[evidence.evidence_id],
+            coverage_complete=True,
+        )
+        return result, source, [evidence]
+
+
+class MismatchedFoundOfficial(FoundOfficial):
+    async def exact_lookup(self, identifier: str, *, now=None):
+        result, source, evidence = await super().exact_lookup(identifier, now=now)
+        return result.model_copy(update={"provider_id": "unexpected-provider"}), source, evidence
 
 
 def _catalog_receipt() -> dict[str, object]:
@@ -214,7 +271,13 @@ def test_exact_lookup_promotes_catalog_bound_local_snapshot_to_evidence():
     )
 
     result, source, evidence = asyncio.run(
-        provider.exact_lookup(DEMO_JID)
+        provider.exact_lookup(DEMO_JID, now=datetime(2040, 1, 1, tzinfo=UTC))
+    )
+    later_result, later_source, later_evidence = asyncio.run(
+        provider.exact_lookup(
+            DEMO_JID,
+            now=datetime(2040, 1, 1, tzinfo=UTC) + timedelta(seconds=1),
+        )
     )
 
     assert result.status is ProviderResultStatus.FOUND
@@ -226,6 +289,11 @@ def test_exact_lookup_promotes_catalog_bound_local_snapshot_to_evidence():
     assert len(evidence) == 1
     assert evidence[0].section_type.value == "court_holding"
     assert evidence[0].verify_text(evidence[0].exact_text)
+    assert later_result.provider_id == provider.provider_id
+    assert later_source is not None
+    assert later_source.source_id != source.source_id
+    assert later_evidence[0].source_id == later_source.source_id
+    assert later_evidence[0].evidence_id != evidence[0].evidence_id
 
 
 def test_exact_lookup_fails_closed_when_trusted_text_hash_is_tampered():
@@ -246,6 +314,67 @@ def test_exact_lookup_fails_closed_when_trusted_text_hash_is_tampered():
     assert result.metadata["local_portal_candidate_only"] is True
 
 
+def test_official_fallback_is_rebound_to_local_adapter_before_contract_validation():
+    payload = _verified_lookup_payload()
+    payload["trusted_text_hash"] = "sha256:" + "e" * 64
+    provider = LocalPortalJudgmentProvider(
+        Path.cwd() / "synthetic-root",
+        official_provider=FoundOfficial(),
+        portal=FakePortal(payload, expected_capability="judgment_lookup"),
+    )
+
+    result, source, evidence = asyncio.run(provider.exact_lookup(DEMO_JID))
+
+    assert source is not None
+    assert result.provider_id == provider.provider_id
+    assert source.provider_id == provider.provider_id
+    assert result.metadata["delegated_provider_id"] == FoundOfficial.provider_id
+    assert source.metadata["delegated_provider_id"] == FoundOfficial.provider_id
+    assert result.metadata["delegated_source_id"] == "src_official_judgment_fixture"
+    assert source.source_id != result.metadata["delegated_source_id"]
+    assert result.source_ids == [source.source_id]
+    assert result.evidence_ids == [item.evidence_id for item in evidence]
+    assert all(item.source_id == source.source_id for item in evidence)
+    assert result.metadata["delegated_evidence_ids"] == [
+        "ev_official_judgment_fixture"
+    ]
+    validated, validated_source, validated_evidence = (
+        ProviderObligationExecutor._validated_exact_material(
+            result,
+            source,
+            evidence,
+            expected_provider_id=provider.provider_id,
+        )
+    )
+    assert validated.status is ProviderResultStatus.FOUND
+    assert validated_source is source
+    assert validated_evidence == evidence
+
+
+def test_unexpected_official_provider_identity_is_still_rejected():
+    payload = _verified_lookup_payload()
+    payload["trusted_text_hash"] = "sha256:" + "e" * 64
+    provider = LocalPortalJudgmentProvider(
+        Path.cwd() / "synthetic-root",
+        official_provider=MismatchedFoundOfficial(),
+        portal=FakePortal(payload, expected_capability="judgment_lookup"),
+    )
+
+    result, source, evidence = asyncio.run(provider.exact_lookup(DEMO_JID))
+    validated, validated_source, validated_evidence = (
+        ProviderObligationExecutor._validated_exact_material(
+            result,
+            source,
+            evidence,
+            expected_provider_id=provider.provider_id,
+        )
+    )
+
+    assert validated.error_code.value == "PROVIDER_RESULT_CONTRACT_VIOLATION"
+    assert validated_source is None
+    assert validated_evidence == []
+
+
 def test_exact_lookup_preserves_official_not_found_when_portal_is_unavailable():
     provider = LocalPortalJudgmentProvider(
         Path("/tmp/legal"),
@@ -260,3 +389,34 @@ def test_exact_lookup_preserves_official_not_found_when_portal_is_unavailable():
     assert result.candidates == []
     assert source is None
     assert evidence == []
+
+
+def test_reverified_local_and_fallback_snapshots_coexist_in_storage(tmp_path):
+    from alr_tw.research.service import ResearchService
+    from alr_tw.storage.sqlite_store import SqliteStore
+    from alr_tw.contracts.providers import DataMode
+    store = SqliteStore(tmp_path / 'cache')
+    service = ResearchService(store)
+    run = service.create_run('合成快照持久化', mode=DataMode.SYNTHETIC)
+    timestamp = datetime.now(UTC)
+    for fallback in (False, True):
+        payload = _verified_lookup_payload()
+        if fallback:
+            payload['trusted_text_hash'] = 'sha256:' + 'e' * 64
+        provider = LocalPortalJudgmentProvider(
+            Path.cwd() / 'synthetic-root', official_provider=FoundOfficial(),
+            portal=FakePortal(payload, expected_capability='judgment_lookup'))
+        identities = []
+        for offset in (0, 1):
+            result, source, evidence = asyncio.run(provider.exact_lookup(
+                DEMO_JID, now=timestamp + timedelta(seconds=offset)))
+            checked, source, evidence = ProviderObligationExecutor._validated_exact_material(
+                result, source, evidence, expected_provider_id=provider.provider_id)
+            assert checked.status is ProviderResultStatus.FOUND and source is not None
+            store.save_source(run.run_id, source)
+            for span in evidence:
+                store.save_evidence(run.run_id, span)
+            identities.append(source.source_id)
+        assert identities[0] != identities[1]
+    assert len(store.list_sources(run.run_id)) == 4
+    assert len(store.list_evidence(run.run_id)) == 4

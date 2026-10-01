@@ -1,6 +1,9 @@
 # ALR-TW Error Codes
 
-## v0.12.0 contract codes
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [功能與限制](V1_RELEASE.md)。
+
+
+## v1.0.0 contract codes
 
 | Code | Meaning |
 |---|---|
@@ -23,7 +26,7 @@
 | `HISTORICAL_LAW_NORMATIVE_ROLE_MISMATCH` | 法條版本 source role 不是 normative text |
 | `HISTORICAL_LAW_SOURCE_ROLE_INVALID` | Provider 回傳的法條／立法資料分類無法安全驗證 |
 
-## v0.12.0 provider and research codes
+## v1.0.0 provider and research codes
 
 | Code | Meaning |
 |---|---|
@@ -104,7 +107,7 @@
 | `COUNTER_AUTHORITY_COVERAGE_INCOMPLETE` | 未執行、未完成或失敗的反面見解搜尋必須揭露 |
 | `PROCEDURAL_POSTURE_UNRESOLVED` | 程序階段尚未確認 |
 
-## v0.12.0 applicability and authority-lineage codes
+## v1.0.0 applicability and authority-lineage codes
 
 | Code | Meaning |
 |---|---|
@@ -134,7 +137,7 @@
 | `AUTHORITY_LINEAGE_NOT_FOUND_IS_BOUNDED_ONLY` | `not_found_in_scope` 僅限 bounded scope，不支持全球不存在主張 |
 | `NEGATIVE_TREATMENT_SEMANTIC_CLASSIFICATION_NOT_PERFORMED` | Provider treatment 尚未經 semantic opposition classifier |
 
-## v0.12.0 public-law provider and SDK codes
+## v1.0.0 public-law provider and SDK codes
 
 | Code | Meaning |
 |---|---|
@@ -203,7 +206,7 @@
 `LIVE_TRUSTSTORE_REQUIRED` 與 `OFFICIAL_TLS_VERIFICATION_FAILED` 是
 `alr-tw doctor --live`／official transport 的部署診斷，不表示法源查無資料。
 
-## v0.12.0 semantic-verifier plugin codes
+## v1.0.0 semantic-verifier plugin codes
 
 | Code | Meaning |
 |---|---|
@@ -235,7 +238,7 @@
 | `SEMANTIC_VERIFIER_TARGET_DUPLICATED` | plugin 對同一 target 回傳多筆 finding |
 | `SEMANTIC_VERIFIER_TARGET_COVERAGE_PARTIAL` | completed plugin 結果未涵蓋所有 requested targets |
 
-## v0.12.0 provider conformance and boundary codes
+## v1.0.0 provider conformance and boundary codes
 
 | Code | Meaning |
 |---|---|
@@ -272,7 +275,7 @@
 | DEPLOYER_CREDENTIALS_FORBIDDEN | 公開套件不得含 credentials |
 | DEPLOYER_DEPLOYMENT_PARAMETERS_FORBIDDEN | 公開套件不得含 deployment parameters |
 
-## v0.12.0 legal-analysis domain constraint codes
+## v1.0.0 legal-analysis domain constraint codes
 
 | Code | Meaning |
 |---|---|
@@ -316,3 +319,62 @@ Provider `ERROR`、`NOT_FOUND` 與 degraded／partial 必須分開。外部 outa
 | `PRIVATE_DATA_NOT_ALLOWED` | Private data must not enter public harness | refuse |
 | `PRODUCTION_DATA_EXCLUDED` | Production data is outside public repo | refuse |
 | `SCHEMA_VALIDATION_FAILED` | Input or trace schema invalid | refuse |
+
+## v1.0.0 受管儲存與操作重播
+
+| 代碼 | 意義與處置 |
+|---|---|
+| `STORAGE_PATH_UNSAFE` | 目錄／檔案型別、擁有者或連結不安全；改用本人擁有的實體目錄。 |
+| `STORAGE_PATH_CHANGED` | 儲存目錄或資料庫身分改變；停止操作並確認設定。 |
+| `STORAGE_PATH_PLATFORM_UNSUPPORTED` | 缺少必要的 POSIX 安全開檔能力；不靜默降級。 |
+| `OPERATION_REQUEST_MISMATCH` | 操作種類、請求或驗證材料與舊紀錄不符，或舊紀錄無摘要；使用新的操作編號。 |
+| `OPERATION_IN_PROGRESS` | 同次研究有未完成操作；先確認原程序是否仍在執行，不並行重做。 |
+| `OPERATION_FAILED` | 原操作已失敗；排除原因後以新編號重試。 |
+| `OPERATION_ALREADY_COMPLETED` | 拒絕覆寫已完成的操作結果。 |
+| `OPERATION_RESULT_STALE` | 舊驗證結果的授權條件已失效；重新核對材料並驗證草稿。 |
+
+
+## 草稿與資料包
+
+- `DRAFT_INPUT_INVALID`、`DRAFT_CLAIM_NOT_IN_TEXT`：草稿格式或主張與本文不一致；修正後重試。
+- `PACK_KEY_REQUIRED`、`PACK_ATTESTATION_INVALID`：缺少外部信任金鑰或認證失敗；不升格資料。
+- `PACK_DIGEST_MISMATCH`、`PACK_SCHEMA_INVALID`、`PACK_IDENTITY_INVALID`、`PACK_COVERAGE_MISMATCH`、`PACK_COUNT_MISMATCH`：內容與已認證清單不一致。
+- `PACK_EXPIRED_OR_NOT_YET_VALID`：尚未生效或已過期；取得新的可信快照。
+- `PACK_DESTINATION_EXISTS`：匯入目錄已存在；使用新的目錄，不覆寫現有資料包。
+- `ADVISOR_MODEL_NOT_APPROVED`：指定模型不在前沿模型允許清單；不得降級。
+- `ADVISOR_PRIVACY_BLOCKED`、`ADVISOR_SOURCE_NOT_ELIGIBLE`：顧問請求未通過本機輸出或來源檢查。
+- `SEMANTIC_VERIFIER_PLUGIN_EXECUTION_FAILED`：接線失敗、逾時或模型結果無效；顧問輸出阻擋，不影響來源信任或自動核准答案。
+
+## 草稿補充
+
+- `PACK_EXPORT_INVALID`：匯出格式或欄位無效；依合成範本修正。
+- `PACK_SYNTHETIC_NOT_LIVE`：合成包不能作為 live 來源。
+- `PACK_TRUST_REVOKED`：外部金鑰已移除或更換，後續存取阻擋。
+- 操作紀錄的 `OPERATION_INTERRUPTED`：受管程序中斷，舊操作維持失敗；用新操作編號接續。
+
+## 精確來源與資料包
+
+- `HISTORICAL_IDENTITY_MISMATCH`／`HISTORICAL_VERSION_MISMATCH`：官方頁面必要欄位不符，不從正文推定。
+- `HISTORICAL_ARTICLE_NOT_FOUND_IN_VERSION`：有限查詢未確認條文，回傳 blocked，不宣稱完整範圍不存在。
+- `INTERPRETATION_EFFECTIVITY_UNKNOWN`：效力缺失、否定、疑問或未辨識格式，保持未知。
+- `PACK_HTTP_EXTRA_REQUIRED`：安裝 `alr-tw[live]` 或 `alr-tw[tlr]` 後使用遠端功能。
+- `PACK_TRANSPORT_TIMEOUT`：整次請求超過 20 秒；來源未核准，可在確認服務後另次重試。
+- `REQUEST_FAILED`：操作失敗的遮蔽診斷，不回傳原始路徑、輸入或驗證例外內容。
+
+## 生命週期與重播
+
+- `OPERATION_IN_PROGRESS`：受管工作占用程序協調；本次讀取／寫入／清除未完成，稍後重試。
+- `RESEARCH_RUN_NOT_FOUND_OR_REPLACED`：更新目標不存在或建立時間不符，禁止舊物件回寫。
+- `STORAGE_PURGED`：此儲存實例已完成全清除；直接呼叫端須建立新實例；MCP 會在下一請求建立新服務。
+- `OPERATION_REQUEST_MISMATCH`：歷審工具、識別或節點預算不同，或舊操作沒有摘要。
+- `OPERATION_RESULT_STALE`：歷審重播的材料摘要、來源或回執期限不再有效。
+
+## 研究預算
+
+- `TIMEOUT_BUDGET_EXHAUSTED`：受管研究期限已到；停止新的提供者工作，保留已存材料。
+- `HTTP_BUDGET_EXHAUSTED`：累計 HTTP 嘗試已達上限；不再送出新請求。
+
+批次推進回傳 `stop_reason=budget_exhausted`，單步回傳相同狀態及原因；
+綁定研究的精確查證／歷審回傳 blocked。這不是「查無來源」或研究完成。
+更換操作編號、重啟或調整設定不會重設既有預算；需要新工作時建立新研究。
+外部模型 token 成本未知，並不受此伺服器 HTTP 上限約束。

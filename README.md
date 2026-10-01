@@ -1,12 +1,34 @@
-# ALR-TW：台灣法律研究安全 MCP Harness
+# ALR-TW：台灣法律研究與查證框架
+
+連接 AI 代理與台灣官方法律來源，提供研究流程、來源查證、證據綁定與答案驗證。
+
+目前版本為 **v1.0.0**（套件 `1.0.0`）；功能、安裝與限制請見 [1.0 說明](docs/V1_RELEASE.md)。本文件描述 1.0 現行功能。
+
 
 [繁體中文說明](README.zh-TW.md) | [English](README.en.md)
 
-ALR-TW v0.12.0 是一個讓外部 Agent／LLM 以 MCP 使用台灣法律研究工具的安全框架。它負責管理研究流程、官方來源查證、證據信任邊界、答案驗證與短期資料清除；Agent 負責理解問題與起草文字。
+ALR-TW v1.0.0 是供不同 AI 代理使用的台灣法律研究與查證框架，透過 MCP（模型上下文協定）提供工具介面。它負責管理研究流程、官方來源查證、證據信任邊界、答案驗證與短期資料清除；Agent 負責理解問題與起草文字。
 
-它不是法律意見服務，也不是完整台灣法律資料庫。v0.12.0 仍是 public preview（套件版本 `0.12.0`）；任何輸出都必須由具資格的人員依官方原文、適用時點與個案事實複核。
+它不是法律意見服務，也不是完整台灣法律資料庫。v1.0.0 套件版本為 `1.0.0`；任何輸出都必須由具資格的人員依官方原文、適用時點與個案事實複核。
 
 本 repo 不包含 LLM，也不包含 agent 實作。Repo 內的 demo ranking／示範 ranking 參數只用於展示與測試，不是 production ranking 設定；正式部署的模型、資料集、排序與權重由部署者自行治理。
+
+1.0 的支援面見 [穩定契約](docs/V1_CONTRACT.md)，升級與回退見 [指南](docs/V1_UPGRADE.md)。
+
+## 1.0 可用入口
+
+- 官方歷史法條、函釋全文、原文引句映射與固定資料稽核命令。
+- HTTPS／HMAC 遠端精確資料包；逐項整合證據見 [整合紀錄](docs/V1_RELEASE.md)。
+
+- `build-pack`／`inspect-pack`：建置本機資料包及查核品質摘要；附合成示例。
+- 草稿新增逐項修正建議；新版受管操作可在程序中斷後用新編號接續。
+
+- `complete-research`：接續研究、嚴格驗證與修訂稿重驗；每版草稿使用新操作編號。
+- `review-draft`：唯讀內部草稿與來源標註，不核准正式答案。
+- `import-pack`：認證並匯入本機裁判資料包，使用外部信任金鑰明示啟用。
+- `advise-draft`：明示啟用語意模型接線取得修稿建議，顧問不能升格證據或核准答案。
+
+操作與限制見 [1.0 說明](docs/V1_RELEASE.md)。以功能可用性為優先，模型比較列末順位。
 
 ## 先看懂 ALR-TW
 
@@ -42,13 +64,13 @@ Agent 依已驗證證據起草
 
 - 不會產生法律意見、律師服務或個案決定。
 - 不會把 Agent 自己提供的 official URL、hash、來源角色或 trust metadata 當成官方證據。
-- 搜尋結果、TLR 結果、外部網路搜尋與立法院材料都是 candidate；只有 server-owned 的官方驗證結果才能進入正式答案驗證。
+- 搜尋結果、TLR 結果、外部網路搜尋與立法院材料都是 candidate；只有 server-owned 的官方來源或通過可信快取閘門的材料才能進入正式答案驗證。
 - 不承諾指定歷史日期的完整法規版本、普通裁判全域召回率、所有程序裁定正文、完整審級關係或附件／OCR 全覆蓋。
 - 立法院連結的 PDF／DOC 不在本 connector 中解析；立法材料不等於現行有效法條，也不能代表單一立法者意旨。
 - `not_found` 或有限範圍內查不到，不代表全球不存在，也不代表實務一致。
 - 目前尚無 semantic opposition classifier；有限範圍的反方候選查詢不能證明全球沒有反面見解或實務一致。
 
-當來源時點、角色、內容或主張支持不足時，系統會保留限制、要求人工複核或 fail closed，而不是猜測一個完整答案。
+當既定檢查偵測到來源時點、角色、內容或主張支持不足時，系統會保留限制、要求人工複核或拒絕放行；這不代表能偵測所有法律推理錯誤。
 
 ## 研究結果怎麼看
 
@@ -58,10 +80,10 @@ Agent 依已驗證證據起草
 | `qualified` | 有可核對的證據，但召回範圍、歷史版本、receipt 或其他限制必須一併揭露。 |
 | `blocked`／`refusal_only` | 不應展示草稿答案；需要補資料、改變研究範圍或交由人工處理。 |
 
-`ready_for_draft` 只代表研究流程走完，不代表研究充分。最後仍須由
+`ready_for_draft` 只代表目前研究狀態允許進入起草階段，不代表研究充分。最後仍須由
 `validate_legal_answer` 決定草稿是否可以展示。
 
-v0.12.0 內建 `ResearchService` 會為同一 run 中通過官方／可信快取閘門的精確
+v1.0.0 內建 `ResearchService` 會為同一 run 中通過官方／可信快取閘門的精確
 source 與 evidence 集合簽發並持久化 provider-neutral snapshot receipt；caller 提供的
 receipt 不受信任。receipt 完整、未過期且其餘閘門均通過時，`ordinary` 才可能
 成為起草前姿態；缺 receipt 最高為 `conditional`，混用或內容不符則 fail closed。
@@ -74,7 +96,7 @@ receipt 不受信任。receipt 完整、未過期且其餘閘門均通過時，`
 ALR-TW 將「找到資料」、「來源可信」與「資料支持這個主張」分開處理：
 
 1. Agent 可以提出問題、爭點與 locator，但不能自行建立正式 evidence。
-2. Server 會從官方來源取得並驗證內容，再建立 server-owned evidence。
+2. Server 會核對官方來源或合格可信快取，再建立 server-owned evidence（伺服器掌控的證據）。
 3. 法規時點、法院角色、主文／理由、當事人主張與個別意見會分開保存。
 4. 證據過期、識別不一致、角色錯置、主張超出證據或覆蓋不足時，結果會降級或拒絕。
 
@@ -97,7 +119,7 @@ ALR-TW 將「找到資料」、「來源可信」與「資料支持這個主張�
 | 模式 | 會不會連線 | 適合用途 |
 |---|---|---|
 | `synthetic` | 不連線 | 預設的離線 demo、CI 與契約測試；不能支撐真實案件答案。 |
-| `official_only` | 只連官方來源 | 法規、司法院裁判與憲法法庭的查詢與官方回查。 |
+| `official_only` | 預設使用官方網路來源；另行啟用的遠端包依設定連線 | 法規、司法院裁判與憲法法庭的查詢與官方回查。 |
 | `hybrid_verified` | 官方來源 + TLR | 用 TLR 提高普通裁判候選召回，再回司法院官方來源驗證。 |
 
 召回／locator 資料層也可由部署者選擇。若使用 `mcp-taiwan-legal-db` 或其他能提供
@@ -109,7 +131,7 @@ ALR-TW 將「找到資料」、「來源可信」與「資料支持這個主張�
 
 啟用 `hybrid_verified` 時，通過 privacy gate 的查詢文字可能送往 TLR。不要輸入個人秘密、未公開案件事實、私有契約、訴訟策略、證據弱點或談判底線。
 
-### 快速模式（v0.12）
+### 快速模式（v1.0.0）
 
 若主要目的是找裁判，可以直接在提示詞開頭指定：
 
@@ -202,6 +224,13 @@ alr-tw doctor --live
 
 普通裁判查詢不需要司法院 API token；live 查詢的關鍵字、案號與篩選條件會送到官方網站。不要把未公開個案事實或保密資料當成搜尋詞。
 
+## 兩條常用操作流程
+
+可直接使用 `alr-tw quick-research` 快速查證材料，接著以
+`alr-tw validate-draft` 驗證同次研究的草稿與段落綁定；
+`alr-tw research-status` 可查看繁中進度與待補項目。
+完整範例、輸入格式與拒答補救見 [快速查案與草稿驗證](docs/RESEARCH_WORKFLOWS.md)。
+
 ## Agent 最短使用流程
 
 新整合建議依序：
@@ -213,7 +242,7 @@ alr-tw doctor --live
 3. 讀取 `get_legal_research_finalization`，確認證據、限制與答案姿態。
 4. 只使用同一 run 的 server-owned evidence 起草。
 5. 呼叫 `validate_legal_answer`，只展示允許展示的結果。
-6. 依 retention policy 等待自動清除，或使用 `purge_research_storage` 手動清除。
+6. 到期材料不能繼續授權答案；使用 `purge_research_storage` 清除已不需要的研究，不把期限到期當成檔案已刪除。
 
 若只需核對單一法源，可使用 `lookup_legal_source`；若要查立法沿革候選，可在 live mode 明示使用 `lookup_legislative_history`。
 
@@ -230,6 +259,8 @@ alr-tw doctor --live
 | `get_legal_research_capabilities` | 了解目前資料模式、可用 profile 與 server 的信任責任。 |
 | `research_legal_question` | 建立一個 server-owned research run。 |
 | `execute_legal_research` | 建立 run 並一次執行可執行的 server-owned obligations；保留逐步稽核與 final-answer validation。 |
+| `review_legal_draft` | 唯讀內部草稿及來源標註，不核准正式答案 |
+| `complete_legal_research` | 接續有界研究並嚴格驗證；修稿使用新操作編號，既有結果保留 |
 | `continue_legal_research` | 執行下一個研究義務；每次只推進一個有界步驟。 |
 | `get_legal_research_state` | 唯讀恢復研究狀態，不做新的網路請求。 |
 | `get_legal_research_finalization` | 查看研究充分性、覆蓋限制、blockers 與答案姿態。 |
@@ -296,3 +327,18 @@ Synthetic demo tools 僅用於離線測試與契約示範，不應用於真實�
 ## 法律聲明
 
 本專案僅供軟體架構、法律研究與測試，不構成法律意見、律師服務或任何個案結論，也不保證資料完整、正確、即時或適用。
+
+### v1.0.0 功能驗收
+
+1.0 功能與限制見 [正式版說明](docs/V1_RELEASE.md)；[功能與驗證範圍](docs/V1_RELEASE.md)保留原始驗收範圍。
+受管儲存目前要求 POSIX 安全開檔能力；不支援的平台會明確拒絕。人工研究成效評核尚待安排。
+
+## macOS 同步目錄與研究儲存
+
+若啟用桌面／文件的雲端同步，建議將工作目錄、虛擬環境及持續寫入的 SQLite
+研究儲存放在不受同步管理的使用者專用目錄。這可減少同步與高頻 I/O 的干擾，
+但不能據此將所有逾時或資料庫鎖定歸因於 iCloud；也應檢查多程序寫入與檔案權限。
+
+使用 `ALR_TW_STORAGE_PATH` 指定研究儲存目錄（不是 `ALR_TW_STORAGE_DIR`）。
+搬移前停止寫入程序並保留完整備份，勿在資料庫仍開啟時只複製主資料庫檔。
+不要以共用暫存目錄作為敏感研究的持久儲存，也不需要停用系統的全部同步功能。

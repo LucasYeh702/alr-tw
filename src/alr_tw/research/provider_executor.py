@@ -9,6 +9,9 @@ from datetime import UTC, datetime
 from typing import Any, Callable, Coroutine, TypeVar
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from alr_tw.budget import bounded_provider
+from alr_tw.research.query_preparation import prepare_query
+from alr_tw.research.drafting_rules import lineage_guidance
 from alr_tw.contracts.providers import (
     CandidateRecallProvider,
     CandidatePrivacyDecision,
@@ -72,16 +75,16 @@ from alr_tw.storage.sqlite_store import SqliteStore
 _T = TypeVar("_T")
 _LAW_CITATION = re.compile(
     r"(?P<law>[\u4e00-\u9fff]{1,30}(?:法|條例|規則|辦法))第\s*"
-    r"(?P<article>\d+(?:\s*(?:之|-)\s*\d+)*)\s*條"
+    r"(?P<article>\d+(?:\s*(?:之|-)\s*\d+)*\s*條(?:\s*之\s*\d+)*)(?!\s*[之\d-])"
 )
 _JID = re.compile(
     r"(?P<jid>[A-Z0-9]{3,12},[^,\r\n]{1,80},[^,\r\n]{1,80},"
     r"\d+,\d{8},\d+)"
 )
 _FORMAL_JUDGMENT_CITATION = re.compile(
-    r"(?P<citation>[\u4e00-\u9fff]{2,24}法院\s*\d{1,3}\s*年度\s*"
+    r"(?P<citation>[\u4e00-\u9fff]{2,24}法院\s*\d{1,3}\s*年(?:度)?\s*"
     r"[^,，。；;\r\n]{1,20}?字\s*第\s*\d{1,12}\s*號"
-    r"(?:(?:民事|刑事|行政|懲戒)(?:判決|裁定)?)?)"
+    r"(?:民事|刑事|行政|懲戒)?(?:判決|裁定)?)"
 )
 
 
@@ -91,7 +94,7 @@ def _run(coroutine: Coroutine[Any, Any, _T]) -> _T:
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(coroutine)
+        return asyncio.run(bounded_provider(coroutine))
     raise RuntimeError("SYNC_RESEARCH_SERVICE_CALLED_FROM_ASYNC_LOOP")
 
 
@@ -128,6 +131,13 @@ class ProviderObligationExecutor:
         self.store = store
         self.providers = providers
 
+    def _lookup_judgment(self, identifier: str, run_id: str | None):
+        from alr_tw.providers.remote_pack import RemotePackProvider
+        provider = self.providers.judgments
+        if isinstance(provider, RemotePackProvider):
+            return _run(provider.exact_lookup(identifier, run_id=run_id))
+        return _run(provider.exact_lookup(identifier))
+
     def execute(
         self,
         run: ResearchRun,
@@ -150,6 +160,17 @@ class ProviderObligationExecutor:
         return handler(run, obligation)
 
     def lookup(self, text: str, *, run_id: str | None = None) -> dict[str, Any]:
+        # A catalog outage cannot establish that a law identifier is invalid.
+        # Successful load is reused by resolve_citations without another request.
+        if _LAW_CITATION.search(_compact_identifier(text)):
+            loaded = _run(self.providers.laws.load())
+            if loaded.status == ProviderResultStatus.ERROR:
+                return {
+                    "schema_version": "alr-tw.legal-source-lookup/v1",
+                    "status": loaded.status.value,
+                    "error_code": loaded.error_code.value if loaded.error_code else None,
+                    "claim_verified": False,
+                }
         law_citations = _run(self.providers.laws.resolve_citations(text, limit=1))
         if law_citations:
             law_name, article_no = law_citations[0]
@@ -171,14 +192,14 @@ class ProviderObligationExecutor:
                 result, source, evidence_items = self._cached_lookup(
                     run_id,
                     f"judgment:{jid}",
-                    lambda: _run(self.providers.judgments.exact_lookup(jid)),
+                    lambda: self._lookup_judgment(jid, run_id),
                     expected_provider_id=self.providers.judgments.provider_id,
                 )
             elif formal_citation:
                 result, source, evidence_items = self._cached_lookup(
                     run_id,
                     f"judgment-formal:{_compact_identifier(formal_citation)}",
-                    lambda: _run(self.providers.judgments.exact_lookup(formal_citation)),
+                    lambda: self._lookup_judgment(formal_citation, run_id),
                     expected_provider_id=self.providers.judgments.provider_id,
                 )
             elif constitutional:
@@ -283,7 +304,7 @@ class ProviderObligationExecutor:
             def fetch_related(
                 identifier: str = identifier,
             ) -> tuple[ProviderResult, SourceRecord | None, list[EvidenceSpan]]:
-                return _run(self.providers.judgments.exact_lookup(identifier))
+                return self._lookup_judgment(identifier, run_id)
 
             result, source, evidence = fetch_related()
             provider_calls.append(self._provider_call(result))
@@ -418,6 +439,10 @@ class ProviderObligationExecutor:
                 ),
                 "establishes_finality": False,
             },
+            "workflow_guidance": lineage_guidance(
+                truncated=truncated, failed_count=failed_count,
+                upper_count=sum(item.direction == "upper" for item in history.entries),
+            ),
             "official_verified_related_count": len(verified),
             "official_verification_failed_count": failed_count,
             "history_entry_count": len(history.entries),
@@ -446,6 +471,7 @@ class ProviderObligationExecutor:
         return self._outcome(
             obligation,
             metadata={
+                "query_preparation": prepare_query(run.query, as_of_date=run.as_of_date),
                 "law_citations": [match.group(0) for match in _LAW_CITATION.finditer(run.query)],
                 "constitutional_identifier": (
                     self.providers.constitutional.normalize_identifier(run.query)
@@ -519,8 +545,14 @@ class ProviderObligationExecutor:
             if client_assisted:
                 warnings.append("CLIENT_ASSISTED_LAW_LOCATOR_UNRESOLVED")
             else:
-                result = _run(self.providers.laws.search(run.query, limit=10))
-                calls.append(self._provider_call(result))
+                for suggestion in prepare_query(run.query, as_of_date=run.as_of_date)["law_search_queries"]:
+                    result = _run(self.providers.laws.search(suggestion["query"], limit=10))
+                    calls.append(self._provider_call(result))
+                    # Failed searches are not invitations to amplify requests.
+                    if result.status != ProviderResultStatus.NOT_FOUND:
+                        break
+                if len(calls) > 1:
+                    warnings.append("BOUNDED_QUERY_EXPANSION_CANDIDATE_ONLY")
                 warnings.append("LAW_KEYWORD_RESULTS_REQUIRE_EXACT_LOOKUP")
         limitations = list(run.coverage.limitations)
         if not citations:
@@ -629,34 +661,40 @@ class ProviderObligationExecutor:
 
         def recall_official() -> None:
             nonlocal added_candidates, usable_candidate_count
-            official = _run(self.providers.judgments.search(run.query, limit=5))
-            calls.append(self._provider_call(official))
-            provider_matches = official.provider_id == self.providers.judgments.provider_id
-            accepted = [
-                candidate
-                for candidate in official.candidates[:5]
-                if candidate.provider_id == self.providers.judgments.provider_id
-            ]
-            if (
-                official.status == ProviderResultStatus.FOUND
-                and official.error_code is None
-                and provider_matches
-                and len(accepted) == len(official.candidates)
-            ):
-                for candidate in accepted:
-                    self.store.save_candidate(run.run_id, candidate, expires_at=run.expires_at)
-                added_candidates += len(accepted)
-                usable_candidate_count += sum(
-                    resolve_judgment_candidate(candidate) is not None for candidate in accepted
-                )
-            elif official.status == ProviderResultStatus.FOUND:
-                warnings.append(ProviderErrorCode.PROVIDER_RESULT_CONTRACT_VIOLATION.value)
-            elif official.status == ProviderResultStatus.ERROR:
-                warnings.append(
-                    official.error_code.value
-                    if official.error_code
-                    else "OFFICIAL_SOURCE_UNAVAILABLE"
-                )
+            calls_before = len(calls)
+            for suggestion in prepare_query(run.query, as_of_date=run.as_of_date)["search_queries"]:
+                official = _run(self.providers.judgments.search(suggestion["query"], limit=5))
+                calls.append(self._provider_call(official))
+                provider_matches = official.provider_id == self.providers.judgments.provider_id
+                accepted = [
+                    candidate
+                    for candidate in official.candidates[:5]
+                    if candidate.provider_id == self.providers.judgments.provider_id
+                ]
+                if (
+                    official.status == ProviderResultStatus.FOUND
+                    and official.error_code is None
+                    and provider_matches
+                    and len(accepted) == len(official.candidates)
+                ):
+                    for candidate in accepted:
+                        self.store.save_candidate(run.run_id, candidate, expires_at=run.expires_at)
+                    added_candidates += len(accepted)
+                    usable_candidate_count += sum(
+                        resolve_judgment_candidate(candidate) is not None for candidate in accepted
+                    )
+                elif official.status == ProviderResultStatus.FOUND:
+                    warnings.append(ProviderErrorCode.PROVIDER_RESULT_CONTRACT_VIOLATION.value)
+                elif official.status == ProviderResultStatus.ERROR:
+                    warnings.append(
+                        official.error_code.value
+                        if official.error_code
+                        else "OFFICIAL_SOURCE_UNAVAILABLE"
+                    )
+                if official.status != ProviderResultStatus.NOT_FOUND:
+                    break
+            if len(calls) - calls_before > 1:
+                warnings.append("BOUNDED_QUERY_EXPANSION_CANDIDATE_ONLY")
 
         def recall_external_candidates() -> None:
             nonlocal added_candidates, added_sources, usable_candidate_count
@@ -851,7 +889,7 @@ class ProviderObligationExecutor:
             def fetch_judgment(
                 identifier: str = identifier,
             ) -> tuple[ProviderResult, SourceRecord | None, list[EvidenceSpan]]:
-                return _run(self.providers.judgments.exact_lookup(identifier))
+                return self._lookup_judgment(identifier, run.run_id)
 
             if target.candidate is None:
                 result, source, evidence = self._cached_lookup(
@@ -1232,7 +1270,7 @@ class ProviderObligationExecutor:
             def fetch_judgment(
                 identifier: str = identifier,
             ) -> tuple[ProviderResult, SourceRecord | None, list[EvidenceSpan]]:
-                return _run(self.providers.judgments.exact_lookup(identifier))
+                return self._lookup_judgment(identifier, run.run_id)
 
             cache_key = (
                 f"judgment:{identifier}"
@@ -1408,6 +1446,7 @@ class ProviderObligationExecutor:
         return self._outcome(
             obligation,
             warnings=["HISTORICAL_LAW_VERSION_UNSUPPORTED"],
+            metadata={"time_hints": prepare_query(run.query, as_of_date=run.as_of_date)["time_hints"]},
             updates={"coverage": coverage},
         )
 
@@ -1439,8 +1478,13 @@ class ProviderObligationExecutor:
         *,
         expected_provider_id: str,
     ) -> tuple[ProviderResult, SourceRecord | None, list[EvidenceSpan]]:
-        existing_cache = run_id is not None and self.store.has_cache_entry(cache_key)
-        if run_id is not None:
+        # Packs must reauthenticate the configured key/snapshot on every lookup.
+        # The shared source cache has no such binding or original coverage receipt.
+        use_shared_cache = expected_provider_id != "attested_judgment_pack"
+        existing_cache = (
+            use_shared_cache and run_id is not None and self.store.has_cache_entry(cache_key)
+        )
+        if use_shared_cache and run_id is not None:
             cached = self.store.get_fresh_cache_entry(cache_key)
             if cached is not None:
                 cached_source, evidence = cached
@@ -1486,7 +1530,7 @@ class ProviderObligationExecutor:
             self.store.save_source(run_id, source)
             for item in evidence:
                 self.store.save_evidence(run_id, item)
-            if result.status == ProviderResultStatus.FOUND and evidence:
+            if use_shared_cache and result.status == ProviderResultStatus.FOUND and evidence:
                 self.store.save_cache_entry(cache_key, source, evidence)
         return result, source, evidence
 
@@ -1758,6 +1802,7 @@ class ProviderObligationExecutor:
             "status": "blocked",
             "jid": jid,
             "reason_codes": [reason_code],
+            "workflow_guidance": lineage_guidance(blocked=True),
             "establishes_finality": False,
             "semantic_opinion_comparison_performed": False,
             "related_nodes": [],

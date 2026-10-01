@@ -1,4 +1,4 @@
-"""Fail-closed environment configuration for the v0.12.0 preview."""
+"""Fail-closed environment configuration for the v1.0.0 candidate."""
 
 from __future__ import annotations
 
@@ -39,7 +39,13 @@ class Settings(BaseModel):
     mcp_tool_profile: ToolProfile = ToolProfile.DEMO
     storage_policy: StoragePolicy = Field(default_factory=StoragePolicy)
     storage_path: Path | None = None
+    research_max_seconds: float = Field(default=120, gt=0, le=3600, allow_inf_nan=False)
+    research_max_http_requests: int = Field(default=50, ge=1, le=1000)
     local_portal_root: Path | None = None
+    remote_pack_endpoint: str | None = Field(default=None, exclude=True, repr=False)
+    remote_pack_snapshot: str | None = None
+    data_pack_root: Path | None = None
+    data_pack_key_file: Path | None = Field(default=None, exclude=True, repr=False)
     tlr_base_url: str = "https://tlr.dr-lawbot.com"
     tlr_api_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
 
@@ -98,6 +104,8 @@ class Settings(BaseModel):
         configured_key = env.get("ALR_TW_TLR_API_KEY") or None
         values = {
             "data_mode": mode_value,
+            "research_max_seconds": env.get("ALR_TW_RESEARCH_MAX_SECONDS", "120"),
+            "research_max_http_requests": env.get("ALR_TW_RESEARCH_MAX_HTTP_REQUESTS", "50"),
             "storage_policy": StoragePolicy(retention_seconds=retention),
             "storage_path": Path(storage_path).expanduser() if storage_path else None,
             "local_portal_root": (
@@ -105,6 +113,12 @@ class Settings(BaseModel):
                 if env.get("ALR_TW_LOCAL_PORTAL_ROOT")
                 else None
             ),
+            "remote_pack_endpoint": env.get("ALR_TW_REMOTE_PACK_ENDPOINT") or None,
+            "remote_pack_snapshot": env.get("ALR_TW_REMOTE_PACK_SNAPSHOT") or None,
+            "data_pack_root": Path(env["ALR_TW_DATA_PACK_ROOT"]).expanduser()
+                if env.get("ALR_TW_DATA_PACK_ROOT") else None,
+            "data_pack_key_file": Path(env["ALR_TW_DATA_PACK_KEY_FILE"]).expanduser()
+                if env.get("ALR_TW_DATA_PACK_KEY_FILE") else None,
             "tlr_base_url": env.get("ALR_TW_TLR_BASE_URL", "https://tlr.dr-lawbot.com"),
             "tlr_api_key": SecretStr(configured_key) if configured_key else None,
         }
