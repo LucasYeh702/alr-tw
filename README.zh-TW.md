@@ -1,11 +1,13 @@
-# ALR-TW：台灣法律 Agentic RAG / MCP Harness
+# ALR-TW：台灣法律研究與查證框架
+
+連接 AI 代理與台灣官方法律來源，提供研究流程、來源查證、證據綁定與答案驗證。
 
 目前版本為 **v1.0.0**（套件 `1.0.0`）；功能、安裝與限制請見 [1.0 說明](docs/V1_RELEASE.md)。本文件描述 1.0 現行功能。
 
 
 繁體中文 | [English](README.en.md)
 
-ALR-TW v1.0.0 是台灣法律研究安全 harness 的 agent-neutral research runtime。外部 agent／LLM 可透過 MCP 建立研究 run、提出爭點與法源 locator；來源取得、研究義務、證據升格、答案驗證與清除則由 server 掌控。架構採台灣大陸法系角度：現行法規與法律時點優先，普通裁判依審級及段落角色處理，憲法法庭多數理由、協同意見與不同意見分離。
+ALR-TW v1.0.0 是供不同 AI 代理使用的台灣法律研究與查證框架，透過 MCP（模型上下文協定）提供工具介面。外部 agent／LLM 可透過 MCP 建立研究 run、提出爭點與法源 locator；來源取得、研究義務、證據升格、答案驗證與清除則由 server 掌控。架構採台灣大陸法系角度：現行法規與法律時點優先，普通裁判依審級及段落角色處理，憲法法庭多數理由、協同意見與不同意見分離。
 
 本專案已整合並在 `hybrid_verified` 模式使用 [TLR（Taiwan Legal RAG）](https://github.com/aa0101181514/tw-legal-rag)尋找普通裁判候選，再由 ALR-TW 回查司法院官方全文；TLR provider 也可召回 typed 行政函釋候選，以及有界分頁讀取裁判長全文。所有 TLR 結果本身都不是正式引用證據。
 
@@ -137,7 +139,7 @@ source／evidence binding 後才能升格。
 | 模式 | 行為 |
 |---|---|
 | `synthetic` | 預設、完全離線，供 demo 與 CI |
-| `official_only` | 只連官方法規、普通裁判與憲法法庭來源 |
+| `official_only` | 預設連官方來源；明示啟用的遠端包依部署設定連線 |
 | `hybrid_verified` | privacy gate 通過後送 TLR 找候選，再回官方驗證 |
 
 啟用 `hybrid_verified` 時，查詢文字可能傳送至 TLR。不得輸入個人秘密、未公開個案事實、私有契約、訴訟策略、證據弱點或談判底線。詳見 [TLR Provider](docs/TLR_PROVIDER.md)。
@@ -336,7 +338,7 @@ Choose data mode
   -> run alr-tw doctor --live
   -> retrieve candidate sources
   -> resolve official identifier and content
-  -> create server-owned evidence (bind a receipt only when the adapter issues one)
+  -> create server-owned evidence and bind an eligible same-run snapshot receipt
   -> validate draft claims and citations
   -> present or fail closed
 ```

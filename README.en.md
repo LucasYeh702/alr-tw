@@ -1,12 +1,13 @@
-# ALR-TW: Agentic Legal RAG / MCP Harness for Taiwan Law
+# ALR-TW: Taiwan Legal Research and Verification Framework
 
+Connect AI agents to Taiwan’s official legal sources with research workflows, source verification, evidence binding, and answer validation.
 
 Current version: **v1.0.0** (package `1.0.0`). See [1.0 functionality and limits](docs/V1_RELEASE.md). This document describes the 1.0 release.
 
 
 [繁體中文](README.zh-TW.md) | English
 
-ALR-TW v1.0.0 is the agent-neutral release of the Taiwan-law research safety harness. An external agent or LLM may create and advance a research run over MCP and propose issues or authority locators, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
+ALR-TW v1.0.0 is the agent-neutral release of the Taiwan legal research and verification framework. An external agent or LLM may create and advance a research run over MCP and propose issues or authority locators, while source acquisition, research obligations, evidence promotion, answer validation, retention, and purge remain server-owned. The model is civil-law oriented: statutory text and legal time come first; ordinary judgments are classified by court and section role; Constitutional Court majority reasoning is kept separate from individual opinions.
 
 In `hybrid_verified` mode, this project uses [TLR (Taiwan Legal RAG)](https://github.com/aa0101181514/tw-legal-rag) to recall ordinary-judgment candidates, then asks ALR-TW to verify them against Judicial Yuan official full text. The TLR provider can also return typed administrative-interpretation candidates and read long judgment text through bounded paging. No TLR result is final citation evidence by itself.
 
@@ -140,7 +141,7 @@ External agent asks and drafts
 | Mode | Behavior |
 |---|---|
 | `synthetic` | Default; offline demos, tests, and CI |
-| `official_only` | Connect only to official law, judgment, and Constitutional Court sources |
+| `official_only` | Use official sources by default; explicitly enabled remote packs follow deployment configuration |
 | `hybrid_verified` | After a local privacy gate, send a safe query to TLR for recall, then verify candidates against official sources |
 
 In `hybrid_verified`, query text that passes the privacy gate is transmitted to TLR. Do not send personal secrets, unpublished case facts, private contracts, litigation strategy, evidentiary weaknesses, or negotiation limits. See [TLR Provider](docs/TLR_PROVIDER.md) and [Data Policy](DATA_POLICY.md).
@@ -352,7 +353,7 @@ Choose data mode
   -> run alr-tw doctor --live
   -> retrieve candidate sources
   -> resolve official identifier and content
-  -> create server-owned evidence (bind a receipt only when the adapter issues one)
+  -> create server-owned evidence and bind an eligible same-run snapshot receipt
   -> validate draft claims and citations
   -> present or fail closed
 ```

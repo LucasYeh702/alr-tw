@@ -1,4 +1,4 @@
-# Case Study: ALR-TW Agentic Legal RAG Harness
+# Case Study: ALR-TW Taiwan Legal Research and Verification Framework
 
 > 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
 

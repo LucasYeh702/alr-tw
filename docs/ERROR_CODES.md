@@ -1,6 +1,6 @@
 # ALR-TW Error Codes
 
-> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [RC3 說明](V1_RELEASE.md)。
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [功能與限制](V1_RELEASE.md)。
 
 
 ## v1.0.0 contract codes
@@ -334,7 +334,7 @@ Provider `ERROR`、`NOT_FOUND` 與 degraded／partial 必須分開。外部 outa
 | `OPERATION_RESULT_STALE` | 舊驗證結果的授權條件已失效；重新核對材料並驗證草稿。 |
 
 
-## v0.13 RC2 草稿與資料包
+## 草稿與資料包
 
 - `DRAFT_INPUT_INVALID`、`DRAFT_CLAIM_NOT_IN_TEXT`：草稿格式或主張與本文不一致；修正後重試。
 - `PACK_KEY_REQUIRED`、`PACK_ATTESTATION_INVALID`：缺少外部信任金鑰或認證失敗；不升格資料。
@@ -345,14 +345,14 @@ Provider `ERROR`、`NOT_FOUND` 與 degraded／partial 必須分開。外部 outa
 - `ADVISOR_PRIVACY_BLOCKED`、`ADVISOR_SOURCE_NOT_ELIGIBLE`：顧問請求未通過本機輸出或來源檢查。
 - `SEMANTIC_VERIFIER_PLUGIN_EXECUTION_FAILED`：接線失敗、逾時或模型結果無效；顧問輸出阻擋，不影響來源信任或自動核准答案。
 
-## RC2 補充
+## 草稿補充
 
 - `PACK_EXPORT_INVALID`：匯出格式或欄位無效；依合成範本修正。
 - `PACK_SYNTHETIC_NOT_LIVE`：合成包不能作為 live 來源。
 - `PACK_TRUST_REVOKED`：外部金鑰已移除或更換，後續存取阻擋。
 - 操作紀錄的 `OPERATION_INTERRUPTED`：受管程序中斷，舊操作維持失敗；用新操作編號接續。
 
-## RC3 精確來源與資料包
+## 精確來源與資料包
 
 - `HISTORICAL_IDENTITY_MISMATCH`／`HISTORICAL_VERSION_MISMATCH`：官方頁面必要欄位不符，不從正文推定。
 - `HISTORICAL_ARTICLE_NOT_FOUND_IN_VERSION`：有限查詢未確認條文，回傳 blocked，不宣稱完整範圍不存在。
@@ -361,7 +361,7 @@ Provider `ERROR`、`NOT_FOUND` 與 degraded／partial 必須分開。外部 outa
 - `PACK_TRANSPORT_TIMEOUT`：整次請求超過 20 秒；來源未核准，可在確認服務後另次重試。
 - `REQUEST_FAILED`：操作失敗的遮蔽診斷，不回傳原始路徑、輸入或驗證例外內容。
 
-## RC4 生命週期與重播
+## 生命週期與重播
 
 - `OPERATION_IN_PROGRESS`：受管工作占用程序協調；本次讀取／寫入／清除未完成，稍後重試。
 - `RESEARCH_RUN_NOT_FOUND_OR_REPLACED`：更新目標不存在或建立時間不符，禁止舊物件回寫。
@@ -369,7 +369,7 @@ Provider `ERROR`、`NOT_FOUND` 與 degraded／partial 必須分開。外部 outa
 - `OPERATION_REQUEST_MISMATCH`：歷審工具、識別或節點預算不同，或舊操作沒有摘要。
 - `OPERATION_RESULT_STALE`：歷審重播的材料摘要、來源或回執期限不再有效。
 
-## RC2 研究預算
+## 研究預算
 
 - `TIMEOUT_BUDGET_EXHAUSTED`：受管研究期限已到；停止新的提供者工作，保留已存材料。
 - `HTTP_BUDGET_EXHAUSTED`：累計 HTTP 嘗試已達上限；不再送出新請求。

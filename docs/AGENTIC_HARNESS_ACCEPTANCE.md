@@ -3,8 +3,7 @@
 > 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
 
 
-ALR-TW v1.0.0 可宣稱為「台灣法律 Agentic RAG / MCP research safety
-harness 公開預覽」。它提供 server-owned research state、agent-neutral
+ALR-TW v1.0.0 定位為「台灣法律研究與查證框架」。它提供 server-owned research state、agent-neutral
 interoperability、官方來源 providers、TLR candidate-only recall、evidence
 promotion、六種可併用法律分析分支的結構／信任驗證、claim validation、
 short-lived storage 與 purge；並提供 provider-neutral applicability、

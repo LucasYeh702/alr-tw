@@ -98,10 +98,11 @@ alr-tw validate-draft --run RUN_ID --input draft.json
 
 同一研究的受管操作不允許重疊執行。可攔截的例外會將本次取得的操作標為失敗，
 讀取進度並排除原因後可用新編號重試；失敗編號回 `OPERATION_FAILED`。
-程序遭強制終止或儲存無法存取時，可能留下未完成紀錄。`OPERATION_IN_PROGRESS` 表示仍有執行中或
-中斷後未完成的操作，不能當作成功。先確認原程序是否仍在執行；確定中斷時，
-以原問題與原法律適用日期重新建立研究，重新查證，不重用舊答案授權。
-不再需要的舊研究可用既有 purge 命令移除。此版不提供自動接管執行中的工作。
+程序強制終止可能留下未完成紀錄。新版受管操作會在下一次成功取得共用寫入鎖時，
+將可辨識的中斷操作標為 `OPERATION_INTERRUPTED`，再以新操作編號接續；舊結果不改為成功。
+原程序仍持有鎖時回 `OPERATION_IN_PROGRESS`，不得搶占。舊版無受管恢復標記的紀錄
+不自動接管；必要時以原問題與適用日期重建研究，重新查證，不重用舊答案授權。
+
 
 新版本會為操作紀錄補上請求摘要欄位；舊紀錄無摘要時不能證明是同一請求，
 改用新的操作編號。摘要不保存草稿正文，但既有結果的保存政策仍適用。
@@ -115,10 +116,28 @@ alr-tw validate-draft --run RUN_ID --input draft.json
 
 先取得同次研究證據，再用 `review-draft` 檢視內部草稿；`complete-research` 接續研究並嚴格驗證。修訂稿使用新的操作編號，舊結果保持不變。資料包匯入、啟用與顧問接線見 [1.0 操作與限制](V1_RELEASE.md)。
 
-## 0.14 引用定位與起草規則
+## 引用定位與起草規則
 
 先取得能力協商的 `workflow_guidance.drafting`；研究完成會附同一版本規則。
 `review-draft` 回傳 `citation_preparation` 的草稿摘要、原位置、候選位置與原因。
 核對摘要後更新原 `claim_bindings` 中對應引用，重新預檢，再以新操作編號完整驗證。
 預檢不自動套用修正，不授權答案；查無、歧義、跨子句及錯誤來源須修稿。
 詳見 [1.0 操作與限制](V1_RELEASE.md) 與 [公開面盤點](V1_RELEASE.md)。
+
+## 本機資料包啟用
+
+先取得部署者核准的資料包、認證清單及獨立可信金鑰，再執行：
+
+```sh
+alr-tw import-pack pack.sqlite --manifest manifest.json --key-file TRUST_KEY_FILE --destination PACK_DIRECTORY
+export ALR_TW_DATA_PACK_ROOT=PACK_DIRECTORY
+export ALR_TW_DATA_PACK_KEY_FILE=TRUST_KEY_FILE
+```
+
+佔位路徑需換成部署環境的實際路徑。資料包與金鑰不隨專案提供；
+同包附帶的未知金鑰不能建立信任。資料包只改變裁判提供者，其他來源仍依設定連線。
+
+`advise-draft --run RUN_ID --input draft.json --gateway-config GATEWAY_CONFIG` 為明示啟用的外部顧問。
+設定包含 `command`（執行檔絕對路徑及參數陣列）、`model` 與 `timeout_seconds`（1–180 秒）。
+模型名稱須在接線程式允許清單內；列名不代表附有該提供者接線或已驗證其服務可用。
+外部程式須遵守既有語意驗證協定；回應只供修稿，不升格證據或授權答案。

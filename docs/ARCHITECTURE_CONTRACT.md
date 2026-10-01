@@ -178,6 +178,6 @@ local `verified_cache`.
 
 These tests do not claim production retrieval quality. They only assert the architecture contract that a production implementation should preserve.
 
-## RC4 additions
+## Draft and provider interfaces
 
 The draft workspace is read-only and advisory. Research completion reuses existing finalization and claim checks. Authenticated local packs are a separate judgment provider; the optional command-based semantic gateway cannot promote evidence or authorize answers. See [1.0 操作與限制](V1_RELEASE.md).

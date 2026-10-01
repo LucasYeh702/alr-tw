@@ -117,6 +117,6 @@ true and `final_action` is `answer`.
 - `fail_unsupported_paraphrase`: claim paraphrase does not match supporting segments.
 - `human_review_claim_unchecked`: source exists, but claim support was intentionally unchecked.
 
-## RC4 draft revision
+## Draft revision
 
 After research returns an evidence bundle, `review_legal_draft` provides internal annotations and `complete_legal_research` resumes research before strict validation. Neither exploratory labels nor semantic advice authorize final answers. See [1.0 操作與限制](V1_RELEASE.md).

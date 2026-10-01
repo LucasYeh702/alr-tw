@@ -48,7 +48,7 @@ are marked `[DEMO ONLY]`; compatibility entries are marked
 External discovery, including a web search when the deployment permits it, is
 not categorically forbidden. Its output may identify candidate identifiers or
 locators only. A formal citation must return through server-owned official
-verification and source promotion; discovery output itself is never evidence.
+verification or the trusted-cache gate and source promotion; discovery output itself is never evidence.
 
 ### Optional Legislative Yuan locator connector
 
@@ -140,8 +140,8 @@ source verification:
 沒有引用標記時可省略 `citation_occurrences`（引用位置）；有標記時其
 `citation_text` 必須是 `source.citation`（正式引用名稱），不是證據原文。
 若研究已有註冊計畫，還須提供相應 `issue_ids`（爭點識別）。
-RC4 另支援經來源佐證的裁判同文書等價名稱，以及完整主張後的單一純引導引用句；
-具體限制見 [RC4 說明](V1_RELEASE.md)，不接受任意名稱或引用句中的額外結論。
+本版支援經來源佐證的裁判同文書等價名稱，以及完整主張後的單一純引導引用句；
+具體限制見 [功能與限制](V1_RELEASE.md)，不接受任意名稱或引用句中的額外結論。
 預檢不是放行；修稿後將完整參數加上新的 `operation_id`，呼叫
 `validate_legal_answer`（嚴格答案驗證），依實際結果決定能否展示。
 
@@ -274,6 +274,6 @@ quality beyond the deterministic checks represented in the trace.
 分級搜尋候選及 time_hints；建議不是證據、不授權答案，日期確認後另以 as_of_date
 明示建立研究。精確引用不展開；關係與日期有歧義時先澄清。詳見 V1_CONTRACT。
 
-RC7 的 law_search_queries 為官方法規搜尋用的獨立詞候選，與完整 original_query
+law_search_queries 為官方法規搜尋用的獨立詞候選，與完整 original_query
 分開；surface／relation 表示候選來源，不得把搜尋詞代換為案件事實。
 期間或一般制度問題不要求歷史日期；真正日期與明示歷史需求仍須核對。
