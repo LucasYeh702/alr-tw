@@ -1,13 +1,16 @@
-# ALR-TW v0.12.0 Acceptance
+# ALR-TW v1.0.0 Acceptance
 
-ALR-TW v0.12.0 可宣稱為「台灣法律 Agentic RAG / MCP research safety
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
+ALR-TW v1.0.0 可宣稱為「台灣法律 Agentic RAG / MCP research safety
 harness 公開預覽」。它提供 server-owned research state、agent-neutral
 interoperability、官方來源 providers、TLR candidate-only recall、evidence
 promotion、六種可併用法律分析分支的結構／信任驗證、claim validation、
 short-lived storage 與 purge；並提供 provider-neutral applicability、
 authority／judgment-lineage、公法材料 contracts 及可替換 provider SDK。
 
-v0.12.0 同時提供 semantic verifier sidecar、provider conformance、
+v1.0.0 同時提供 semantic verifier sidecar、provider conformance、
 receipt-aware adapter 與 deployer boundary contracts。它們只驗證結構、信任、
 snapshot 與公開邊界；sidecar／部署者 provider 不能建立 evidence、改變 source
 trust、授權 finalization，也不會把模型、corpus、credentials 或 production
@@ -53,7 +56,7 @@ parameters 打包進公開套件。
   或 caller-attested manifest 自動升格為可信 provider；
 - ChronoLex-TW adapter 不內附資料集，agent input 不含 gold，歷史版本指標沒有
   evaluator-owned server adjudication 時必須是 `not_scoreable`；
-- v0.12.0 contract、既有工具與 payload 的 additive compatibility、build 與 stdio smoke 應通過；
+- v1.0.0 contract、既有工具與 payload 的 additive compatibility、build 與 stdio smoke 應通過；
 - 公開邊界掃描無秘密、真實資料或 local-sensitive artifacts。
 
 ## 可接受的 qualified 狀態

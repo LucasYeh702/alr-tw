@@ -1,8 +1,11 @@
 # ALR-TW Trace Schema
 
-## v0.12.0 research state records
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
 
-v0.12.0 流程以持久化 `ResearchRun` 與逐步 result 取代 caller 組裝 authority trace：
+
+## v1.0.0 research state records
+
+v1.0.0 流程以持久化 `ResearchRun` 與逐步 result 取代 caller 組裝 authority trace：
 
 - `alr-tw.research-run/v1`：狀態、mode、privacy、obligations、coverage、source/evidence ids、TTL，以及 additive responsibility／registered-plan、workflow completion、research sufficiency、answer mode 與 `max_judgment_verifications` fields；
 - Coverage v2 另保存 bounded query/time scope、provider scope、partial／error／timeout reason codes、absence gate 與可選 snapshot receipt reference；
@@ -23,7 +26,7 @@ v0.12.0 流程以持久化 `ResearchRun` 與逐步 result 取代 caller 組裝 a
 
 Trace 不得記錄 API secret。TLR privacy metadata 不得包含未遮罩的 sensitive input。Blocked validation 的 `answer_text` 必須是 `null`；ephemeral validation 另回 `storage_purged=true`。
 
-舊 `alr-tw.agentic_trace/v1` 保留 synthetic／externally-driven compatibility，但不得用它把 caller-attested source 注入 v0.12.0 evidence。
+舊 `alr-tw.agentic_trace/v1` 保留 synthetic／externally-driven compatibility，但不得用它把 caller-attested source 注入 v1.0.0 evidence。
 
 The public trace schema version is `alr-tw.agentic_trace/v1`.
 

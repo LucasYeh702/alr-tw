@@ -1,13 +1,16 @@
 # ALR-TW Agent Client Guide
 
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
 ALR-TW records and gates externally driven tool runs. This repository ships no
 LLM and no agent implementation. The external MCP client supplies the agent
 role; the harness records tool calls, validates citations, computes the trust
 gate, and returns a canonical trace.
 
-## v0.12.0 agent tool profiles and selection
+## v1.0.0 agent tool profiles and selection
 
-v0.12.0 provides a profile-gated MCP catalog and an optional Legislative Yuan
+v1.0.0 provides a profile-gated MCP catalog and an optional Legislative Yuan
 locator connector while preserving the server-owned trust boundary.
 
 The MCP catalog classifies tools as `server_owned`, `legacy_compatibility`, or
@@ -70,7 +73,7 @@ answer use. Synthetic mode never calls the connector. In `official_only` or
 `lookup_legislative_history`; merely starting the stdio server or listing tools
 does not fetch Legislative Yuan data.
 
-## v0.12.0 agent-neutral research flow
+## v1.0.0 agent-neutral research flow
 
 New clients should first call `get_legal_research_capabilities`.
 
@@ -106,6 +109,41 @@ source verification:
 8. Treat finalization as a pre-draft posture only. Render only a
    `validated` or `qualified` result returned by `validate_legal_answer`; a
    `refusal_only` finalization must not render a draft.
+
+### 建立研究與最小草稿範例
+
+`research_legal_question`（建立研究）必填 `query`，可選 `constraints`、
+`client_id` 與 `request_id`，不接受 `operation_id`；操作編號用於後續推進或驗證。
+建立參數例如：
+
+```json
+{"query": "合成示範問題", "constraints": {"research_depth": "quick"}}
+```
+
+`claim_bindings`（主張綁定）的每項必填 `claim_id`、`claim_text`、`claim_type`
+及非空 `evidence_ids`。以下是 `review_legal_draft`（唯讀預檢）的最小結構示例，
+所有識別與文字皆為合成占位，實際使用必須換成同研究取得的證據與完整主張：
+
+```json
+{
+  "run_id": "synthetic-run-placeholder",
+  "answer_text": "示範條文規定應履行示範義務。",
+  "claim_bindings": [{
+    "claim_id": "claim-1",
+    "claim_text": "示範條文規定應履行示範義務。",
+    "claim_type": "law_rule",
+    "evidence_ids": ["synthetic-evidence-placeholder"]
+  }]
+}
+```
+
+沒有引用標記時可省略 `citation_occurrences`（引用位置）；有標記時其
+`citation_text` 必須是 `source.citation`（正式引用名稱），不是證據原文。
+若研究已有註冊計畫，還須提供相應 `issue_ids`（爭點識別）。
+RC4 另支援經來源佐證的裁判同文書等價名稱，以及完整主張後的單一純引導引用句；
+具體限制見 [RC4 說明](V1_RELEASE.md)，不接受任意名稱或引用句中的額外結論。
+預檢不是放行；修稿後將完整參數加上新的 `operation_id`，呼叫
+`validate_legal_answer`（嚴格答案驗證），依實際結果決定能否展示。
 
 ### Quick server-managed path
 
@@ -163,7 +201,7 @@ Counter-authority results are bounded lexical candidate discovery followed by
 official verification; they do not establish semantic opposition, global
 absence, or practice-wide consensus.
 
-The v0.12.0 public contracts also expose structural applicability resolution,
+The v1.0.0 public contracts also expose structural applicability resolution,
 authority/judgment lineage, and public-law provider adapters. Use the
 provider-neutral interfaces for explicit source relationships, court/procedure
 metadata, administrative rules or legislative materials. These records remain
@@ -227,3 +265,15 @@ server.
 Externally driven traces prove tool invocation through `execution_mode:
 "actual_tool"` and `trace_kind: "externally_driven"`. They do not prove answer
 quality beyond the deterministic checks represented in the trace.
+
+### 查詢前處理與澄清
+
+「法院如何處理……」等明確實務問句可進入既有裁判召回與官方驗證；純法規查詢
+不因此附加裁判分支。詞義或研究意圖不明時，客戶端應先澄清或分列研究計畫，
+不可擅自改寫成單一解釋。建立與讀取研究會回傳 query_preparation，包含原問題、
+分級搜尋候選及 time_hints；建議不是證據、不授權答案，日期確認後另以 as_of_date
+明示建立研究。精確引用不展開；關係與日期有歧義時先澄清。詳見 V1_CONTRACT。
+
+RC7 的 law_search_queries 為官方法規搜尋用的獨立詞候選，與完整 original_query
+分開；surface／relation 表示候選來源，不得把搜尋詞代換為案件事實。
+期間或一般制度問題不要求歷史日期；真正日期與明示歷史需求仍須核對。

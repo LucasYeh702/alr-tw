@@ -546,7 +546,7 @@ class LocalPortalJudgmentProvider:
             return None
 
         source_id = "src_local_judgment_" + hashlib.sha256(
-            f"{jid}\x00{source_hash}".encode("utf-8")
+            f"{jid}\x00{source_hash}\x00{now.isoformat()}".encode("utf-8")
         ).hexdigest()[:24]
         source = SourceRecord(
             source_id=source_id,
@@ -634,6 +634,76 @@ class LocalPortalJudgmentProvider:
             now=timestamp,
         )
         if official_result.status is ProviderResultStatus.FOUND and source is not None and evidence:
+            # The composite provider owns the provider boundary seen by the
+            # research executor.  Rebind only results that are internally
+            # consistent with the configured official delegate; preserve the
+            # delegate identity in metadata for provenance.  Any other
+            # provider mismatch stays untouched and is rejected downstream.
+            evidence_ids = [
+                item.evidence_id for item in evidence if isinstance(item, EvidenceSpan)
+            ]
+            delegate_bundle_is_consistent = bool(
+                official_result.provider_id == self.official_provider.provider_id
+                and isinstance(source, SourceRecord)
+                and source.provider_id == self.official_provider.provider_id
+                and official_result.source_ids == [source.source_id]
+                and len(evidence_ids) == len(evidence)
+                and len(evidence_ids) == len(set(evidence_ids))
+                and set(official_result.evidence_ids) == set(evidence_ids)
+                and all(item.source_id == source.source_id for item in evidence)
+            )
+            if delegate_bundle_is_consistent:
+                delegated_provider_id = source.provider_id
+                delegated_source_id = source.source_id
+                delegated_evidence_ids = [item.evidence_id for item in evidence]
+                snapshot_identity = json.dumps(
+                    source.model_dump(mode="json", exclude={"source_id"}),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                adapted_source_id = "src_local_fallback_" + hashlib.sha256(
+                    f"{self.provider_id}\x00{snapshot_identity}".encode("utf-8")
+                ).hexdigest()[:24]
+                evidence = [
+                    item.model_copy(
+                        update={
+                            "evidence_id": "ev_local_fallback_"
+                            + hashlib.sha256(
+                                f"{adapted_source_id}\x00{item.evidence_id}".encode("utf-8")
+                            ).hexdigest()[:24],
+                            "source_id": adapted_source_id,
+                        }
+                    )
+                    for item in evidence
+                ]
+                source = source.model_copy(
+                    update={
+                        "source_id": adapted_source_id,
+                        "provider_id": self.provider_id,
+                        "metadata": {
+                            **source.metadata,
+                            "delegated_provider_id": delegated_provider_id,
+                            "delegated_source_id": delegated_source_id,
+                            "retrieval": "official_provider_fallback",
+                        },
+                    }
+                )
+                official_result = official_result.model_copy(
+                    update={
+                        "provider_id": self.provider_id,
+                        "source_ids": [adapted_source_id],
+                        "evidence_ids": [item.evidence_id for item in evidence],
+                        "metadata": {
+                            **official_result.metadata,
+                            "delegated_provider_id": delegated_provider_id,
+                            "delegated_source_id": delegated_source_id,
+                            "delegated_evidence_ids": delegated_evidence_ids,
+                            "retrieval": "official_provider_fallback",
+                            "local_portal": True,
+                        },
+                    }
+                )
             return official_result, source, evidence
         if not local.candidates:
             return official_result, source, evidence

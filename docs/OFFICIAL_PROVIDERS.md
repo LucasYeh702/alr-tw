@@ -1,8 +1,11 @@
 # Official Providers
 
-ALR-TW v0.12.0 以三個獨立 provider 取得台灣中央法規、普通法院裁判與憲法法庭資料。官方即時內容通過結構、一致性與 freshness 檢查後，會固定成 server-owned evidence；呼叫端不能自行宣告某段文字為官方資料。內建 `ResearchService` 會依同一 run 中通過官方／可信快取閘門的精確 source／evidence 集合簽發並持久化 provider-neutral snapshot receipt，finalization 再從 server-owned store 重算 binding。receipt 與其他閘門均通過時 `ordinary` 才可達；缺失最高為 `conditional`，跨 run、過期或集合不符則 fail closed。
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
 
-v0.12.0 也提供行政規則、行政解釋、訴願與立法資料的 provider-neutral
+
+ALR-TW v1.0.0 以三個獨立 provider 取得台灣中央法規、普通法院裁判與憲法法庭資料。官方即時內容通過結構、一致性與 freshness 檢查後，會固定成 server-owned evidence；呼叫端不能自行宣告某段文字為官方資料。內建 `ResearchService` 會依同一 run 中通過官方／可信快取閘門的精確 source／evidence 集合簽發並持久化 provider-neutral snapshot receipt，finalization 再從 server-owned store 重算 binding。receipt 與其他閘門均通過時 `ordinary` 才可達；缺失最高為 `conditional`，跨 run、過期或集合不符則 fail closed。
+
+v1.0.0 也提供行政規則、行政解釋、訴願與立法資料的 provider-neutral
 contracts／SDK。TLR adapter 可召回行政函釋候選，但不建立 source 或 evidence；
 本 repo 仍不內附行政函釋官方 provider、corpus 或 index。部署者可用
 `PublicLawProviderAdapter` 接入官方來源；所有升格結果仍須由 server metadata
@@ -24,7 +27,7 @@ handshake 後 renegotiation。無法安全建立連線時會 fail closed。
 - 來源：全國法規資料庫官方結構化資料與官方網頁；
 - 能力：法規名稱、基本關鍵詞、精確條文、現行／廢止狀態；
 - 結構化內容與官方網頁內容衝突時，來源降為 `verification_failed`，不得作正式證據；
-- v0.12.0 不承諾指定歷史日期的完整版本、地方自治法規或所有附件解析。
+- v1.0.0 不承諾指定歷史日期的完整版本、地方自治法規或所有附件解析。
 
 ## 司法院普通裁判 Provider
 
@@ -83,3 +86,7 @@ canonical JID／正式字號回查官方來源。
 - 每個 source 保存官方識別碼、網址、內容 hash、取得與驗證時間、到期時間；
 - 到期或驗證衝突的 evidence 不可支援 final answer；
 - `as_of_date`／修法前查詢在本版無法完整支援時會 fail closed。
+
+## 本機裁判資料包
+
+除官方即時來源與既有本機介面外，本版提供 `DataPackJudgmentProvider`。它驗證外部金鑰認證的完整 SQLite 映像、範圍及期限，搜尋仍為候選，精確回查才產生可信快取。它不進行網路回退，其他來源仍沿用原本行為；詳見 [1.0 操作與限制](V1_RELEASE.md)。

@@ -1,5 +1,8 @@
 # Security Policy
 
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](docs/V1_RELEASE.md)。
+
+
 ## Supported versions
 
 Security review focuses on the default branch and latest public-preview release. `0.x` versions are not stable interfaces.
@@ -8,7 +11,7 @@ Security review focuses on the default branch and latest public-preview release.
 
 Do not publish vulnerabilities, secrets, private paths, real case facts, or personal data in an issue. Use GitHub private vulnerability reporting or a Security Advisory when available. Otherwise open a minimal issue asking for a private contact, without exploit details.
 
-## v0.12.0 trust boundary
+## v1.0.0 trust boundary
 
 - MCP caller input is untrusted, including `source_tier`, URLs, hashes, timestamps, answer text, and identifiers.
 - Caller-attested `official` or `verified_cache` metadata cannot establish final eligibility.

@@ -1,6 +1,9 @@
 # ALR-TW Agent-Neutral Interoperability Contract
 
-本文件定義 v0.12.0 的前端無關接口。任何能呼叫 MCP tool 的法律
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
+本文件定義 v1.0.0 的前端無關接口。任何能呼叫 MCP tool 的法律
 agent、prompt skill、workflow engine 或人工控制程式都可以使用同一套契約；
 核心程式不依賴特定前端專案、模型或提示詞。
 
@@ -12,20 +15,20 @@ trust-boundary tests only; it does not ship production corpus, private paths,
 indexes, manifests, operational state, or private evaluation labels. A user
 supplies a conforming provider through these public contracts.
 
-The v0.12.0 public surface also includes structural applicability resolution,
+The v1.0.0 public surface also includes structural applicability resolution,
 authority/judgment-lineage records, public-law material contracts, and a
 provider SDK. These are metadata-bound extension points: they describe explicit
 source relationships, court/procedure lineage, and administrative or legislative
 material roles, but they do not perform semantic entailment or opposition
 classification. A deployment must supply the provider and server-owned binding.
 
-The v0.12.0 surface includes an optional semantic-verifier sidecar. It can
+The v1.0.0 surface includes an optional semantic-verifier sidecar. It can
 return bounded `supports`, `contradicts`, `uncertain`, or `not_evaluated`
 relations for server-selected targets, but its output remains advisory-only and
 cannot promote evidence, mutate source trust, or authorize finalization or an
 answer. The core runtime remains model-free.
 
-The v0.12.0 provider boundary also exposes a common conformance validator and an
+The v1.0.0 provider boundary also exposes a common conformance validator and an
 optional receipt-aware adapter. A deployer may provide a provider, model, or
 corpus outside this repository, but the public package does not bundle them;
 server-owned source/evidence promotion and run-bound snapshot receipts remain
@@ -73,7 +76,7 @@ same run.
 
 ### `server_managed`
 
-This is the v0.12.0-compatible default. ALR-TW plans and executes its bounded
+This is the v1.0.0-compatible default. ALR-TW plans and executes its bounded
 official/TLR discovery obligations. No external research plan is required.
 
 The client may use `execute_legal_research` to advance all currently executable
@@ -245,7 +248,7 @@ scope and provider scope. A clean `not_found_in_scope` is not a global absence
 claim. Counter-authority is lexical candidate discovery plus official
 verification, not a semantic opposition classifier or a consensus proof.
 
-Snapshot receipts are provider-neutral contracts. In v0.12.0 the built-in
+Snapshot receipts are provider-neutral contracts. In v1.0.0 the built-in
 `ResearchService` issues and persists them for the exact same-run set of
 eligible official/verified-cache sources and claim-supporting evidence, then
 recomputes that binding during finalization. Caller-supplied receipts are never

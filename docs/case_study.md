@@ -1,5 +1,8 @@
 # Case Study: ALR-TW Agentic Legal RAG Harness
 
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
 ## Problem
 
 Legal AI systems often fail by producing confident but ungrounded citations, mixing unofficial sources with official ones, or treating semantic similarity as legal authority.

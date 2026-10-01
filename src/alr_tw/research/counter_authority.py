@@ -28,7 +28,7 @@ MAX_COUNTER_QUERY_CHARS = 128
 _TOKEN_RE = re.compile(r"[\u3400-\u9fffA-Za-z0-9]{2,}")
 _LAW_REFERENCE_RE = re.compile(
     r"[\u3400-\u9fff]{1,30}?(?:法|條例|規則|辦法)第\s*"
-    r"\d+(?:\s*(?:之|-)\s*\d+)*\s*條"
+    r"\d+(?:\s*(?:之|-)\s*\d+)*\s*條(?:\s*之\s*\d+)*"
 )
 _QUERY_FILLERS = (
     "請問",

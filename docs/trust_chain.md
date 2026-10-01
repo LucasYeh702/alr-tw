@@ -1,5 +1,8 @@
 # Trust Chain
 
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
 The trust chain separates retrieval candidates from final citations.
 
 1. Official sources may be final citations.

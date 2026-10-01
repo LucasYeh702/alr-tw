@@ -170,3 +170,22 @@ def test_structured_and_web_content_match_remains_eligible() -> None:
     assert result.status == ProviderResultStatus.FOUND
     assert source is not None and source.trust_status == TrustStatus.EVIDENCE_ELIGIBLE
     assert evidence is not None and evidence.eligible_for_claim_support
+
+
+@pytest.mark.parametrize("status", [500, 503])
+def test_exact_locator_preserves_catalog_outage(tmp_path, status):
+    from alr_tw.providers.official import OfficialConstitutionalProvider, OfficialJudgmentProvider
+    from alr_tw.research.provider_executor import ProviderObligationExecutor, ProviderSet
+    from alr_tw.storage.sqlite_store import SqliteStore
+
+    transport = FixtureTransport(b"unavailable", status_code=status)
+    executor = ProviderObligationExecutor(SqliteStore(tmp_path), ProviderSet(
+        laws=OfficialLawProvider(transport),
+        constitutional=OfficialConstitutionalProvider(),
+        judgments=OfficialJudgmentProvider(),
+    ))
+    result = executor.lookup("示範程序法第12條之1")
+    assert result["status"] == "error"
+    assert result["error_code"] == "OFFICIAL_SOURCE_UNAVAILABLE"
+    assert not result["claim_verified"]
+    assert transport.calls == [LAW_DATA_URL]

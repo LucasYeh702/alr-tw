@@ -1,0 +1,14 @@
+{
+  "manifest_id": "alr-tw-public-research-tasks-v1",
+  "manifest_hash": "b80f65e63c31e04a8a62ee665a6e7d79d640ab0d61c20559b5588daf3e3ab99a",
+  "status": "authored_unreviewed",
+  "task_ids": [
+    "RT-01-01",
+    "RT-02-02",
+    "RT-03-03",
+    "RT-04-04",
+    "RT-05-05",
+    "RT-06-06"
+  ],
+  "purpose": "bounded Luna pilot selection; no model outputs or expert scores"
+}

@@ -50,3 +50,23 @@ profile、tool description 與回傳 envelope 為準。
 先完成 server-owned research obligations，再用 evidence 綁定每個核心主張，
 最後呼叫 `validate_legal_answer`。只有該工具回傳允許呈現的結果才可輸出；
 `blocked` 或 `refusal_only` 不得帶出草稿答案。
+
+<!-- drafting-rules:start -->
+規則版本：`alr-tw.drafting-rules/v2`
+
+- 每個實質子句（包括短結論）須由一項主張綁定完整涵蓋，不可用零碎文字拼湊覆蓋。
+- 僅通過來源、精確位置與主張關聯核對的純引用標記可排除；括號內的法律結論仍須綁定驗證。
+- 使用同次研究的 evidence_ids 與正式引用文字；完整綁定仍須通過支持、角色、時點及最終驗證。
+- 引用位置使用原始 answer_text 的 Unicode 碼點，零起算、結尾不包含；改稿後重新定位並使用新的操作編號。
+- 引用與主張放在同一子句；或完整主張後立即接單一純引導引用句（參見／參照／見／依），不得跨段、夾帶結論或有歧義。
+<!-- drafting-rules:end -->
+
+citation_text 必須是對應來源的 source.citation 正式引用名稱（裁判可用已核對的同文書等價名稱），不是 evidence.exact_text 條文或裁判原文；答案沒有引用標記時可省略 citation_occurrences，仍須完整 claim_bindings。
+
+## Research intent clarification
+
+快速研究只以明確用語分派來源，例如「法院如何處理……」會安排裁判召回與官方驗證。
+若問題的研究意圖或詞義有歧義，先向使用者澄清，或以既有研究計畫分列待核對的解釋；
+不要自行選定單一詞義，也不要為消除歧義而無限制查詢全部來源。保留原問題的否定、
+角色、金額與日期。query_preparation 提供有界詞彙與日期候選，近似／相關詞不等於事實；
+日期建議不自動套用，只有年月不得補日，須澄清後明示 as_of_date。不要將建議當證據或授權。

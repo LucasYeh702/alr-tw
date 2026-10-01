@@ -1,6 +1,9 @@
 # TLR Provider
 
-ALR-TW v0.12.0 提供可選的 TLR provider（資料提供者），透過 [TLR（Taiwan Legal RAG）公開專案](https://github.com/aa0101181514/tw-legal-rag)的 HTTP API 召回普通裁判與行政函釋候選，並支援裁判長全文的有界分頁讀取。部署者可依需求選擇召回資料層；正式來源與 evidence 仍由 ALR-TW 驗證。
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
+ALR-TW v1.0.0 提供可選的 TLR provider（資料提供者），透過 [TLR（Taiwan Legal RAG）公開專案](https://github.com/aa0101181514/tw-legal-rag)的 HTTP API 召回普通裁判與行政函釋候選，並支援裁判長全文的有界分頁讀取。部署者可依需求選擇召回資料層；正式來源與 evidence 仍由 ALR-TW 驗證。
 
 TLR HTTPS 與官方 provider 相同，使用作業系統 trust store（`truststore`），不走
 skip-verify，也不改用獨立 CA bundle。裁判搜尋與行政函釋搜尋若回傳超過 requested

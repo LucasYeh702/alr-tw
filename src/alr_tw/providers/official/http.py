@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from alr_tw.budget import charge_http_request
+
+import asyncio
 import importlib
 import ssl
 from dataclasses import dataclass
@@ -80,33 +83,35 @@ class HttpxAllowlistedTransport:
         except ImportError as exc:  # pragma: no cover - exercised by base-install smoke
             raise RuntimeError("LIVE_EXTRA_REQUIRED") from exc
 
-        current = url
-        async with httpx.AsyncClient(
-            headers={"User-Agent": self.user_agent},
-            follow_redirects=False,
-            timeout=timeout,
-            verify=system_truststore_context(),
-        ) as client:
-            for _ in range(4):
-                self.validate_url(current)
-                async with client.stream("GET", current) as response:
-                    if response.status_code in {301, 302, 303, 307, 308}:
-                        location = response.headers.get("location")
-                        if not location:
-                            raise RuntimeError("REDIRECT_WITHOUT_LOCATION")
-                        current = urljoin(current, location)
-                        continue
-                    chunks: list[bytes] = []
-                    size = 0
-                    async for chunk in response.aiter_bytes():
-                        size += len(chunk)
-                        if size > max_bytes:
-                            raise RuntimeError("RESPONSE_TOO_LARGE")
-                        chunks.append(chunk)
-                    return HttpResponse(
-                        status_code=response.status_code,
-                        content=b"".join(chunks),
-                        headers=dict(response.headers),
-                        url=str(response.url),
-                    )
-        raise RuntimeError("TOO_MANY_REDIRECTS")
+        async with asyncio.timeout(timeout):
+            current = url
+            async with httpx.AsyncClient(
+                headers={"User-Agent": self.user_agent},
+                follow_redirects=False,
+                timeout=timeout,
+                verify=system_truststore_context(),
+            ) as client:
+                for _ in range(4):
+                    self.validate_url(current)
+                    charge_http_request()
+                    async with client.stream("GET", current) as response:
+                        if response.status_code in {301, 302, 303, 307, 308}:
+                            location = response.headers.get("location")
+                            if not location:
+                                raise RuntimeError("REDIRECT_WITHOUT_LOCATION")
+                            current = urljoin(current, location)
+                            continue
+                        chunks: list[bytes] = []
+                        size = 0
+                        async for chunk in response.aiter_bytes():
+                            size += len(chunk)
+                            if size > max_bytes:
+                                raise RuntimeError("RESPONSE_TOO_LARGE")
+                            chunks.append(chunk)
+                        return HttpResponse(
+                            status_code=response.status_code,
+                            content=b"".join(chunks),
+                            headers=dict(response.headers),
+                            url=str(response.url),
+                        )
+            raise RuntimeError("TOO_MANY_REDIRECTS")

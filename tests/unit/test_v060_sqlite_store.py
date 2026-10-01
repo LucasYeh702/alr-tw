@@ -85,7 +85,7 @@ def test_store_round_trips_run_source_evidence_and_idempotent_operation(tmp_path
     run = _run("run_1", now=now)
     source = _source("source_1", now=now)
 
-    store.save_run(run)
+    store.create_run(run)
     store.save_source(run.run_id, source)
     store.save_evidence(run.run_id, _evidence("evidence_1", source.source_id))
     first = store.record_operation(run.run_id, "operation_1", {"step": "planning"})
@@ -107,7 +107,7 @@ def test_source_and_evidence_ids_are_immutable(tmp_path: Path):
     store = SqliteStore(tmp_path / "cache")
     run = _run("run_1", now=now)
     source = _source("source_1", now=now)
-    store.save_run(run)
+    store.create_run(run)
     store.save_source(run.run_id, source)
     evidence = _evidence("evidence_1", source.source_id)
     store.save_evidence(run.run_id, evidence)
@@ -127,7 +127,7 @@ def test_purge_run_keeps_shared_source_until_last_reference_is_removed(tmp_path:
     source = _source("shared", now=now)
 
     for run_id in ("run_1", "run_2"):
-        store.save_run(_run(run_id, now=now))
+        store.create_run(_run(run_id, now=now))
         store.save_source(run_id, source)
         store.save_evidence(run_id, _evidence(f"evidence_{run_id}", source.source_id))
 
@@ -150,7 +150,7 @@ def test_cleanup_expired_removes_run_and_unreferenced_sources(tmp_path: Path):
     store = SqliteStore(tmp_path / "cache")
     expired = _run("expired", now=now - timedelta(hours=2), expires_at=now - timedelta(hours=1))
     source = _source("expired-source", now=now - timedelta(hours=2))
-    store.save_run(expired)
+    store.create_run(expired)
     store.save_source(expired.run_id, source)
 
     result = store.cleanup_expired(now=now)
@@ -169,7 +169,7 @@ def test_same_candidate_identity_can_belong_to_separate_runs(tmp_path: Path):
         title="合成裁判候選",
     )
     for run_id in ("run_1", "run_2"):
-        store.save_run(_run(run_id, now=now))
+        store.create_run(_run(run_id, now=now))
         store.save_candidate(
             run_id,
             candidate,
@@ -186,7 +186,7 @@ def test_fresh_verified_cache_links_same_evidence_to_separate_runs(tmp_path: Pat
     source = _source("cached", now=now)
     evidence = _evidence("cached-evidence", source.source_id)
 
-    store.save_run(_run("run_1", now=now))
+    store.create_run(_run("run_1", now=now))
     store.save_source("run_1", source)
     store.save_evidence("run_1", evidence)
     store.save_cache_entry("law:synthetic:1", source, [evidence])
@@ -194,7 +194,7 @@ def test_fresh_verified_cache_links_same_evidence_to_separate_runs(tmp_path: Pat
     cached = store.get_fresh_cache_entry("law:synthetic:1", now=now)
     assert cached == (source, [evidence])
 
-    store.save_run(_run("run_2", now=now))
+    store.create_run(_run("run_2", now=now))
     store.save_source("run_2", cached[0])
     store.save_evidence("run_2", cached[1][0])
 
@@ -213,7 +213,7 @@ def test_purge_all_removes_database_sidecars_and_temp_files(tmp_path: Path):
     now = datetime.now(UTC)
     root = tmp_path / "cache"
     store = SqliteStore(root)
-    store.save_run(_run("run_1", now=now))
+    store.create_run(_run("run_1", now=now))
     store.temp_path.mkdir(parents=True, exist_ok=True)
     (store.temp_path / "response.tmp").write_text("synthetic", encoding="utf-8")
     Path(f"{store.database_path}-wal").touch()

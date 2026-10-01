@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta, timezone
+from functools import wraps
 import re
 from threading import RLock
-from time import perf_counter
-from typing import Any, Literal, Protocol
+from time import monotonic, perf_counter
+from typing import Any, Callable, Literal, ParamSpec, Protocol, TypeVar
 import unicodedata
 from uuid import uuid4
 
+from alr_tw.budget import ACTIVE_BUDGET, BudgetScope, BudgetExceeded
+from alr_tw.contracts.budget import ResearchBudget
 from alr_tw.contracts.legal_analysis import LegalAnalysisEnvelope
 from alr_tw.contracts.civil_analysis import CounterAuthorityRelation
 from alr_tw.contracts.finalization import (
@@ -54,13 +57,20 @@ from alr_tw.contracts.sources import (
 from alr_tw.contracts.provider_snapshot import ProviderSnapshotReceipt
 from alr_tw.storage.sqlite_store import SqliteStore
 from alr_tw.providers.synthetic import SyntheticLegalContextProvider
+from alr_tw.providers.official.judgments import OfficialJudgmentProvider
 from alr_tw.research.counter_authority import CounterAuthorityProgress
+from alr_tw.research.drafting_rules import drafting_guidance
+from alr_tw.research.workflow_guidance import (
+    build_research_guidance,
+    build_validation_guidance,
+)
 from alr_tw.verification.legal_analysis import (
     validate_legal_analysis as run_legal_analysis_validation,
 )
 from alr_tw.verification.claim_support import (
     AnswerClaim,
     ClaimBinding,
+    CitationOccurrence,
     ClaimType,
     Importance,
     LegalSegment,
@@ -70,6 +80,8 @@ from alr_tw.verification.claim_support import (
 )
 from alr_tw.verification.output_privacy import screen_answer_output
 
+from .query_preparation import prepare_query, time_hints, validate_query
+from .citation_identity import judgment_name_equivalent
 from .state_machine import transition_run
 from .snapshot_receipts import (
     check_run_snapshot_receipts,
@@ -135,9 +147,19 @@ def _evidence_section_priority(section_type: EvidenceSectionType) -> int:
     return priorities.get(section_type, 9)
 
 
+def _binding_coverage_text(text: str) -> str:
+    # Only canonical composition, ASCII width and spacing equivalence. NFKC
+    # would also turn superscripts/compatibility symbols into different claims.
+    width_map = {code: code - 0xFEE0 for code in range(0xFF01, 0xFF5F)}
+    normalized = unicodedata.normalize("NFC", text).translate(width_map)
+    return re.sub(r"[^\S\n]", "", normalized)
+
+
 def _claims_for_validation(
     answer_text: str,
     bindings: list[ClaimBinding],
+    *,
+    citation_annotations: list[tuple[int, int]] | None = None,
 ) -> list[AnswerClaim]:
     extracted = extract_answer_claims(answer_text)
     if not bindings:
@@ -145,14 +167,21 @@ def _claims_for_validation(
     claim_ids = [item.claim_id for item in bindings]
     if len(claim_ids) != len(set(claim_ids)):
         raise ValueError("CLAIM_BINDING_ID_DUPLICATED")
-    answer_key = _claim_key(answer_text)
+    # Preserve punctuation/operators and case; only normalize width and spacing.
+    # A binding covers its actual occurrences, never an overlapping whole sentence.
+    coverage_text = _binding_coverage_text
+
+    answer_key = coverage_text(answer_text)
     bound_claims: list[AnswerClaim] = []
-    bound_keys: list[str] = []
+    bound_spans: list[tuple[int, int]] = []
     for item in bindings:
-        key = _claim_key(item.claim_text)
+        key = coverage_text(item.claim_text)
         if not key or key not in answer_key:
             raise ValueError("CLAIM_BINDING_TEXT_NOT_IN_ANSWER")
-        bound_keys.append(key)
+        start = 0
+        while (start := answer_key.find(key, start)) >= 0:
+            bound_spans.append((start, start + len(key)))
+            start += 1
         bound_claims.append(
             AnswerClaim(
                 claim_id=item.claim_id,
@@ -166,10 +195,37 @@ def _claims_for_validation(
                 ),
             )
         )
-    for claim in extracted:
-        key = _claim_key(claim.claim_text)
-        if not any(key in bound or bound in key for bound in bound_keys):
-            bound_claims.append(claim)
+    # Each punctuation-delimited clause must be contained in one binding.
+    # Combining arbitrary short bindings cannot tile a new unsupported proposition.
+    # Short residuals (e.g. a two-character conclusion) are still substantive.
+    ignored_positions: set[int] = set()
+    for start, end in citation_annotations or []:
+        ignored_positions.update(range(len(coverage_text(answer_text[:start])),
+                                       len(coverage_text(answer_text[:end]))))
+    used_ids = set(claim_ids)
+    for index, match in enumerate(re.finditer(r"[^。\n;；，,]+", answer_key)):
+        if not match.group().strip() or all(char in "!?！？" for char in match.group()):
+            continue
+        substantive = [position for position in range(match.start(), match.end())
+                       if position not in ignored_positions]
+        # Evaluate sentence-final punctuation after removing only verified citation
+        # annotations, so both text!(citation) and text(citation)! keep coverage.
+        tail = len(substantive)
+        while tail and answer_key[substantive[tail - 1]] in "!?":
+            tail -= 1
+        if tail and re.fullmatch(r"[\u3400-\u9fff]", answer_key[substantive[tail - 1]]):
+            substantive = substantive[:tail]
+        if not substantive:
+            continue
+        if not any(start <= substantive[0] and substantive[-1] < end for start, end in bound_spans):
+            claim_id = f"unbound-{index}"
+            while claim_id in used_ids:
+                claim_id += "-unbound"
+            used_ids.add(claim_id)
+            bound_claims.append(AnswerClaim(
+                claim_id=claim_id, claim_text=match.group(), claim_type=ClaimType.UNKNOWN,
+                importance=Importance.CORE,
+            ))
     return bound_claims
 
 
@@ -423,6 +479,40 @@ def _clause_span(value: str, position: int) -> tuple[int, int]:
     return start, end
 
 
+def _adjacent_citation_annotation(
+    answer: str, binding: ClaimBinding, occurrence: CitationOccurrence, bindings: list[ClaimBinding],
+) -> tuple[int, int] | None:
+    """Recognize one pure lead-in citation immediately after one whole claim."""
+    start, end = _clause_span(answer, occurrence.start_offset)
+    if start < 2 or answer[start - 1] != "。":
+        return None
+    clause = answer[start:end]
+    # No paragraphs, second citations, conclusions or unmatched parentheses.
+    citation = re.escape(occurrence.citation_text)
+    pattern = rf"[ \t]*(?:參見|參照|見|依)[ \t]*(?:（{citation}）|\({citation}\))[ \t]*。?"
+    if re.fullmatch(pattern, clause) is None:
+        return None
+    if clause.find(occurrence.citation_text) + start != occurrence.start_offset:
+        return None
+    previous_start, previous_end = _clause_span(answer, start - 2)
+    previous = answer[previous_start:previous_end]
+    if previous_end != start or "\n" in previous or "\r" in previous:
+        return None
+    claim = binding.claim_text.strip(" \t").removesuffix("。")
+    if not claim or previous.strip(" \t").removesuffix("。") != claim:
+        return None
+    if answer.count(binding.claim_text) != 1:
+        return None
+    owners = [item for item in bindings
+              if item.claim_text.strip(" \t").removesuffix("。") == claim]
+    occurrences = [item for owner in bindings for item in owner.citation_occurrences
+                   if (item.start_offset, item.end_offset) ==
+                   (occurrence.start_offset, occurrence.end_offset)]
+    if len(owners) != 1 or len(occurrences) != 1:
+        return None
+    return start, end
+
+
 def _citation_occurrence_reasons(
     answer_text: str,
     bindings: list[ClaimBinding],
@@ -451,18 +541,39 @@ def _citation_occurrence_reasons(
                 continue
             evidence = evidence_by_id.get(occurrence.evidence_id)
             source = sources.get(evidence.source_id) if evidence is not None else None
-            if source is None or not any(
-                value and value in occurrence.citation_text
-                for value in (source.citation, source.official_identifier)
+            if source is None or not (
+                any(value and _binding_coverage_text(value) ==
+                    _binding_coverage_text(occurrence.citation_text)
+                    for value in (source.citation, source.official_identifier))
+                or judgment_name_equivalent(occurrence.citation_text, source, sources)
             ):
                 reasons.append("CITATION_OCCURRENCE_SOURCE_MISMATCH")
             citation_clause = _clause_span(answer_text, occurrence.start_offset)
             if not any(
                 _clause_span(answer_text, position) == citation_clause
                 for position in claim_positions
-            ):
+            ) and _adjacent_citation_annotation(answer_text, binding, occurrence, bindings) is None:
                 reasons.append("CITATION_OCCURRENCE_OUTSIDE_BOUND_CLAUSE")
     return reasons
+
+
+def _verified_citation_annotations(
+    answer_text: str, bindings: list[ClaimBinding], citation_reasons: list[str],
+) -> list[tuple[int, int]]:
+    annotations = []
+    if not citation_reasons:
+        for binding in bindings:
+            for occurrence in binding.citation_occurrences:
+                adjacent = _adjacent_citation_annotation(answer_text, binding, occurrence, bindings)
+                if adjacent is not None:
+                    annotations.append(adjacent)
+                    continue
+                start, end = occurrence.start_offset, occurrence.end_offset
+                if start > 0 and end < len(answer_text) and (
+                    answer_text[start - 1], answer_text[end]
+                ) in {("（", "）"), ("(", ")")}:
+                    annotations.append((start - 1, end + 1))
+    return annotations
 
 
 def _merge_plan_obligations(
@@ -565,6 +676,10 @@ def _has_explicit_law_article(query: str) -> bool:
 
 def _is_judgment_lookup_query(query: str) -> bool:
     normalized = query.upper()
+    # Explicit practice questions only; mentioning a court as an institution
+    # does not by itself request judgment recall. No query rewriting or I/O.
+    if re.search(r"法院(?:通常|一般|實務上)?(?:如何|怎麼|怎樣)(?:處理|認定|判斷|解釋|適用)", query):
+        return True
     if any(marker.upper() in normalized for marker in _JUDGMENT_LOOKUP_MARKERS):
         return True
     if re.search(
@@ -576,7 +691,7 @@ def _is_judgment_lookup_query(query: str) -> bool:
         return True
     return (
         re.search(
-            r"[\u4e00-\u9fff]{2,24}法院\s*\d{1,3}\s*年度\s*"
+            r"[\u4e00-\u9fff]{2,24}法院\s*\d{1,3}\s*年(?:度)?\s*"
             r"[^,，。；;\r\n]{1,20}?字\s*第\s*\d{1,12}\s*號"
             r"(?:(?:民事|刑事|行政|懲戒)(?:判決|裁定)?)?",
             query,
@@ -619,9 +734,11 @@ def _plan_obligations(
     if any(token in query for token in ("憲法", "釋字", "憲判字", "基本權")):
         kinds.append(ResearchObligationKind.CONSTITUTIONAL_RESEARCH)
     reference_date = current_date or datetime.now(TAIWAN_TIME).date()
-    if (as_of_date is not None and as_of_date != reference_date) or any(
-        token in query for token in ("修法前", "修法後", "當時")
-    ):
+    temporal = time_hints(query, as_of_date)
+    unresolved_time = temporal["needs_time_context"] and (
+        as_of_date is None or temporal["requires_clarification"]
+    )
+    if (as_of_date is not None and as_of_date != reference_date) or unresolved_time:
         kinds.append(ResearchObligationKind.LEGAL_TIME_CONTEXT)
     kinds.extend(
         [
@@ -632,6 +749,22 @@ def _plan_obligations(
     return [ResearchObligation(kind=kind) for kind in kinds]
 
 
+_OperationParams = ParamSpec("_OperationParams")
+_OperationResult = TypeVar("_OperationResult")
+
+
+def _close_failed_operations(
+    method: Callable[_OperationParams, _OperationResult],
+) -> Callable[_OperationParams, _OperationResult]:
+    @wraps(method)
+    def wrapped(*args: _OperationParams.args, **kwargs: _OperationParams.kwargs) -> _OperationResult:
+        service = args[0]
+        assert isinstance(service, ResearchService)
+        with service.store.operation_attempt():
+            return method(*args, **kwargs)
+    return wrapped
+
+
 class ResearchService:
     def __init__(
         self,
@@ -639,11 +772,41 @@ class ResearchService:
         executor: ObligationExecutor | None = None,
         *,
         legal_context_provider: LegalContextProvider | None = None,
+        research_max_seconds: float = 120,
+        research_max_http_requests: int = 50,
     ):
+        self.budget_defaults = ResearchBudget(
+            max_seconds=research_max_seconds, max_http_requests=research_max_http_requests,
+        )
         self.store = store
         self.executor = executor or SyntheticObligationExecutor()
         self.legal_context_provider = legal_context_provider or SyntheticLegalContextProvider()
         self._lock = RLock()
+
+    def _budgeted_call(
+        self, run: ResearchRun, timestamp: datetime, call: Callable[[], dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Use one persisted budget across advancement, exact lookup and lineage."""
+        budget = run.budget
+        if budget.deadline_at is None:
+            budget = budget.model_copy(update={
+                "deadline_at": timestamp + timedelta(seconds=budget.max_seconds),
+            })
+        self.store.save_run(run.model_copy(update={"budget": budget}))
+
+        def persist(value: ResearchBudget) -> None:
+            current = self._required_run(run.run_id)
+            self.store.save_run(current.model_copy(update={"budget": value}))
+
+        scope = BudgetScope(budget, monotonic() + budget.remaining(timestamp), persist)
+        context_handle = ACTIVE_BUDGET.set(scope)
+        try:
+            scope.check()
+            result = call()
+            scope.check()
+            return result
+        finally:
+            ACTIVE_BUDGET.reset(context_handle)
 
     def create_run(
         self,
@@ -659,7 +822,7 @@ class ResearchService:
         now: datetime | None = None,
         discovery_mode: DiscoveryMode = DiscoveryMode.SERVER_MANAGED,
     ) -> ResearchRun:
-        normalized_query = query.strip()
+        normalized_query = validate_query(query)
         if not normalized_query:
             raise ValueError("query is required")
         if isinstance(max_judgment_verifications, bool) or not (
@@ -674,6 +837,7 @@ class ResearchService:
             )
         timestamp = now or datetime.now(UTC)
         run = ResearchRun(
+            budget=self.budget_defaults,
             run_id=f"run_{uuid4().hex}",
             query=normalized_query,
             created_at=timestamp,
@@ -704,7 +868,7 @@ class ResearchService:
             coverage=CoverageState(),
             responsibility=ResearchResponsibility(discovery_mode=discovery_mode),
         )
-        self.store.save_run(run)
+        self.store.create_run(run)
         return run
 
     def get_run(self, run_id: str) -> ResearchRun | None:
@@ -1100,6 +1264,7 @@ class ResearchService:
         research_brief = self._research_brief(full_run, contract, now=timestamp)
         return {
             "schema_version": "alr-tw.research-state/v1",
+            "query_preparation": prepare_query(full_run.query, as_of_date=full_run.as_of_date),
             "run": assessed_run.model_dump(mode="json"),
             "source_count": len(self.store.list_sources(run_id)),
             "evidence_count": len(self.store.list_evidence(run_id)),
@@ -1114,6 +1279,9 @@ class ResearchService:
             "sufficiency_reasons": assessment.reason_codes,
             "finalization": self._finalization_summary(contract),
             "research_brief": research_brief,
+            "workflow_guidance": build_research_guidance(
+                research_brief, depth=full_run.research_depth.value,
+            ),
             "awaiting_external_plan": (
                 full_run.responsibility.discovery_mode is DiscoveryMode.CLIENT_ASSISTED
                 and registered_plan is None
@@ -1247,6 +1415,7 @@ class ResearchService:
             "items": items,
         }
 
+    @_close_failed_operations
     def register_research_plan(
         self,
         run_id: str,
@@ -1263,7 +1432,12 @@ class ResearchService:
             else ResearchPlanProposal.model_validate(proposal)
         )
         with self._lock:
-            existing = self.store.get_operation(run_id, operation_id)
+            run = self._required_run(run_id)
+            if run.expires_at <= (now or datetime.now(UTC)):
+                raise ValueError("RESEARCH_RUN_EXPIRED")
+            existing = self.store.get_operation(
+                run_id, operation_id, request={"tool": "register_research_plan", "proposal": normalized_proposal.model_dump(mode="json")},
+            )
             if existing is not None:
                 return existing
             run = self._required_run(run_id)
@@ -1319,11 +1493,17 @@ class ResearchService:
                 ],
                 "candidate_only": True,
             }
-            self.store.record_operation(run_id, operation_id, {"status": "in_progress"})
+            claim = self.store.record_operation(
+                run_id, operation_id, {"status": "in_progress"},
+                request={"tool": "register_research_plan", "proposal": normalized_proposal.model_dump(mode="json")},
+            )
+            if not claim.created:
+                return claim.result
             self.store.save_run(run)
             self.store.complete_operation(run_id, operation_id, result)
             return result
 
+    @_close_failed_operations
     def lookup_source(
         self,
         text: str,
@@ -1344,14 +1524,24 @@ class ResearchService:
             }
         if run_id is None:
             return lookup(normalized, run_id=None)
-        self._required_run(run_id)
+        run = self._required_run(run_id)
+        if run.expires_at <= datetime.now(UTC):
+            raise ValueError("RESEARCH_RUN_EXPIRED")
         if operation_id is None:
-            return lookup(normalized, run_id=run_id)
-        claim = self.store.record_operation(run_id, operation_id, {"status": "in_progress"})
+            operation_id = f"lookup-{uuid4().hex}"
+        claim = self.store.record_operation(
+                run_id, operation_id, {"status": "in_progress"},
+                request={"tool": "lookup_source", "text": normalized},
+            )
         if not claim.created:
             return claim.result
-        result = lookup(normalized, run_id=run_id)
-        self.store.complete_operation(run_id, operation_id, result)
+        try:
+            result = self._budgeted_call(
+                run, datetime.now(UTC), lambda: lookup(normalized, run_id=run_id),
+            )
+        except BudgetExceeded as exc:
+            result = {"schema_version": "alr-tw.legal-source-lookup/v1",
+                      "status": "blocked", "error_code": str(exc), "claim_verified": False}
         run = self._required_run(run_id)
         run = run.model_copy(
             update={
@@ -1364,8 +1554,10 @@ class ResearchService:
         run = self._refresh_sufficiency(run)
         self._sync_snapshot_receipts(run, now=datetime.now(UTC))
         self.store.save_run(run)
+        self.store.complete_operation(run_id, operation_id, result)
         return result
 
+    @_close_failed_operations
     def inspect_judgment_lineage(
         self,
         run_id: str,
@@ -1379,8 +1571,13 @@ class ResearchService:
 
         if not operation_id.strip():
             raise ValueError("operation_id is required")
-        if not 1 <= max_related_nodes <= 20:
+        if isinstance(max_related_nodes, bool) or not 1 <= max_related_nodes <= 20:
             raise ValueError("max_related_nodes must be between 1 and 20")
+        normalized_jid = OfficialJudgmentProvider.normalize_jid(jid)
+        if normalized_jid is None:
+            raise ValueError("JUDGMENT_IDENTIFIER_INVALID")
+        request = {"tool": "inspect_judgment_lineage", "jid": normalized_jid,
+                   "max_related_nodes": max_related_nodes}
         with self._lock:
             run = self._required_run(run_id)
             timestamp = now or datetime.now(UTC)
@@ -1390,22 +1587,39 @@ class ResearchService:
                 run_id,
                 operation_id,
                 {"status": "in_progress"},
+                request=request,
             )
             if not operation.created:
+                if (
+                    operation.result.get("replay_material_digest")
+                    != self.store.validation_material_digest(run_id)
+                    or any(source.expires_at <= timestamp for source in self.store.list_sources(run_id))
+                    or any(receipt.expires_at is None or receipt.expires_at <= timestamp for receipt in
+                           self.store.list_provider_snapshot_receipts(run_id))
+                ):
+                    raise ValueError("OPERATION_RESULT_STALE")
                 return operation.result
             inspect = getattr(self.executor, "inspect_judgment_lineage", None)
             if callable(inspect):
-                result = inspect(
-                    run_id,
-                    jid,
-                    max_related_nodes=max_related_nodes,
-                )
+                try:
+                    result = self._budgeted_call(
+                        run, timestamp, lambda: inspect(
+                            run_id, normalized_jid, max_related_nodes=max_related_nodes,
+                        ),
+                    )
+                except BudgetExceeded as exc:
+                    result = {"schema_version": "alr-tw.judgment-lineage-inspection/v1",
+                              "status": "blocked", "reason_codes": [str(exc)],
+                              "limitations": [str(exc)], "related_nodes": [],
+                              "establishes_finality": False,
+                              "semantic_opinion_comparison_performed": False}
+                run = self._required_run(run_id)
             else:
                 result = {
                     "schema_version": "alr-tw.judgment-lineage-inspection/v1",
                     "status": "blocked",
                     "run_id": run_id,
-                    "jid": jid,
+                    "jid": normalized_jid,
                     "reason_codes": ["JUDGMENT_LINEAGE_EXECUTOR_UNAVAILABLE"],
                     "establishes_finality": False,
                     "semantic_opinion_comparison_performed": False,
@@ -1441,6 +1655,7 @@ class ResearchService:
                 now=now or datetime.now(UTC),
             )
             self.store.save_run(full_run)
+            result["replay_material_digest"] = self.store.validation_material_digest(run_id)
             self.store.complete_operation(run_id, operation_id, result)
             return result
 
@@ -1524,6 +1739,9 @@ class ResearchService:
                         "elapsed_ms": round((perf_counter() - step_started) * 1000, 3),
                     }
                 )
+                if isinstance(outcome, dict) and outcome.get("status") == "budget_exhausted":
+                    stop_reason = "budget_exhausted"
+                    break
                 if isinstance(outcome, dict) and outcome.get("retryable"):
                     stop_reason = "retry_required"
                     break
@@ -1549,6 +1767,7 @@ class ResearchService:
                 "finalization": state["finalization"],
             }
             if stop_reason == "ready_for_draft":
+                result["workflow_guidance"] = {"drafting": drafting_guidance()}
                 result["evidence_bundle"] = self.get_evidence_bundle(
                     run_id,
                     max_sources=min(16, run.max_judgment_verifications + 7),
@@ -1557,6 +1776,7 @@ class ResearchService:
                 )
             return result
 
+    @_close_failed_operations
     def continue_run(
         self,
         run_id: str,
@@ -1580,6 +1800,7 @@ class ResearchService:
                 run_id,
                 operation_id,
                 {"status": "in_progress"},
+                request={"tool": "continue_run"},
             )
             if not claim.created:
                 return claim.result
@@ -1600,7 +1821,19 @@ class ResearchService:
                 run = transition_run(run, ResearchState.RESEARCHING, updated_at=timestamp)
             was_semantic_recall_degraded = run.semantic_recall_degraded
             previous_limitations = set(run.coverage.limitations)
-            outcome = self.executor.execute(run, obligation)
+            try:
+                outcome = self._budgeted_call(
+                    run, timestamp, lambda: self.executor.execute(run, obligation),
+                )
+            except BudgetExceeded as exc:
+                run = self._run_with_server_refs(self._required_run(run_id))
+                self.store.save_run(run)
+                outcome = {"status": "budget_exhausted", "obligation": obligation.kind.value,
+                           "warnings": [str(exc)], "retryable": False}
+                result = self._result(run, outcome, replayed=False)
+                self.store.complete_operation(run_id, operation_id, result)
+                return result
+            run = run.model_copy(update={"budget": self._required_run(run_id).budget})
             run_updates = outcome.pop("_run_updates", {})
             if not isinstance(run_updates, dict):
                 raise TypeError("executor _run_updates must be a dictionary")
@@ -1862,6 +2095,7 @@ class ResearchService:
             }
         )
 
+    @_close_failed_operations
     def validate_legal_analysis(
         self,
         run_id: str,
@@ -1883,6 +2117,7 @@ class ResearchService:
                 run_id,
                 operation_id,
                 {"status": "in_progress"},
+                request={"tool": "validate_legal_analysis", "analysis": analysis.model_dump(mode="json")},
             )
             if not operation.created:
                 return operation.result
@@ -1972,6 +2207,7 @@ class ResearchService:
             self.store.complete_operation(run_id, operation_id, result)
             return result
 
+    @_close_failed_operations
     def validate_answer(
         self,
         run_id: str,
@@ -2008,8 +2244,17 @@ class ResearchService:
                 run_id,
                 operation_id,
                 {"status": "in_progress"},
+                request={"tool": "validate_answer", "material_digest": self.store.validation_material_digest(run_id), "coverage": run.coverage.model_dump(mode="json"), "answer_text": answer_text, "claim_bindings": [item.model_dump(mode="json") if isinstance(item, ClaimBinding) else item for item in (claim_bindings or [])]},
             )
             if not claim.created:
+                if claim.result.get("safe_to_present") is True:
+                    prior = claim.result.get("finalization", {})
+                    if (
+                        finalization.answer_mode.value == "refusal_only"
+                        or prior.get("answer_mode") != finalization.answer_mode.value
+                        or prior.get("required_qualification") != finalization.required_qualification
+                    ):
+                        raise ValueError("OPERATION_RESULT_STALE")
                 return claim.result
             if finalization.answer_mode.value == "refusal_only":
                 finalization = self._refusal_contract(finalization)
@@ -2042,11 +2287,21 @@ class ResearchService:
                     "citations": [],
                     "finalization": finalization.model_dump(mode="json"),
                 }
+                result["workflow_guidance"] = build_validation_guidance(result)
                 self.store.complete_operation(run_id, operation_id, result)
                 if terminal_refusal and persisted.ephemeral:
                     self.store.purge_run(run_id)
                     result["storage_purged"] = True
                 return result
+            if (
+                run.state in {ResearchState.VALIDATED, ResearchState.QUALIFIED, ResearchState.BLOCKED}
+                and finalization.workflow_complete
+            ):
+                # A new answer operation may reassess a completed research run.
+                # The current finalization gate has already passed above; old
+                # operation results remain immutable. Only this working copy
+                # re-enters validation, and the new decision is saved below.
+                run = run.model_copy(update={"state": ResearchState.READY_FOR_DRAFT})
             if run.state != ResearchState.READY_FOR_DRAFT:
                 finalization = self._refusal_contract(
                     finalization,
@@ -2084,6 +2339,7 @@ class ResearchService:
                     "privacy": None,
                     "finalization": finalization.model_dump(mode="json"),
                 }
+                result["workflow_guidance"] = build_validation_guidance(result)
                 self.store.complete_operation(run_id, operation_id, result)
                 if terminal_refusal and persisted.ephemeral:
                     self.store.purge_run(run_id)
@@ -2093,12 +2349,20 @@ class ResearchService:
                 item if isinstance(item, ClaimBinding) else ClaimBinding.model_validate(item)
                 for item in (claim_bindings or [])
             ]
-            claims = _claims_for_validation(answer_text, bindings)
             answer_privacy = screen_answer_output(answer_text)
             run = transition_run(run, ResearchState.VALIDATING, updated_at=timestamp)
             sources = {source.source_id: source for source in self.store.list_sources(run_id)}
             evidence = self.store.list_evidence(run_id)
             evidence_by_id = {item.evidence_id: item for item in evidence}
+            citation_reasons = _citation_occurrence_reasons(
+                answer_text, bindings, evidence_by_id=evidence_by_id, sources=sources,
+            )
+            citation_annotations = _verified_citation_annotations(
+                answer_text, bindings, citation_reasons,
+            )
+            claims = _claims_for_validation(
+                answer_text, bindings, citation_annotations=citation_annotations,
+            )
             bound_evidence_ids = {
                 evidence_id for item in bindings for evidence_id in item.evidence_ids
             }
@@ -2144,14 +2408,7 @@ class ResearchService:
             reasons.extend(binding_reasons)
             issue_coverage, issue_reasons = _issue_coverage(run, bindings)
             reasons.extend(issue_reasons)
-            reasons.extend(
-                _citation_occurrence_reasons(
-                    answer_text,
-                    bindings,
-                    evidence_by_id=evidence_by_id,
-                    sources=sources,
-                )
-            )
+            reasons.extend(citation_reasons)
             if not claims:
                 reasons.append("CLAIM_SUPPORT_NOT_CHECKED")
             if answer_privacy.status == "redaction_required":
@@ -2274,6 +2531,7 @@ class ResearchService:
                     )
                 ],
             }
+            result["workflow_guidance"] = build_validation_guidance(result)
             self.store.complete_operation(run_id, operation_id, result)
             if run.ephemeral:
                 self.store.purge_run(run_id)
@@ -2283,7 +2541,7 @@ class ResearchService:
     def _required_run(self, run_id: str) -> ResearchRun:
         run = self.store.get_run(run_id)
         if run is None:
-            raise KeyError(f"RESEARCH_RUN_NOT_FOUND: {run_id}")
+            raise ValueError("RESEARCH_RUN_NOT_FOUND")
         return run
 
     @staticmethod

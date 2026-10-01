@@ -9,6 +9,7 @@ on:
   pull_request:
   workflow_dispatch:
 
+
 jobs:
   history-secret-scan:
     runs-on: ubuntu-latest
@@ -36,9 +37,9 @@ jobs:
         run: ruff check .
       - name: Typecheck
         run: mypy src
-      - name: Forbidden file check
-        run: python scripts/check_no_forbidden_files.py
-      - name: Public boundary check
-        run: python scripts/check_public_boundary.py
+      - name: Source boundary checks
+        run: |
+          python scripts/check_no_forbidden_files.py
+          python scripts/check_public_boundary.py
       - name: Test and example trace validation
         run: pytest

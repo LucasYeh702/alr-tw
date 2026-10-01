@@ -1,4 +1,7 @@
-# v0.12.0 公開版發布審核規程
+# v1.0.0 候選版與正式發布審核規程
+
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
 
 原則：fail closed。程式 regression、公開邊界、build artifact 或 live dependency 狀態必須分開記錄；外部服務暫時不可用不應被掩飾，也不應直接誤判為程式 regression。
 
@@ -50,7 +53,7 @@ uv run mypy src
 uv run pytest -q
 ```
 
-至少覆蓋：v0.12.0 六種 domain profiles、complete／issue-limited scope、
+至少覆蓋：v1.0.0 六種 domain profiles、complete／issue-limited scope、
 server-owned analysis references、legacy tool regression、caller-attested
 source rejection、candidate-only blocking、role mismatch、historical-law
 block、source expiry、privacy downgrade、idempotency、TTL、WAL/SHM/temp purge，
@@ -65,10 +68,10 @@ forgery/mismatch fail-closed 與 purge cascade，Lane C 記錄 verified-profile 
 ## C. Packaging 與 base-install smoke
 
 ```bash
-VERSION=0.12.0
-uv build
-python scripts/check_release_artifacts.py --version "$VERSION" dist/*.whl dist/*.tar.gz
-python -m zipfile -l "dist/alr_tw-${VERSION}-py3-none-any.whl"
+VERSION=1.0.0
+uv build --out-dir "dist/$VERSION"
+python scripts/check_release_artifacts.py --version "$VERSION" "dist/$VERSION/"*.whl "dist/$VERSION/"*.tar.gz
+python -m zipfile -l "dist/$VERSION/alr_tw-${VERSION}-py3-none-any.whl"
 ```
 
 正式 release 授權前，`pyproject.toml`、`src/alr_tw/_version.py`、MCP
@@ -90,7 +93,7 @@ python -m zipfile -l "dist/alr_tw-${VERSION}-py3-none-any.whl"
 - current protocol `2025-11-25`；
 - legacy supported protocol `2024-11-05`；
 - unsupported protocol fail closed；
-- tools/list 包含 v0.12.0 server-managed 與 interoperability MCP tools；
+- tools/list 包含 v1.0.0 server-managed 與 interoperability MCP tools；
 - capabilities 與 tools/list 包含 `alr-tw.legal-analysis/v1`、六種 profiles
   與 `validate_legal_analysis`；
 - synthetic run 可推進到 ready-for-draft，沒有 evidence 時 final validation blocked 且 answer body 為 null；
@@ -139,3 +142,5 @@ Tag 前重新執行 A–F，並在
 公開 PR 合併後，須核對實際 merge commit 的 tree 並重跑 CI，再建立正式 tag。
 「閘門通過但結論仍可能錯」必須留在限制欄，不得改寫為測試通過或失敗。未經
 使用者明確要求，不由自動化自行 commit、push、tag 或發布。
+
+RC4 額外覆蓋 `tests/integration/test_v013_workflows.py`、`tests/unit/test_v013_rc_workflows.py` 與安裝後的 `scripts/smoke_installed_workflows.py`。候選版檢查不授權建立正式公開 Release。

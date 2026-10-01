@@ -1,5 +1,8 @@
 # TLR 候選模式
 
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
 語言：[English](TLR_CANDIDATE_MODE.md) | 繁體中文
 
 本公開 repo 將 TLR-like（類 TLR）或外部語意召回資料視為有用的候選探索來源，而不是 final citation authority（最終引用權威來源）。

@@ -1,5 +1,8 @@
 # Deployment Starting Points
 
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
 This document gives generic, illustrative starting points for connecting
 ALR-TW to a real deployment. These are not production settings or
 deployment-specific parameters, and are not recommendations to copy without
@@ -111,3 +114,13 @@ Illustrative only, not production:
 - record content hashes for promoted official originals
 - track latency and index size per retrieval layer
 - keep production ranking parameters and private evaluation holdouts private
+
+## macOS 同步目錄與研究儲存
+
+若啟用桌面／文件的雲端同步，建議將工作目錄、虛擬環境及持續寫入的 SQLite
+研究儲存放在不受同步管理的使用者專用目錄。這可減少同步與高頻 I/O 的干擾，
+但不能據此將所有逾時或資料庫鎖定歸因於 iCloud；也應檢查多程序寫入與檔案權限。
+
+使用 `ALR_TW_STORAGE_PATH` 指定研究儲存目錄（不是 `ALR_TW_STORAGE_DIR`）。
+搬移前停止寫入程序並保留完整備份，勿在資料庫仍開啟時只複製主資料庫檔。
+不要以共用暫存目錄作為敏感研究的持久儲存，也不需要停用系統的全部同步功能。

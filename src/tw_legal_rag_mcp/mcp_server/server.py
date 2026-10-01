@@ -33,6 +33,7 @@ from alr_tw.providers.legislative_history import LegislativeHistoryBackend
 from alr_tw.providers.sdk import PublicLawBackendResult
 from alr_tw.providers.tlr import TlrSemanticRecallProvider
 from alr_tw.research.provider_executor import ProviderObligationExecutor, ProviderSet
+from alr_tw.research.query_preparation import prepare_query
 from alr_tw.research.service import ResearchService
 from alr_tw.storage.purge import PurgeService
 from alr_tw.storage.sqlite_store import SqliteStore
@@ -160,6 +161,7 @@ class McpSession:
         self._agentic_runs: dict[str, AgenticRunState] = {}
         self._active_agentic_run_id: str | None = None
         self._research_service = research_service
+        self._research_storage_root = research_service.store.root_path if research_service else None
         self._legislative_history_backend = legislative_history_backend
 
     @property
@@ -183,10 +185,13 @@ class McpSession:
     def research_service(self) -> ResearchService:
         if self._research_service is None:
             settings = self._settings
-            root = settings.storage_path or Path.home() / ".cache" / "alr-tw"
+            root = self._research_storage_root or settings.storage_path or Path.home() / ".cache" / "alr-tw"
             store = SqliteStore(root)
             if settings.data_mode.value == "synthetic":
-                self._research_service = ResearchService(store)
+                self._research_service = ResearchService(
+                    store, research_max_seconds=settings.research_max_seconds,
+                    research_max_http_requests=settings.research_max_http_requests,
+                )
             else:
                 candidate_provider = (
                     TlrSemanticRecallProvider(
@@ -196,10 +201,12 @@ class McpSession:
                     if settings.external_query_enabled
                     else None
                 )
+                from alr_tw.providers.data_pack import configured_pack_provider
+
                 providers = ProviderSet(
                     laws=OfficialLawProvider(),
                     constitutional=OfficialConstitutionalProvider(),
-                    judgments=(
+                    judgments=configured_pack_provider(settings) if (settings.data_pack_root or settings.remote_pack_endpoint) else (
                         build_local_portal_judgment_provider(
                             settings.local_portal_root,
                             official_provider=OfficialJudgmentProvider(),
@@ -213,6 +220,8 @@ class McpSession:
                 self._research_service = ResearchService(
                     store,
                     ProviderObligationExecutor(store, providers),
+                    research_max_seconds=settings.research_max_seconds,
+                    research_max_http_requests=settings.research_max_http_requests,
                 )
         return self._research_service
 
@@ -695,7 +704,41 @@ def _legal_analysis_schema() -> dict[str, Any]:
 
 def _server_owned_tool_definitions() -> list[dict[str, Any]]:
     object_schema = {"type": "object", "additionalProperties": False}
+    from alr_tw.verification.claim_support import ClaimBinding
+
+    from alr_tw.research.drafting_rules import BINDING_DESCRIPTION
+
+    binding_schema = ClaimBinding.model_json_schema()
+    definitions = binding_schema.pop("$defs", {})
+
+    def inline_schema(value: Any) -> Any:
+        if isinstance(value, dict):
+            if "$ref" in value:
+                return inline_schema(definitions[value["$ref"].split("/")[-1]])
+            return {key: inline_schema(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [inline_schema(item) for item in value]
+        return value
+
+    draft_properties = {
+        "run_id": {"type": "string"},
+        "answer_text": {"type": "string", "minLength": 1, "maxLength": 100000},
+        "claim_bindings": {"type": "array", "maxItems": 256,
+                           "items": inline_schema(binding_schema),
+                           "description": BINDING_DESCRIPTION},
+    }
     return [
+        {"name": "review_legal_draft",
+         "description": "Read-only internal draft annotations and bounded citation offset proposals. Check the draft digest, apply proposed offsets to the original bindings, then strictly validate with a new operation ID. Never authorizes a final answer.",
+         "inputSchema": {"type": "object", "properties": draft_properties,
+                         "required": list(draft_properties), "additionalProperties": False}},
+        {"name": "complete_legal_research",
+         "description": "Resume bounded research and strictly validate a supplied bound draft. "
+                        "Each step is audited; this is not an atomic network transaction.",
+         "inputSchema": {"type": "object", "properties": {
+             **draft_properties, "operation_id": {"type": "string"},
+             "max_steps": {"type": "integer", "minimum": 1, "maximum": 32}},
+             "required": [*draft_properties, "operation_id"], "additionalProperties": False}},
         {
             "name": "get_legal_research_capabilities",
             "description": (
@@ -919,8 +962,7 @@ def _server_owned_tool_definitions() -> list[dict[str, Any]]:
                     "claim_bindings": {
                         "type": "array",
                         "description": (
-                            "Bind each answer claim to evidence IDs returned by the same "
-                            "research run; core legal claims require span-level bindings."
+                            BINDING_DESCRIPTION
                         ),
                         "items": {
                             "type": "object",
@@ -958,7 +1000,10 @@ def _server_owned_tool_definitions() -> list[dict[str, Any]]:
                                         "type": "object",
                                         "properties": {
                                             "evidence_id": {"type": "string"},
-                                            "citation_text": {"type": "string"},
+                                            "citation_text": {
+                                                "type": "string",
+                                                "description": "對應來源的 source.citation 正式引用名稱（裁判可用已核對的同文書等價名稱）；不是 evidence.exact_text 原文。",
+                                            },
                                             "start_offset": {
                                                 "type": "integer",
                                                 "minimum": 0,
@@ -1248,6 +1293,7 @@ def _call_server_owned_tool(
         _service, run = _create_research_run(arguments, session)
         return {
             "schema_version": "alr-tw.research-created/v1",
+            "query_preparation": prepare_query(run.query, as_of_date=run.as_of_date),
             "run": run.model_dump(mode="json"),
         }
     if name == "execute_legal_research":
@@ -1273,6 +1319,42 @@ def _call_server_owned_tool(
             operation_prefix=operation_prefix,
         )
     service = session.research_service()
+    if name in {"review_legal_draft", "complete_legal_research"}:
+        allowed = {"run_id", "answer_text", "claim_bindings"}
+        if name == "complete_legal_research":
+            allowed |= {"operation_id", "max_steps"}
+        _reject_unexpected_keys(arguments, allowed)
+        from alr_tw.research.draft_workspace import review_draft
+        from alr_tw.verification.claim_support import ClaimBinding
+
+        run_id = _required_string(arguments, "run_id")
+        answer = _required_string(arguments, "answer_text")
+        raw = arguments.get("claim_bindings")
+        if not isinstance(raw, list) or len(raw) > 256 or len(answer) > 100000:
+            raise ValueError("DRAFT_INPUT_INVALID")
+        try:
+            bindings = [ClaimBinding.model_validate(item).model_dump(mode="json") for item in raw]
+        except ValueError as exc:
+            raise ValueError("DRAFT_INPUT_INVALID") from exc
+        if name == "review_legal_draft":
+            return review_draft(service.store, run_id, answer, bindings)
+        operation_id = _required_string(arguments, "operation_id")
+        max_steps = arguments.get("max_steps", 12)
+        if type(max_steps) is not int or not 1 <= max_steps <= 32:
+            raise ValueError("WORKFLOW_STEPS_INVALID")
+        if service.store.get_operation(run_id, operation_id) is not None:
+            validation = service.validate_answer(run_id, answer, operation_id,
+                                                 claim_bindings=bindings)
+            return {"schema_version": "alr-tw.research-completion/v1", "run_id": run_id,
+                    "execution": None, "validation": validation, "replayed": True,
+                    "safe_to_present": validation.get("safe_to_present") is True}
+        # Validate before side effects. Existing per-step and final operation
+        # identities retain their own replay protections.
+        execution = service.execute_run_to_completion(run_id, max_steps=max_steps)
+        validation = service.validate_answer(run_id, answer, operation_id, claim_bindings=bindings)
+        return {"schema_version": "alr-tw.research-completion/v1", "run_id": run_id,
+                "execution": execution, "validation": validation,
+                "safe_to_present": validation.get("safe_to_present") is True}
     if name == "submit_legal_research_plan":
         _reject_unexpected_keys(
             arguments,
@@ -1371,6 +1453,11 @@ def _call_server_owned_tool(
             run_id=run_value,
             confirmed=arguments.get("confirm") is True,
         )
+        if scope == "all" and result.success:
+            # Retire the old object permanently; lazily construct a fresh generation
+            # for the next request instead of rebinding any in-flight old worker.
+            session._research_storage_root = service.store.root_path
+            session._research_service = None
         return result.model_dump(mode="json")
     raise ValueError(f"Unknown server-owned tool: {name}")
 

@@ -15,6 +15,7 @@ on:
       - 'scripts/**'
       - '.github/workflows/**'
 
+
 jobs:
   release-gate:
     runs-on: ubuntu-latest
@@ -42,11 +43,11 @@ jobs:
       - name: Build distributions
         run: python -m build
       - name: Check built artifact boundaries and version
-        run: python scripts/check_release_artifacts.py --version 0.12.0 dist/*.whl dist/*.tar.gz
+        run: python scripts/check_release_artifacts.py --version 1.0.0 dist/*.whl dist/*.tar.gz
       - name: Isolated base and TLR-only wheel smoke
         shell: bash
         run: |
-          wheel="$GITHUB_WORKSPACE/dist/alr_tw-0.12.0-py3-none-any.whl"
+          wheel="$GITHUB_WORKSPACE/dist/alr_tw-1.0.0-py3-none-any.whl"
           for profile in base tlr; do
             envdir="$RUNNER_TEMP/alr-tw-$profile-smoke"
             python -m venv "$envdir"
@@ -54,7 +55,8 @@ jobs:
             if [ "$profile" = tlr ]; then requirement="$wheel[tlr]"; fi
             "$envdir/bin/python" -m pip install -q "$requirement"
             "$envdir/bin/python" -m pip check
-            (cd "$RUNNER_TEMP" && "$envdir/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed_package.py" --profile "$profile" --version 0.12.0)
+            (cd "$RUNNER_TEMP" && "$envdir/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed_package.py" --profile "$profile" --version 1.0.0)
+            (cd "$RUNNER_TEMP" && "$envdir/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed_workflows.py")
           done
 
   tlr-only-minimum-python:
@@ -75,10 +77,52 @@ jobs:
       - name: TLR-only isolated install and synthetic transport smoke
         shell: bash
         run: |
-          wheel="$GITHUB_WORKSPACE/dist/alr_tw-0.12.0-py3-none-any.whl"
+          wheel="$GITHUB_WORKSPACE/dist/alr_tw-1.0.0-py3-none-any.whl"
           envdir="$RUNNER_TEMP/alr-tw-tlr-minimum"
           python -m venv "$envdir"
           "$envdir/bin/python" -m pip install -q "$wheel[tlr]"
           "$envdir/bin/python" -m pip check
           cd "$RUNNER_TEMP"
-          "$envdir/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed_package.py" --profile tlr --version 0.12.0
+          "$envdir/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed_package.py" --profile tlr --version 1.0.0
+
+  upgrade-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        baseline:
+          - version: '0.12.0'
+            revision: '95bd9e848699228298a5ec7e4d5308515514472e'
+            public: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build exact old and candidate packages
+        env:
+          BASELINE_REVISION: ${{ matrix.baseline.revision }}
+          BASELINE_PUBLIC: ${{ matrix.baseline.public }}
+        run: |
+          python -m pip install -q build
+          if [ "$BASELINE_PUBLIC" = true ]; then
+            git fetch https://github.com/LucasYeh702/alr-tw.git "$BASELINE_REVISION"
+          fi
+          mkdir -p "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/upgrade-data"
+          git archive "$BASELINE_REVISION" | tar -x -C "$RUNNER_TEMP/baseline"
+          python -m build "$RUNNER_TEMP/baseline" --outdir "$RUNNER_TEMP/old-dist"
+          python -m build --outdir "$RUNNER_TEMP/new-dist"
+          python -m venv "$RUNNER_TEMP/old-env"
+          python -m venv "$RUNNER_TEMP/new-env"
+          "$RUNNER_TEMP/old-env/bin/python" -m pip install -q "$RUNNER_TEMP"/old-dist/*.whl
+          "$RUNNER_TEMP/new-env/bin/python" -m pip install -q "$RUNNER_TEMP"/new-dist/*.whl
+      - name: Write old storage and consume with candidate
+        env:
+          BASELINE_VERSION: ${{ matrix.baseline.version }}
+        run: |
+          "$RUNNER_TEMP/old-env/bin/python" -I scripts/smoke_upgrade.py write --root "$RUNNER_TEMP/upgrade-data" --fixture "$RUNNER_TEMP/baseline/tests/unit/test_v080_finalization_integration.py" --version "$BASELINE_VERSION"
+          "$RUNNER_TEMP/new-env/bin/python" -I scripts/smoke_upgrade.py read --root "$RUNNER_TEMP/upgrade-data" --version 1.0.0

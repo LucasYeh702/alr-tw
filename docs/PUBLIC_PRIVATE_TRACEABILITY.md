@@ -1,5 +1,8 @@
 # Public / Private Traceability
 
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
 | Local capability | Public counterpart | Public status | Exclusion reason |
 |---|---|---|---|
 | Law Chroma | synthetic law fixture + adapter schema | partial | production DB excluded |

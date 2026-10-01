@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from alr_tw.budget import charge_http_request
+
 import importlib
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
@@ -130,6 +132,7 @@ class HttpxJudicialSiteTransport:
         try:
             for _ in range(4):
                 self._validate_url(current_url)
+                charge_http_request()
                 async with client.stream(
                     current_method,
                     current_url,

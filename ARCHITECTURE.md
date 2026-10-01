@@ -1,6 +1,9 @@
 # Architecture
 
-ALR-TW v0.12.0 將「agent 決定如何推理」與「server 決定何者可信」分開。外部 agent 可以提出查詢、逐步呼叫工具、提交爭點與法源 locator 並起草答案，但不能注入正式證據或跳過 obligations。v0.12.0 將這條邊界做成 agent-neutral interoperability contract，不依賴特定前端專案。
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](docs/V1_RELEASE.md)。
+
+
+ALR-TW v1.0.0 將「agent 決定如何推理」與「server 決定何者可信」分開。外部 agent 可以提出查詢、逐步呼叫工具、提交爭點與法源 locator 並起草答案，但不能注入正式證據或跳過 obligations。v1.0.0 將這條邊界做成 agent-neutral interoperability contract，不依賴特定前端專案。
 
 ALR-TW 是獨立的、前端無關且 provider-neutral 的公開法律研究驗證 harness，
 以 contract-first 方式提供可公開的 contracts、validators、synthetic fixtures
@@ -92,20 +95,13 @@ context 全部通過，才可通過結構與 trust validation。這仍不等於�
 
 ## Compatibility
 
-`alr_tw.*` 是 v0.12.0 中立 contracts、providers、research 與 storage 的主命名空間。`tw_legal_rag_mcp.*` 保留 legacy synthetic／trace 工具並承載 MCP stdio server。兩者共用 source tier 與 fail-closed invariants；新功能不得反向依賴 client-controlled provenance。Legacy answer／provider-promotion 邊界收到的 raw citation mappings 固定視為 caller-controlled，metadata-only answer helper 不具有答案呈現授權能力。
+`alr_tw.*` 是 v1.0.0 中立 contracts、providers、research 與 storage 的主命名空間。`tw_legal_rag_mcp.*` 保留 legacy synthetic／trace 工具並承載 MCP stdio server。兩者共用 source tier 與 fail-closed invariants；新功能不得反向依賴 client-controlled provenance。Legacy answer／provider-promotion 邊界收到的 raw citation mappings 固定視為 caller-controlled，metadata-only answer helper 不具有答案呈現授權能力。
 
-## v0.12.0 changes
+## v1.0.0 changes
 
-本版新增 prompt-selectable quick mode 與 `execute_legal_research`：裁判型 quick
-query 只縮減未要求的研究廣度，仍以最多五件預算逐件完成 JID／正式字號與官方
-內容驗證。若至少一件通過，其他候選失敗或被截斷只允許
-`qualified`／`conditional`；`0` 件通過仍 fail closed。候選召回與歷審候選改由
-provider-neutral protocols 注入，TLR 為 reference adapter；source／evidence 與
-答案授權仍由 ALR-TW 管理。
+1.0 RC2 沿用 0.14 的四個操作層：研究接續與修稿重驗、唯讀探索草稿、經外部金鑰認證的本機裁判資料包，以及明示啟用的語意顧問接線。它們沿用既有研究狀態、來源升格、快照回執與最終答案閘門，詳細界線見 [1.0 操作與限制](docs/V1_RELEASE.md)。
 
-本版並加入 conformance-envelope CLI 與 ChronoLex-TW evaluation adapter。前者
-不宣稱能解析任意私有資料庫，後者不內附資料集或歷史法規 provider。完整候選
-邊界見 [v0.12.0 Candidate Scope](docs/V0120_RELEASE_SCOPE.md)。
+既有 quick mode、`execute_legal_research`、provider-neutral candidate／lineage 介面、相容性檢查命令與 ChronoLex 介面繼續保留。它們不等於完整歷史法規提供者或法律語意核准器；模型比較列於功能工作之後。
 
 ## Agent 工具面與立法院資料定位
 
@@ -165,7 +161,7 @@ metadata binding 與 source promotion。沒有正式公布版本時維持 `quali
 ranking 參數、private manifests、operator state、gold labels 或使用者資料。
 Live providers 是有界即時查詢，不保證外部服務可用或全域完整召回。
 
-Snapshot receipt 是 provider-neutral 的公開契約。v0.12.0 內建
+Snapshot receipt 是 provider-neutral 的公開契約。v1.0.0 內建
 `ResearchService` 會為同一 run 中通過官方／可信快取閘門的 source／evidence
 材料集合簽發、持久化 receipt，並在 finalization 時從 server-owned store 重算
 binding。只有 receipt 完整、未過期且其他閘門均通過時才可回 `ordinary`；缺失

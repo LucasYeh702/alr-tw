@@ -107,7 +107,10 @@ class CitationOccurrence(ClaimContractModel):
     model_config = ConfigDict(extra="forbid")
 
     evidence_id: str = Field(min_length=1)
-    citation_text: str = Field(min_length=1, max_length=500)
+    citation_text: str = Field(
+        min_length=1, max_length=500,
+        description="對應來源的 source.citation 正式引用名稱（裁判可用已核對的同文書等價名稱）；不是 evidence.exact_text 原文。",
+    )
     start_offset: int = Field(ge=0)
     end_offset: int = Field(gt=0)
 
@@ -293,7 +296,10 @@ _POLARITY_LEXICAL_COMPOUNDS = {
     ),
     "可": ("許可", "認可", "核可", "可靠"),
 }
-_QUALIFIERS = ("但", "惟", "除非", "除有", "為限", "原則上", "仍應", "尚不得")
+_QUALIFIERS = (
+    "但", "惟", "除非", "除有", "為限", "原則上", "仍應", "尚不得",
+    "除法律另有規定外", "僅限",
+)
 
 
 def _positive_polarity_positions(
@@ -391,13 +397,43 @@ def _polarity_predicate_prefix(value: str, marker_end: int) -> str:
     return match.group(0).lower() if match is not None else ""
 
 
+def _qualifier_scope(claim_text: str, segment_text: str) -> str | None:
+    """Narrow exact-sentence isolation, never infer independent legal propositions.
+
+    Other qualifier-bearing sentences may be excluded only when explicitly
+    introduced as another independent topic.  Continuations remain ambiguous.
+    This scope is used only for qualifiers, not role, polarity or anchor checks.
+    """
+    sentences = [part.strip() for part in re.split(r"[。！？!?\r\n]+", segment_text) if part.strip()]
+    claim = _normalize_grounding_text(claim_text).rstrip("。！？!?")
+    if claim == _normalize_grounding_text(segment_text).rstrip("。！？!?"):
+        return segment_text
+    matches = [index for index, part in enumerate(sentences)
+               if _normalize_grounding_text(part) == claim]
+    if len(sentences) <= 1:
+        return segment_text
+    if len(matches) != 1:
+        return None
+    for index, part in enumerate(sentences):
+        if index == matches[0] or not any(word in part for word in _QUALIFIERS):
+            continue
+        if not re.match(r"另一獨立(?:事項|問題|議題|爭點)", part):
+            return None
+    return sentences[matches[0]]
+
+
 def _qualifier_omitted(claim_text: str, segment_text: str) -> bool:
-    segment_qualifiers = {item for item in _QUALIFIERS if item in segment_text}
-    if not segment_qualifiers:
+    if not any(item in segment_text for item in _QUALIFIERS):
         return False
-    if any(item in claim_text for item in segment_qualifiers):
-        return False
-    return any(item in claim_text for item in ("一律", "均", "皆", "必然", "應", "得", "可以", "不得"))
+    scope = _qualifier_scope(claim_text, segment_text)
+    if scope is None:
+        return True
+    claim = _normalize_grounding_text(claim_text)
+    # Require the actual qualified clause, not merely a shared marker such as
+    # "但". Unrecognized paraphrases require revision rather than authorization.
+    clauses = [part.strip() for part in re.split(r"[，,；;。！？!?]+", scope) if part.strip()]
+    return any(_normalize_grounding_text(part) not in claim for part in clauses
+               if any(word in part for word in _QUALIFIERS))
 
 
 def _anchor_mismatch(claim_text: str, segment_text: str) -> bool:
@@ -583,6 +619,24 @@ def _supporting_segment(segment: LegalSegment) -> ClaimSupportingSegment:
     )
 
 
+def _exact_polarity_variant(left: str, right: str) -> bool:
+    """Detect one polarity edit with identical surrounding text, not entailment.
+
+    Restrict the comparison to the same statement so an unrelated subject or
+    predicate cannot introduce a conflict merely by containing a negative word.
+    """
+    first = _normalize_grounding_text(left).rstrip("。；;.")
+    second = _normalize_grounding_text(right).rstrip("。；;.")
+    for positive, negative in _POLARITY_PAIRS:
+        for source, target in ((first, second), (second, first)):
+            for state, end in _polarity_occurrences(source, positive, negative):
+                if state == -1:
+                    variant = source[: end - len(negative)] + positive + source[end:]
+                    if variant == target:
+                        return True
+    return False
+
+
 def _check_single_claim_support(
     answer: str,
     claim: AnswerClaim,
@@ -618,7 +672,15 @@ def _check_single_claim_support(
 
     for segment in supported_segments:
         overlap = _segment_text_overlap_ratio(claim.claim_text, segment.text)
-        if overlap > best_overlap:
+        # Explicitly bound, equally matching court text must not lose to a
+        # party argument merely because the caller listed that passage first.
+        compatible_tie = (
+            bool(claim.referenced_citation_ids)
+            and overlap == best_overlap
+            and _role_compatible(claim, segment)
+            and not _role_compatible(claim, best_segment)
+        )
+        if overlap > best_overlap or compatible_tie:
             best_overlap = overlap
             best_segment = segment
 
@@ -670,6 +732,15 @@ def _check_single_claim_support(
             supporting_segments=[_supporting_segment(best_segment)],
             risk_flags=["ANCHOR_MISMATCH"],
             support_strength_note="Legal or numeric anchors differ from bound evidence.",
+        )
+
+    if (any(word in best_segment.text for word in _QUALIFIERS)
+            and _qualifier_scope(claim.claim_text, best_segment.text) is None):
+        return ClaimSupport(
+            claim_id=claim.claim_id, support_status=SupportStatus.NEEDS_REVIEW,
+            review_required=True, supporting_segments=[_supporting_segment(best_segment)],
+            risk_flags=["QUALIFIER_SCOPE_UNCERTAIN"],
+            support_strength_note="Cannot isolate the bound proposition's qualifier scope.",
         )
 
     if _qualifier_omitted(claim.claim_text, best_segment.text):
@@ -728,6 +799,33 @@ def _check_single_claim_support(
             review_required=True,
             support_strength_note="Segment overlap is partial but non-zero.",
         )
+
+    if support_status is SupportStatus.SUPPORTED and claim.referenced_citation_ids:
+        conflicting = next(
+            (
+                segment
+                for segment in supported_segments
+                if segment.segment_id != best_segment.segment_id
+                and _role_compatible(claim, segment)
+                and _exact_polarity_variant(best_segment.text, segment.text)
+            ),
+            None,
+        )
+        if conflicting is not None:
+            return ClaimSupport(
+                claim_id=claim.claim_id,
+                support_status=SupportStatus.NEEDS_REVIEW,
+                supporting_segments=[
+                    _supporting_segment(best_segment),
+                    _supporting_segment(conflicting),
+                ],
+                risk_flags=["BOUND_EVIDENCE_POLARITY_CONFLICT"],
+                review_required=True,
+                support_strength_note=(
+                    "Explicitly bound role-compatible statements differ by a polarity edit; "
+                    "resolve their scope before using them together as claim support."
+                ),
+            )
 
     return ClaimSupport(
         claim_id=claim.claim_id,

@@ -1,5 +1,8 @@
 # Source Policy
 
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
 Final citations must be official-grounded or verified cache with traceable official metadata.
 
 TLR-like data may improve recall, but it cannot provide final citation

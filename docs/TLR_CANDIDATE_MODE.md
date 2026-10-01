@@ -1,5 +1,8 @@
 # TLR Candidate Mode
 
+> 適用版本：v1.0.0（套件 `1.0.0`）；功能與限制見 [1.0 說明](V1_RELEASE.md)。
+
+
 Languages: English | [繁體中文](TLR_CANDIDATE_MODE.zh-TW.md)
 
 This public repo treats TLR-like or external semantic recall data as a useful
